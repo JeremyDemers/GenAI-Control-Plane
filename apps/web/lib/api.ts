@@ -191,6 +191,21 @@ export type LifecycleJob = {
   updated_at: string;
 };
 
+export type OperationalHealth = {
+  status: string;
+  requests: {
+    requests_total: number;
+    status_counts: Record<string, number>;
+    top_routes: Record<string, number>;
+    average_duration_ms: number;
+    max_duration_ms: number;
+  };
+  lifecycle_jobs: {
+    status_counts: Record<string, number>;
+    queued_or_failed: number;
+  };
+};
+
 export type AuditEvent = {
   id: string;
   event_type: string;
@@ -590,6 +605,10 @@ export function expireAssignment(user: DevUser, assignmentId: string) {
 
 export function listLifecycleJobs(user: DevUser) {
   return request<LifecycleJob[]>("/lifecycle-jobs", user);
+}
+
+export function getOperationalHealth(user: DevUser) {
+  return request<OperationalHealth>("/health/observability", user);
 }
 
 export function retryLifecycleJob(user: DevUser, jobId: string) {

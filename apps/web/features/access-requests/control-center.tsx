@@ -47,6 +47,7 @@ import {
   exportCostAllocation,
   getExecutiveReport,
   getMe,
+  getOperationalHealth,
   getPolicyEvaluation,
   getRetentionPolicy,
   listArchives,
@@ -262,6 +263,15 @@ export function ControlCenter() {
     queryKey: ["incidents", user],
     queryFn: () => listIncidents(user),
     enabled: user === "admin@example.local" || user === "auditor@example.local" || user === "cto@example.local",
+    retry: false
+  });
+  const operationalHealth = useQuery({
+    queryKey: ["operational-health", user],
+    queryFn: () => getOperationalHealth(user),
+    enabled:
+      user === "admin@example.local" ||
+      user === "auditor@example.local" ||
+      user === "cto@example.local",
     retry: false
   });
   const provisioningEvidence = useQuery({
@@ -1366,6 +1376,31 @@ export function ControlCenter() {
                   <p className="text-sm text-slate-500">No role changes yet.</p>
                 ) : null}
               </div>
+            </Panel>
+          ) : null}
+
+          {user === "admin@example.local" ||
+          user === "auditor@example.local" ||
+          user === "cto@example.local" ? (
+            <Panel title="Operational Health" icon={Activity}>
+              {operationalHealth.data ? (
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  <Detail
+                    label="Requests"
+                    value={operationalHealth.data.requests.requests_total.toString()}
+                  />
+                  <Detail
+                    label="Avg latency"
+                    value={`${operationalHealth.data.requests.average_duration_ms}ms`}
+                  />
+                  <Detail
+                    label="Queued/failed"
+                    value={operationalHealth.data.lifecycle_jobs.queued_or_failed.toString()}
+                  />
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">Operational telemetry unavailable.</p>
+              )}
             </Panel>
           ) : null}
 

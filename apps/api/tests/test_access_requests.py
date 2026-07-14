@@ -1066,6 +1066,41 @@ def test_provider_health_and_configuration_visibility(client: TestClient) -> Non
     assert rotated_events[0]["correlation_id"] == "credential-rotate"
 
 
+def test_observability_propagates_trace_and_correlation_ids(client: TestClient) -> None:
+    trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
+    live = client.get(
+        "/health/live",
+        headers={"traceparent": f"00-{trace_id}-00f067aa0ba902b7-01"},
+    )
+    assert live.status_code == 200
+    assert live.headers["x-trace-id"] == trace_id
+    assert live.headers["x-correlation-id"]
+
+    denied = client.get(
+        "/providers/configuration",
+        headers={
+            "x-dev-user": "employee@example.local",
+            "x-correlation-id": "observability-correlation",
+        },
+    )
+    assert denied.status_code == 403
+
+    observability = client.get("/health/observability")
+    assert observability.status_code == 200
+    body = observability.json()
+    assert body["status"] == "observable"
+    assert body["requests"]["requests_total"] >= 2
+    assert body["requests"]["status_counts"]["2xx"] >= 1
+    assert body["requests"]["status_counts"]["4xx"] >= 1
+    assert body["lifecycle_jobs"]["queued_or_failed"] >= 0
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    failures = [
+        event for event in audit.json() if event["event_type"] == "authorization.failure"
+    ]
+    assert failures[0]["correlation_id"] == "observability-correlation"
+
+
 def test_cto_can_view_executive_report_with_spend_rollups(client: TestClient) -> None:
     provision_demo_request(client)
     assignments = client.get(

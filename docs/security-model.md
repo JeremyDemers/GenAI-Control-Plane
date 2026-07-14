@@ -19,6 +19,12 @@ The API denies by default. Route dependencies require permissions, and service-l
 
 Audit events capture actor, target, request, project, provider, action, result, reason, correlation ID, and metadata. The application does not expose update or delete operations for audit events.
 
+## Observability
+
+The API emits structured JSON access logs with correlation and trace IDs. Incoming W3C `traceparent`
+headers are propagated to `x-trace-id` response headers, and middleware-generated correlation IDs are
+shared with authorization and workflow audit events.
+
 ## Secrets
 
 Real provider credentials must be stored outside source control, preferably in a cloud secret manager. `.env.example` contains only non-secret defaults.
@@ -26,4 +32,3 @@ Real provider credentials must be stored outside source control, preferably in a
 ## Data Retention
 
 Artifact archives include retention expiration. Future lifecycle jobs will enforce retention policies and preserve deprovisioning evidence.
-

@@ -12,6 +12,7 @@
 ## Phase 2/3 Slice Completed
 
 - Initial Alembic migration generated and verified with `alembic upgrade head`.
+- Observability now propagates trace IDs, aligns correlation IDs across response headers and audit events, and exposes request/queue telemetry through `/health/observability`.
 - Local developer lifecycle controls now simulate 70%, 90%, and 100% budget thresholds.
 - Budget enforcement suspends assignments, creates incidents, and emits audit events.
 - Platform administrators and auditors can view incidents; administrators can resolve them with audit evidence.
