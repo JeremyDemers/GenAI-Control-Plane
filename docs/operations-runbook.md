@@ -28,6 +28,11 @@ Users can review their own notifications at `/notifications`. The local portal s
 inbox for request submission, approval handoffs, provisioning, budget thresholds, suspension, restore,
 and closure. Reading another user's notification returns `404`.
 
+## Audit Export
+
+Security auditors can export the latest 1,000 audit events as CSV at `/audit-events/export`.
+The export action writes an `audit.exported` audit event with row count and correlation ID metadata.
+
 ## Local Demo Lifecycle
 
 In local mode, the developer panel can simulate budget warning, critical, and enforcement thresholds.

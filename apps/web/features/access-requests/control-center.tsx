@@ -34,6 +34,7 @@ import {
   createAccessRequest,
   decideApproval,
   expireAssignment,
+  exportAuditEvents,
   getMe,
   getPolicyEvaluation,
   listArchives,
@@ -213,6 +214,9 @@ export function ControlCenter() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
+  });
+  const auditExportMutation = useMutation({
+    mutationFn: () => exportAuditEvents(user)
   });
 
   const activeRequests = requests.data?.filter((request) => request.status === "ACTIVE").length ?? 0;
@@ -445,6 +449,17 @@ export function ControlCenter() {
           {user === "auditor@example.local" ? (
             <Panel title="Audit Trail" icon={Archive}>
               <div className="grid gap-2">
+                <button
+                  className="h-10 rounded-md border border-line px-3 text-sm font-semibold"
+                  onClick={() => auditExportMutation.mutate()}
+                >
+                  Export CSV
+                </button>
+                {auditExportMutation.data ? (
+                  <p className="rounded-md bg-panel p-2 text-xs text-slate-600">
+                    CSV export ready · {auditExportMutation.data.trim().split("\n").length - 1} rows
+                  </p>
+                ) : null}
                 {(auditEvents.data ?? []).slice(0, 8).map((event) => (
                   <div key={event.id} className="rounded-md border border-line p-3 text-sm">
                     <div className="flex items-center justify-between gap-3">

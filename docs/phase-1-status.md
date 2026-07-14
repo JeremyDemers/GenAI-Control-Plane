@@ -17,6 +17,7 @@
 - Administrator restore, forced expiration, artifact archival, deprovisioning, and request closure are implemented in mock mode.
 - Frontend developer controls expose assignment cost/token totals, restore, expiration, and archive evidence.
 - Auditor view shows recent audit events for the demo lifecycle.
+- Security auditors can export recent audit events as CSV through `/audit-events/export`.
 - User notification inbox is implemented for request submission, approval handoffs, provisioning, budget thresholds, suspension, restore, and closure.
 - Root `.env` values are respected by local API settings and Docker Compose interpolation while remaining ignored by git.
 - Playwright now covers the full seeded interview demo lifecycle in Chromium.

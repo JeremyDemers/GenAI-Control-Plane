@@ -45,4 +45,6 @@ test("interview demo lifecycle", async ({ page }) => {
   await page.getByTestId("identity-switcher").selectOption("auditor@example.local");
   await expect(page.getByText("Audit Trail")).toBeVisible();
   await expect(page.getByText("lifecycle.closed")).toBeVisible();
+  await page.getByText("Export CSV").click();
+  await expect(page.getByText(/CSV export ready/)).toBeVisible();
 });

@@ -188,6 +188,18 @@ export function listAuditEvents(user: DevUser) {
   return request<AuditEvent[]>("/audit-events", user);
 }
 
+export async function exportAuditEvents(user: DevUser) {
+  const response = await fetch(`${apiBase}/audit-events/export`, {
+    headers: {
+      "x-dev-user": user
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return response.text();
+}
+
 export function listArchives(user: DevUser) {
   return request<ArtifactArchive[]>("/developer/archives", user);
 }

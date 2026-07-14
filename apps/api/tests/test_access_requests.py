@@ -283,3 +283,16 @@ def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -
         "budget.enforcement",
         "lifecycle.closed",
     } <= event_types
+
+    audit_export = client.get(
+        "/audit-events/export", headers={"x-dev-user": "auditor@example.local"}
+    )
+    assert audit_export.status_code == 200
+    assert audit_export.headers["content-type"].startswith("text/csv")
+    assert "event_type" in audit_export.text.splitlines()[0]
+    assert "lifecycle.closed" in audit_export.text
+
+    denied_export = client.get(
+        "/audit-events/export", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert denied_export.status_code == 403
