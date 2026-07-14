@@ -1,8 +1,11 @@
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.security import RoleName
-from app.models.entities import Role, User
+from app.models.entities import IntegrationCredential, Role, User
+from app.models.enums import ProviderName
 from app.services.policies import ensure_standard_policy
 
 DEMO_USERS: dict[str, tuple[str, RoleName]] = {
@@ -36,6 +39,20 @@ def seed_development_data(db: Session) -> None:
         role = roles_by_name[role_name.value]
         if role not in user.roles:
             user.roles.append(role)
+
+    rotation_due_at = datetime.now(UTC) + timedelta(days=60)
+    for provider in ProviderName:
+        credential = db.scalar(
+            select(IntegrationCredential).where(IntegrationCredential.provider == provider.value)
+        )
+        if not credential:
+            db.add(
+                IntegrationCredential(
+                    provider=provider.value,
+                    credential_reference=f"vault://mock/{provider.value}/primary",
+                    rotation_due_at=rotation_due_at,
+                )
+            )
 
     ensure_standard_policy(db)
     db.commit()

@@ -79,6 +79,19 @@ class PolicyVersionCreate(BaseModel):
     description: str = Field(default="", max_length=500)
 
 
+class RetentionPolicyUpdate(BaseModel):
+    artifact_retention_days: int = Field(ge=1, le=3650)
+    reason: str = Field(min_length=10, max_length=500)
+
+
+class RetentionPolicyOut(BaseModel):
+    policy_version_id: str
+    version: int
+    artifact_retention_days: int
+    active: bool
+    updated_at: datetime
+
+
 class AccessRequestOut(BaseModel):
     id: str
     project_id: str | None
@@ -207,6 +220,9 @@ class AuditEventOut(BaseModel):
     actor_user_id: str | None
     target_type: str
     target_id: str | None
+    request_id: str | None = None
+    project_id: str | None = None
+    provider: str | None = None
     action: str
     result: str
     reason: str
@@ -239,6 +255,18 @@ class ProviderConfigurationOut(BaseModel):
     configured: bool
     mode: str
     details: dict[str, Any]
+
+
+class IntegrationCredentialOut(BaseModel):
+    id: str
+    provider: str
+    credential_reference: str
+    rotation_due_at: datetime | None
+    updated_at: datetime
+
+
+class IntegrationCredentialRotateIn(BaseModel):
+    reason: str = Field(min_length=10, max_length=500)
 
 
 class ProviderAssignmentOut(BaseModel):

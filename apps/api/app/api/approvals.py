@@ -145,12 +145,20 @@ async def cto_override(
         request.status = RequestStatus.APPROVED
         request.approved_at = datetime.now(UTC)
         await provision_request(db, request, correlation_id)
-        notify_user(
-            db,
-            user_id=request.requester_id,
-            event_type="approval_overridden",
-            message=f"{request.project_name} was approved by CTO override.",
-        )
+        if request.status == RequestStatus.PROVISIONING_FAILED:
+            notify_user(
+                db,
+                user_id=request.requester_id,
+                event_type="provisioning_failed",
+                message=f"{request.project_name} was approved, but provisioning failed.",
+            )
+        else:
+            notify_user(
+                db,
+                user_id=request.requester_id,
+                event_type="approval_overridden",
+                message=f"{request.project_name} was approved by CTO override.",
+            )
 
     record_audit_event(
         db,
@@ -248,12 +256,20 @@ async def decide(
             request.status = transition(request.status, RequestStatus.APPROVED)
             request.approved_at = datetime.now(UTC)
             await provision_request(db, request, correlation_id)
-            notify_user(
-                db,
-                user_id=request.requester_id,
-                event_type="request_provisioned",
-                message=f"{request.project_name} was approved and provisioned.",
-            )
+            if request.status == RequestStatus.PROVISIONING_FAILED:
+                notify_user(
+                    db,
+                    user_id=request.requester_id,
+                    event_type="provisioning_failed",
+                    message=f"{request.project_name} was approved, but provisioning failed.",
+                )
+            else:
+                notify_user(
+                    db,
+                    user_id=request.requester_id,
+                    event_type="request_provisioned",
+                    message=f"{request.project_name} was approved and provisioned.",
+                )
 
     record_audit_event(
         db,

@@ -5,9 +5,22 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import current_user, get_correlation_id
 from app.core.database import get_db
 from app.core.security import has_permission
-from app.models.entities import AccessRequest, Project, ProjectMember, ProviderAssignment, User
+from app.models.entities import (
+    AccessRequest,
+    AuditEvent,
+    Project,
+    ProjectMember,
+    ProviderAssignment,
+    User,
+)
 from app.models.enums import RequestStatus
-from app.schemas import ProjectMemberCreate, ProjectMemberOut, ProjectOut, ProjectSuspendIn
+from app.schemas import (
+    AuditEventOut,
+    ProjectMemberCreate,
+    ProjectMemberOut,
+    ProjectOut,
+    ProjectSuspendIn,
+)
 from app.services.audit import record_audit_event
 from app.services.notifications import notify_user
 from app.services.visibility import can_read_all
@@ -266,3 +279,48 @@ def list_project_members(
         .order_by(ProjectMember.created_at.asc())
     ).all()
     return [project_member_out(member, member_user) for member, member_user in rows]
+
+
+@router.get("/{project_id}/audit-events", response_model=list[AuditEventOut])
+def list_project_audit_events(
+    project_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> list[AuditEventOut]:
+    if not can_view_project(db, project_id, user):
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "NOT_FOUND", "message": "Project not found."},
+        )
+    request_ids = select(AccessRequest.id).where(AccessRequest.project_id == project_id)
+    events = db.scalars(
+        select(AuditEvent)
+        .where(
+            (AuditEvent.project_id == project_id)
+            | (AuditEvent.request_id.in_(request_ids))
+            | (
+                (AuditEvent.target_type == "project")
+                & (AuditEvent.target_id == project_id)
+            )
+        )
+        .order_by(AuditEvent.created_at.desc())
+        .limit(100)
+    ).all()
+    return [
+        AuditEventOut(
+            id=event.id,
+            event_type=event.event_type,
+            actor_user_id=event.actor_user_id,
+            target_type=event.target_type,
+            target_id=event.target_id,
+            request_id=event.request_id,
+            project_id=event.project_id,
+            provider=event.provider,
+            action=event.action,
+            result=event.result,
+            reason=event.reason,
+            correlation_id=event.correlation_id,
+            created_at=event.created_at,
+        )
+        for event in events
+    ]

@@ -17,6 +17,7 @@ from app.models.enums import RequestStatus
 from app.providers.registry import get_provider_adapter
 from app.services.audit import record_audit_event
 from app.services.notifications import notify_roles, notify_user
+from app.services.policies import ensure_standard_policy
 from app.services.state_machine import transition
 
 
@@ -210,6 +211,8 @@ async def expire_and_archive_assignment(
     assignment.status = "expired"
 
     request.status = transition(request.status, RequestStatus.ARCHIVING)
+    policy_version = ensure_standard_policy(db)
+    artifact_retention_days = int(policy_version.document.get("artifact_retention_days", 365))
     job = LifecycleJob(
         job_type="archive_and_deprovision",
         status="running",
@@ -225,7 +228,7 @@ async def expire_and_archive_assignment(
         storage_provider=archive_result["storage_provider"],
         storage_location=archive_result["storage_location"],
         checksum=archive_result["checksum"],
-        retention_expires_at=datetime.now(UTC) + timedelta(days=365),
+        retention_expires_at=datetime.now(UTC) + timedelta(days=artifact_retention_days),
         created_by_job_id=job.id,
     )
     db.add(archive)

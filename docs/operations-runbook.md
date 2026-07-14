@@ -4,7 +4,8 @@
 
 Review lifecycle job failure details, provider health, and audit events. Retry with the same idempotency key when the error is retryable.
 Admins can inspect recent jobs at `/lifecycle-jobs` and request a retry for queued or failed jobs at
-`/lifecycle-jobs/{job_id}/retry`.
+`/lifecycle-jobs/{job_id}/retry`. Provider failure metadata is sanitized before persistence; secrets
+and raw credential material must remain in the external secret manager or provider logs.
 
 ## Failed Deprovisioning
 

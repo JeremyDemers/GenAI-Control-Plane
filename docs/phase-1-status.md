@@ -26,7 +26,9 @@
 - Domain endpoints now expose visible provider assignments, usage records, cost records, and per-request budget summaries.
 - Frontend usage and budget evidence shows visible assignments, latest usage, latest cost, spend, remaining budget, and data freshness.
 - Provider health checks and privileged provider configuration validation are exposed in the dashboard.
-- Access request submission creates project membership records, and project owners can review project requests, members, evidence, and add existing users to a project with audit and notification evidence.
+- Provider credential inventory exposes safe vault-style references, admin-only rotation, due dates, and audit evidence without returning secrets.
+- Retryable provider provisioning failures now create failed lifecycle jobs, sanitized failure metadata, requester notifications, and provider failure audit evidence.
+- Access request submission creates project membership records, and project owners can review project requests, members, scoped audit history, evidence, and add existing users to a project with audit and notification evidence.
 - Project ownership reassignment now supports owner request, proposed-owner acceptance, admin/CTO approval, member-role transfer, notifications, and audit evidence.
 - Security auditors can view role-change evidence derived from audited project membership and reassignment events.
 - CTOs and platform administrators can suspend projects, active requests, and provider assignments with audit and notification evidence.
@@ -36,9 +38,10 @@
 - User notification inbox is implemented for request submission, approval handoffs, provisioning, budget thresholds, suspension, restore, and closure.
 - Employees can cancel pending requests and request access extensions; CTOs and platform admins can approve or reject extension requests.
 - Platform administrators can publish new active standard-policy versions, and subsequent requests retain the policy version used during evaluation.
+- Platform administrators can update artifact retention policy versions, and archive expiration uses the active retention value.
 - Root `.env` values are respected by local API settings and Docker Compose interpolation while remaining ignored by git.
 - Playwright now covers the full seeded interview demo lifecycle in Chromium.
-- Admins can list lifecycle jobs and request retry for queued or failed jobs.
+- Admins can list lifecycle jobs in the portal and request retry for queued or failed jobs.
 
 ## Verified
 

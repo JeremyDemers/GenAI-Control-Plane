@@ -99,6 +99,14 @@ export type PolicyVersion = {
   updated_at: string;
 };
 
+export type RetentionPolicy = {
+  policy_version_id: string;
+  version: number;
+  artifact_retention_days: number;
+  active: boolean;
+  updated_at: string;
+};
+
 export type ProviderHealth = {
   provider: string;
   status: string;
@@ -111,6 +119,14 @@ export type ProviderConfiguration = {
   configured: boolean;
   mode: string;
   details: Record<string, unknown>;
+};
+
+export type IntegrationCredential = {
+  id: string;
+  provider: string;
+  credential_reference: string;
+  rotation_due_at: string | null;
+  updated_at: string;
 };
 
 export type ProviderAssignment = {
@@ -164,12 +180,26 @@ export type LifecycleAction = {
   audit_event: string;
 };
 
+export type LifecycleJob = {
+  id: string;
+  job_type: string;
+  status: string;
+  attempt_count: number;
+  idempotency_key: string;
+  failure_information: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AuditEvent = {
   id: string;
   event_type: string;
   actor_user_id: string | null;
   target_type: string;
   target_id: string | null;
+  request_id: string | null;
+  project_id: string | null;
+  provider: string | null;
   action: string;
   result: string;
   reason: string;
@@ -325,6 +355,10 @@ export function listProjectMembers(user: DevUser, projectId: string) {
   return request<ProjectMember[]>(`/projects/${projectId}/members`, user);
 }
 
+export function listProjectAuditEvents(user: DevUser, projectId: string) {
+  return request<AuditEvent[]>(`/projects/${projectId}/audit-events`, user);
+}
+
 export function addProjectMember(
   user: DevUser,
   projectId: string,
@@ -404,6 +438,20 @@ export function listPolicies(user: DevUser) {
   return request<PolicyVersion[]>("/policies", user);
 }
 
+export function getRetentionPolicy(user: DevUser) {
+  return request<RetentionPolicy>("/policies/retention", user);
+}
+
+export function updateRetentionPolicy(user: DevUser) {
+  return request<RetentionPolicy>("/policies/retention", user, {
+    method: "POST",
+    body: JSON.stringify({
+      artifact_retention_days: 30,
+      reason: "Reduce demo artifact retention for regulated cleanup evidence."
+    })
+  });
+}
+
 export function publishInternalSecurityReviewPolicy(user: DevUser, activePolicy: PolicyVersion) {
   const document = JSON.parse(JSON.stringify(activePolicy.document)) as {
     approval_rules?: { require_security_review_for?: string[] };
@@ -435,6 +483,19 @@ export function listProviderHealth(user: DevUser) {
 
 export function listProviderConfiguration(user: DevUser) {
   return request<ProviderConfiguration[]>("/providers/configuration", user);
+}
+
+export function listIntegrationCredentials(user: DevUser) {
+  return request<IntegrationCredential[]>("/providers/credentials", user);
+}
+
+export function rotateIntegrationCredential(user: DevUser, credentialId: string) {
+  return request<IntegrationCredential>(`/providers/credentials/${credentialId}/rotate`, user, {
+    method: "POST",
+    body: JSON.stringify({
+      reason: "Rotate demo provider credential reference for governance evidence."
+    })
+  });
 }
 
 export function decideApproval(
@@ -524,6 +585,16 @@ export function expireAssignment(user: DevUser, assignmentId: string) {
       assignment_id: assignmentId,
       reason: "Developer panel forced expiration for demo."
     })
+  });
+}
+
+export function listLifecycleJobs(user: DevUser) {
+  return request<LifecycleJob[]>("/lifecycle-jobs", user);
+}
+
+export function retryLifecycleJob(user: DevUser, jobId: string) {
+  return request<LifecycleJob>(`/lifecycle-jobs/${jobId}/retry`, user, {
+    method: "POST"
   });
 }
 

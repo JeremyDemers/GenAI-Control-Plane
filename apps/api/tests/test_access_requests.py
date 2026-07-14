@@ -1,6 +1,9 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
+
+from app.providers.base import ProviderOperationError
 
 
 def request_payload() -> dict[str, object]:
@@ -157,6 +160,20 @@ def test_project_owner_can_add_existing_user_to_project(client: TestClient) -> N
     audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
     event_types = {event["event_type"] for event in audit.json()}
     assert {"project.member_added", "authorization.failure"} <= event_types
+
+    project_audit = client.get(
+        f"/projects/{created['project_id']}/audit-events",
+        headers={"x-dev-user": "owner@example.local"},
+    )
+    assert project_audit.status_code == 200
+    assert "project.member_added" in {event["event_type"] for event in project_audit.json()}
+    assert all(event["project_id"] == created["project_id"] for event in project_audit.json())
+
+    denied_project_audit = client.get(
+        f"/projects/{created['project_id']}/audit-events",
+        headers={"x-dev-user": "approver@example.local"},
+    )
+    assert denied_project_audit.status_code == 404
 
 
 def test_project_owner_reassignment_requires_acceptance_and_approval(
@@ -321,6 +338,57 @@ def test_admin_can_publish_policy_version_used_by_new_requests(client: TestClien
 
     audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
     assert any(event["event_type"] == "policy.version_published" for event in audit.json())
+
+
+def test_admin_can_update_artifact_retention_policy_used_by_archives(
+    client: TestClient,
+) -> None:
+    retention = client.get("/policies/retention", headers={"x-dev-user": "auditor@example.local"})
+    assert retention.status_code == 200
+    assert retention.json()["artifact_retention_days"] == 365
+
+    denied_update = client.post(
+        "/policies/retention",
+        headers={"x-dev-user": "auditor@example.local"},
+        json={
+            "artifact_retention_days": 30,
+            "reason": "Auditors cannot update retention policy.",
+        },
+    )
+    assert denied_update.status_code == 403
+
+    updated = client.post(
+        "/policies/retention",
+        headers={"x-dev-user": "admin@example.local", "x-correlation-id": "retention"},
+        json={
+            "artifact_retention_days": 30,
+            "reason": "Reduce demo artifact retention for regulated cleanup evidence.",
+        },
+    )
+    assert updated.status_code == 201
+    assert updated.json()["artifact_retention_days"] == 30
+    assert updated.json()["version"] == retention.json()["version"] + 1
+
+    provision_demo_request(client)
+    assignments = client.get(
+        "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+    ).json()
+    expired = client.post(
+        "/developer/expire",
+        headers={"x-dev-user": "admin@example.local"},
+        json={"assignment_id": assignments[0]["id"], "reason": "Verify retention policy."},
+    )
+    assert expired.status_code == 200
+
+    archives = client.get("/developer/archives", headers={"x-dev-user": "admin@example.local"})
+    retention_expires_at = datetime.fromisoformat(archives.json()[0]["retention_expires_at"])
+    if retention_expires_at.tzinfo is None:
+        retention_expires_at = retention_expires_at.replace(tzinfo=UTC)
+    days_until_retention_expires = (retention_expires_at - datetime.now(UTC)).days
+    assert 28 <= days_until_retention_expires <= 30
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    assert "policy.retention_updated" in {event["event_type"] for event in audit.json()}
 
 
 def test_auditor_cannot_submit_request_and_failure_is_audited(client: TestClient) -> None:
@@ -576,6 +644,90 @@ def provision_demo_request(client: TestClient) -> dict[str, object]:
         json={"decision": "approve", "comments": "Approved."},
     )
     return created
+
+
+def test_retryable_provider_failure_creates_safe_lifecycle_job(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FailingAdapter:
+        def __init__(self, provider: str) -> None:
+            self.name = provider
+
+        async def provision_access(
+            self, request_id: str, idempotency_key: str
+        ) -> dict[str, object]:
+            del request_id, idempotency_key
+            raise ProviderOperationError(
+                "Mock provider timeout",
+                retryable=True,
+                details={
+                    "code": "timeout",
+                    "message": "Provider API timed out.",
+                    "operation": "provision_access",
+                    "secret": "do-not-log",
+                },
+            )
+
+    monkeypatch.setattr(
+        "app.workers.jobs.get_provider_adapter",
+        lambda provider: FailingAdapter(provider),
+    )
+    created = client.post(
+        "/access-requests",
+        headers={"x-dev-user": "employee@example.local"},
+        json=request_payload(),
+    ).json()
+    manager_step = client.get(
+        "/approvals/pending", headers={"x-dev-user": "approver@example.local"}
+    ).json()[0]
+    client.post(
+        f"/approvals/{manager_step['step_id']}",
+        headers={"x-dev-user": "approver@example.local"},
+        json={"decision": "approve", "comments": "Approved."},
+    )
+    cto_step = client.get("/approvals/pending", headers={"x-dev-user": "cto@example.local"}).json()[
+        0
+    ]
+
+    provision_failed = client.post(
+        f"/approvals/{cto_step['step_id']}",
+        headers={"x-dev-user": "cto@example.local", "x-correlation-id": "provider-failure"},
+        json={"decision": "approve", "comments": "Approved."},
+    )
+    assert provision_failed.status_code == 200
+    assert provision_failed.json()["status"] == "PROVISIONING_FAILED"
+
+    jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"})
+    assert jobs.status_code == 200
+    failed_job = jobs.json()[0]
+    assert failed_job["status"] == "failed"
+    assert failed_job["attempt_count"] == 1
+    assert failed_job["failure_information"]["retryable"] is True
+    assert failed_job["failure_information"]["details"]["code"] == "timeout"
+    assert "secret" not in failed_job["failure_information"]["details"]
+
+    denied_jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "employee@example.local"})
+    assert denied_jobs.status_code == 403
+
+    retried = client.post(
+        f"/lifecycle-jobs/{failed_job['id']}/retry",
+        headers={"x-dev-user": "admin@example.local", "x-correlation-id": "job-retry"},
+    )
+    assert retried.status_code == 200
+    assert retried.json()["status"] == "queued"
+    assert retried.json()["attempt_count"] == 2
+    assert retried.json()["failure_information"] == {}
+
+    notifications = client.get(
+        "/notifications", headers={"x-dev-user": "employee@example.local"}
+    ).json()
+    assert "provisioning_failed" in {
+        notification["event_type"] for notification in notifications
+    }
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    event_types = {event["event_type"] for event in audit.json()}
+    assert {"provider.provision_failed", "lifecycle_job.retry_requested"} <= event_types
+    assert created["id"] == provision_failed.json()["id"]
 
 
 def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -> None:
@@ -873,6 +1025,45 @@ def test_provider_health_and_configuration_visibility(client: TestClient) -> Non
         "/providers/configuration", headers={"x-dev-user": "employee@example.local"}
     )
     assert denied_configuration.status_code == 403
+
+    credentials = client.get(
+        "/providers/credentials", headers={"x-dev-user": "auditor@example.local"}
+    )
+    assert credentials.status_code == 200
+    assert len(credentials.json()) == 7
+    first_credential = credentials.json()[0]
+    assert first_credential["credential_reference"].startswith("vault://mock/")
+    assert "secret" not in first_credential
+
+    denied_credentials = client.get(
+        "/providers/credentials", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert denied_credentials.status_code == 403
+
+    denied_rotation = client.post(
+        f"/providers/credentials/{first_credential['id']}/rotate",
+        headers={"x-dev-user": "auditor@example.local"},
+        json={"reason": "Auditor attempted credential rotation during evidence review."},
+    )
+    assert denied_rotation.status_code == 403
+
+    rotated = client.post(
+        f"/providers/credentials/{first_credential['id']}/rotate",
+        headers={"x-dev-user": "admin@example.local", "x-correlation-id": "credential-rotate"},
+        json={"reason": "Rotate provider credential reference for demo governance evidence."},
+    )
+    assert rotated.status_code == 200
+    assert rotated.json()["credential_reference"].startswith(
+        f"vault://mock/{first_credential['provider']}/rotated-"
+    )
+    assert rotated.json()["credential_reference"] != first_credential["credential_reference"]
+    assert rotated.json()["rotation_due_at"] is not None
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    rotated_events = [
+        event for event in audit.json() if event["event_type"] == "provider.credential_rotated"
+    ]
+    assert rotated_events[0]["correlation_id"] == "credential-rotate"
 
 
 def test_cto_can_view_executive_report_with_spend_rollups(client: TestClient) -> None:
