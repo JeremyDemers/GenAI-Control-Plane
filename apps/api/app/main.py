@@ -10,6 +10,7 @@ from app.api import (
     audit,
     auth,
     developer,
+    extensions,
     health,
     lifecycle_jobs,
     notifications,
@@ -61,6 +62,7 @@ app.include_router(developer.router)
 app.include_router(lifecycle_jobs.router)
 app.include_router(notifications.router)
 app.include_router(reports.router)
+app.include_router(extensions.router)
 
 
 @app.get("/")

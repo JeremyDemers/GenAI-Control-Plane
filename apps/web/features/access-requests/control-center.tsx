@@ -32,7 +32,10 @@ import {
 } from "recharts";
 
 import {
+  cancelAccessRequest,
   createAccessRequest,
+  createExtensionRequest,
+  decideExtension,
   decideApproval,
   expireAssignment,
   exportAuditEvents,
@@ -42,6 +45,7 @@ import {
   listArchives,
   listAssignments,
   listAuditEvents,
+  listExtensions,
   listNotifications,
   listPendingApprovals,
   listRequests,
@@ -152,6 +156,11 @@ export function ControlCenter() {
     enabled: user === "cto@example.local",
     retry: false
   });
+  const extensions = useQuery({
+    queryKey: ["extensions", user],
+    queryFn: () => listExtensions(user),
+    retry: false
+  });
   const selectedRequest = useMemo(
     () => requests.data?.find((request) => request.id === selectedRequestId) ?? requests.data?.[0],
     [requests.data, selectedRequestId]
@@ -191,6 +200,15 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
   });
+  const cancelMutation = useMutation({
+    mutationFn: (requestId: string) => cancelAccessRequest(user, requestId),
+    onSuccess: (updated) => {
+      setSelectedRequestId(updated.id);
+      void queryClient.invalidateQueries({ queryKey: ["requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["approvals"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    }
+  });
 
   const lifecycleMutation = useMutation({
     mutationFn: ({
@@ -225,6 +243,24 @@ export function ControlCenter() {
   });
   const auditExportMutation = useMutation({
     mutationFn: () => exportAuditEvents(user)
+  });
+  const extensionMutation = useMutation({
+    mutationFn: ({ requestId, currentEndAt }: { requestId: string; currentEndAt: string }) =>
+      createExtensionRequest(user, requestId, currentEndAt),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["extensions"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    }
+  });
+  const extensionDecisionMutation = useMutation({
+    mutationFn: ({ extensionId, decision }: { extensionId: string; decision: "approve" | "reject" }) =>
+      decideExtension(user, extensionId, decision),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["extensions"] });
+      void queryClient.invalidateQueries({ queryKey: ["requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    }
   });
 
   const activeRequests = requests.data?.filter((request) => request.status === "ACTIVE").length ?? 0;
@@ -304,6 +340,11 @@ export function ControlCenter() {
           </div>
 
           <Panel title="Requests" icon={FileClock}>
+            {extensionMutation.isSuccess ? (
+              <p className="mb-3 rounded-md bg-panel p-2 text-sm text-slate-600">
+                Extension requested.
+              </p>
+            ) : null}
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] border-collapse text-left text-sm">
                 <thead>
@@ -313,6 +354,7 @@ export function ControlCenter() {
                     <th className="py-2 pr-3 font-medium">Providers</th>
                     <th className="py-2 pr-3 font-medium">Budget</th>
                     <th className="py-2 pr-3 font-medium">Expires</th>
+                    <th className="py-2 pr-3 font-medium">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -335,11 +377,38 @@ export function ControlCenter() {
                       <td className="py-3 pr-3 text-slate-600">
                         {new Date(request.requested_end_at).toLocaleDateString()}
                       </td>
+                      <td className="py-3 pr-3">
+                        {user === "employee@example.local" && request.status.includes("AWAITING") ? (
+                          <button
+                            className="rounded-md border border-coral px-2 py-1 text-xs font-semibold text-coral"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              cancelMutation.mutate(request.id);
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        ) : null}
+                        {user === "employee@example.local" && request.status === "ACTIVE" ? (
+                          <button
+                            className="rounded-md border border-line px-2 py-1 text-xs font-semibold"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              extensionMutation.mutate({
+                                requestId: request.id,
+                                currentEndAt: request.requested_end_at
+                              });
+                            }}
+                          >
+                            Extend
+                          </button>
+                        ) : null}
+                      </td>
                     </tr>
                   ))}
                   {requests.data?.length === 0 ? (
                     <tr>
-                      <td className="py-8 text-slate-500" colSpan={5}>
+                      <td className="py-8 text-slate-500" colSpan={6}>
                         No requests for this identity.
                       </td>
                     </tr>
@@ -545,6 +614,53 @@ export function ControlCenter() {
               ) : (
                 <p className="text-sm text-slate-500">Executive report will populate after activity.</p>
               )}
+            </Panel>
+          ) : null}
+
+          {user === "cto@example.local" || user === "admin@example.local" ? (
+            <Panel title="Extension Queue" icon={Clock3}>
+              <div className="grid gap-2">
+                {(extensions.data ?? []).map((extension) => (
+                  <div key={extension.id} className="rounded-md border border-line p-3 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">{extension.status}</p>
+                        <p className="break-all text-xs text-slate-500">{extension.request_id}</p>
+                      </div>
+                      {extension.status === "pending" ? (
+                        <div className="flex gap-2">
+                          <button
+                            data-testid="approve-extension"
+                            className="rounded-md bg-mint px-3 py-2 text-xs font-semibold text-white"
+                            onClick={() =>
+                              extensionDecisionMutation.mutate({
+                                extensionId: extension.id,
+                                decision: "approve"
+                              })
+                            }
+                          >
+                            Approve
+                          </button>
+                          <button
+                            className="rounded-md border border-coral px-3 py-2 text-xs font-semibold text-coral"
+                            onClick={() =>
+                              extensionDecisionMutation.mutate({
+                                extensionId: extension.id,
+                                decision: "reject"
+                              })
+                            }
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+                {extensions.data?.length === 0 ? (
+                  <p className="text-sm text-slate-500">No extension requests.</p>
+                ) : null}
+              </div>
             </Panel>
           ) : null}
         </section>

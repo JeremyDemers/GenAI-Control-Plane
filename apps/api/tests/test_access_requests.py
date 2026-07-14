@@ -141,6 +141,39 @@ def test_approval_workflow_provisions_mock_assignments(client: TestClient) -> No
     }
 
 
+def test_employee_can_cancel_own_pending_request(client: TestClient) -> None:
+    created = client.post(
+        "/access-requests",
+        headers={"x-dev-user": "employee@example.local"},
+        json=request_payload(),
+    ).json()
+
+    denied = client.post(
+        f"/access-requests/{created['id']}/cancel",
+        headers={"x-dev-user": "owner@example.local"},
+    )
+    assert denied.status_code == 403
+
+    cancelled = client.post(
+        f"/access-requests/{created['id']}/cancel",
+        headers={"x-dev-user": "employee@example.local"},
+    )
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "CANCELLED"
+
+    manager_steps = client.get(
+        "/approvals/pending", headers={"x-dev-user": "approver@example.local"}
+    ).json()
+    assert manager_steps == []
+
+    notifications = client.get(
+        "/notifications", headers={"x-dev-user": "employee@example.local"}
+    ).json()
+    assert {notification["event_type"] for notification in notifications} >= {
+        "request_cancelled"
+    }
+
+
 def provision_demo_request(client: TestClient) -> dict[str, object]:
     created = client.post(
         "/access-requests",
@@ -338,3 +371,64 @@ def test_cto_can_view_executive_report_with_spend_rollups(client: TestClient) ->
         "/reports/executive", headers={"x-dev-user": "employee@example.local"}
     )
     assert denied_report.status_code == 403
+
+
+def test_employee_can_request_extension_and_cto_can_approve(client: TestClient) -> None:
+    created = provision_demo_request(client)
+    current_end = datetime.fromisoformat(str(created["requested_end_at"]))
+    requested_end_at = current_end + timedelta(days=7)
+
+    extension = client.post(
+        "/extensions",
+        headers={"x-dev-user": "employee@example.local"},
+        json={
+            "request_id": created["id"],
+            "requested_end_at": requested_end_at.isoformat(),
+            "justification": "Need one more week to finish stakeholder validation safely.",
+        },
+    )
+    assert extension.status_code == 201
+    assert extension.json()["status"] == "pending"
+
+    duplicate = client.post(
+        "/extensions",
+        headers={"x-dev-user": "employee@example.local"},
+        json={
+            "request_id": created["id"],
+            "requested_end_at": (requested_end_at + timedelta(days=1)).isoformat(),
+            "justification": "Trying to create a second pending extension request.",
+        },
+    )
+    assert duplicate.status_code == 409
+
+    denied_decision = client.post(
+        f"/extensions/{extension.json()['id']}/decision",
+        headers={"x-dev-user": "employee@example.local"},
+        json={"decision": "approve", "comments": "Nope."},
+    )
+    assert denied_decision.status_code == 403
+
+    approved = client.post(
+        f"/extensions/{extension.json()['id']}/decision",
+        headers={"x-dev-user": "cto@example.local"},
+        json={"decision": "approve", "comments": "Temporary extension approved."},
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+
+    requests = client.get(
+        "/access-requests", headers={"x-dev-user": "employee@example.local"}
+    ).json()
+    assert datetime.fromisoformat(requests[0]["requested_end_at"]) == requested_end_at
+
+    assignments = client.get(
+        "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+    ).json()
+    assert datetime.fromisoformat(assignments[0]["expires_at"]) == requested_end_at
+
+    notifications = client.get(
+        "/notifications", headers={"x-dev-user": "employee@example.local"}
+    ).json()
+    assert {notification["event_type"] for notification in notifications} >= {
+        "extension_approved"
+    }

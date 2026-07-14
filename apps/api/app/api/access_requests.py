@@ -154,6 +154,69 @@ def create_request(
     return to_request_out(request)
 
 
+@router.post("/{request_id}/cancel", response_model=AccessRequestOut)
+def cancel_request(
+    request_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("requests:cancel_own")),
+    correlation_id: str = Depends(get_correlation_id),
+) -> AccessRequestOut:
+    request = db.get(AccessRequest, request_id)
+    if not request:
+        raise HTTPException(
+            status_code=404, detail={"code": "NOT_FOUND", "message": "Request not found."}
+        )
+    if request.requester_id != user.id:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "FORBIDDEN", "message": "Only the requester can cancel this request."},
+        )
+    if request.status not in {
+        RequestStatus.SUBMITTED,
+        RequestStatus.AWAITING_MANAGER_APPROVAL,
+        RequestStatus.AWAITING_SECURITY_REVIEW,
+        RequestStatus.AWAITING_CTO_APPROVAL,
+        RequestStatus.APPROVED,
+        RequestStatus.PROVISIONING_FAILED,
+    }:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "REQUEST_NOT_CANCELLABLE",
+                "message": "Only pending or failed provisioning requests can be cancelled.",
+            },
+        )
+    request.status = transition(request.status, RequestStatus.CANCELLED)
+    pending_steps = db.scalars(
+        select(ApprovalStep).where(
+            ApprovalStep.request_id == request.id,
+            ApprovalStep.status == "pending",
+        )
+    ).all()
+    for step in pending_steps:
+        step.status = "cancelled"
+    notify_user(
+        db,
+        user_id=user.id,
+        event_type="request_cancelled",
+        message=f"{request.project_name} was cancelled.",
+    )
+    record_audit_event(
+        db,
+        event_type="access_request.cancelled",
+        actor_user_id=user.id,
+        target_type="access_request",
+        target_id=request.id,
+        request_id=request.id,
+        action="cancel",
+        result="success",
+        correlation_id=correlation_id,
+    )
+    db.commit()
+    db.refresh(request)
+    return to_request_out(request)
+
+
 @router.get("/{request_id}/policy-evaluation", response_model=PolicyEvaluationOut)
 def get_policy_evaluation(
     request_id: str,

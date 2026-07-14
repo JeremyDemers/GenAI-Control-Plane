@@ -13,8 +13,9 @@
 11. Show automatic suspension at enforcement and the admin budget notifications.
 12. Restore the assignment.
 13. Switch to `cto@example.local` and show the executive spend report.
-14. Switch back to `admin@example.local`, force expiration, and show archive evidence.
-15. Switch to `auditor@example.local`, review the audit trail, and export CSV evidence.
+14. Switch to `employee@example.local`, request a one-week extension, then approve it as the CTO.
+15. Switch back to `admin@example.local`, force expiration, and show archive evidence.
+16. Switch to `auditor@example.local`, review the audit trail, and export CSV evidence.
 
 The scenario is also automated:
 

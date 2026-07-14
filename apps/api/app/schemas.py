@@ -77,6 +77,28 @@ class AccessRequestOut(BaseModel):
     expires_at: datetime | None
 
 
+class ExtensionRequestCreate(BaseModel):
+    request_id: str
+    requested_end_at: datetime
+    justification: str = Field(min_length=20, max_length=2000)
+
+
+class ExtensionDecisionIn(BaseModel):
+    decision: str = Field(pattern="^(approve|reject)$")
+    comments: str = Field(default="", max_length=2000)
+
+
+class ExtensionRequestOut(BaseModel):
+    id: str
+    request_id: str
+    requester_id: str
+    requested_end_at: datetime
+    status: str
+    justification: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class ApprovalAction(BaseModel):
     decision: str = Field(pattern="^(approve|reject|request_information)$")
     comments: str = Field(default="", max_length=2000)

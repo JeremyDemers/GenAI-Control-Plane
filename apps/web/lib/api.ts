@@ -123,6 +123,17 @@ export type ExecutiveReport = {
   }[];
 };
 
+export type ExtensionRequest = {
+  id: string;
+  request_id: string;
+  requester_id: string;
+  requested_end_at: string;
+  status: string;
+  justification: string;
+  created_at: string;
+  updated_at: string;
+};
+
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function request<T>(path: string, user: DevUser, init?: RequestInit): Promise<T> {
@@ -152,6 +163,12 @@ export function createAccessRequest(user: DevUser, payload: AccessRequestFormVal
   return request<AccessRequest>("/access-requests", user, {
     method: "POST",
     body: JSON.stringify(payload)
+  });
+}
+
+export function cancelAccessRequest(user: DevUser, requestId: string) {
+  return request<AccessRequest>(`/access-requests/${requestId}/cancel`, user, {
+    method: "POST"
   });
 }
 
@@ -239,4 +256,28 @@ export function markNotificationRead(user: DevUser, notificationId: string) {
 
 export function getExecutiveReport(user: DevUser) {
   return request<ExecutiveReport>("/reports/executive", user);
+}
+
+export function listExtensions(user: DevUser) {
+  return request<ExtensionRequest[]>("/extensions", user);
+}
+
+export function createExtensionRequest(user: DevUser, requestId: string, currentEndAt: string) {
+  const requestedEndAt = new Date(currentEndAt);
+  requestedEndAt.setDate(requestedEndAt.getDate() + 7);
+  return request<ExtensionRequest>("/extensions", user, {
+    method: "POST",
+    body: JSON.stringify({
+      request_id: requestId,
+      requested_end_at: requestedEndAt.toISOString(),
+      justification: "Need one more week to complete stakeholder validation and archive evidence."
+    })
+  });
+}
+
+export function decideExtension(user: DevUser, extensionId: string, decision: "approve" | "reject") {
+  return request<ExtensionRequest>(`/extensions/${extensionId}/decision`, user, {
+    method: "POST",
+    body: JSON.stringify({ decision, comments: "Reviewed in local demo." })
+  });
 }

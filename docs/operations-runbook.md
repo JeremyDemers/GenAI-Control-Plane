@@ -39,6 +39,12 @@ CTOs can review executive rollups at `/reports/executive`. The report summarizes
 active and suspended projects, total budget, current spend, remaining budget, provider spend, token
 usage, and cost-center spend.
 
+## Extension Requests
+
+Employees can request a later expiration date for active access at `/extensions`. CTOs and platform
+administrators can approve or reject pending extensions; approvals update the request expiration and
+provider assignment expiration while preserving audit and notification evidence.
+
 ## Local Demo Lifecycle
 
 In local mode, the developer panel can simulate budget warning, critical, and enforcement thresholds.

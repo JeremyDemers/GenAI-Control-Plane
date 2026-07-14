@@ -41,6 +41,12 @@ test("interview demo lifecycle", async ({ page }) => {
   await page.getByTestId("identity-switcher").selectOption("cto@example.local");
   await expect(page.getByText("Executive Report")).toBeVisible();
   await expect(page.getByText("Total spend")).toBeVisible();
+  await page.getByTestId("identity-switcher").selectOption("employee@example.local");
+  await page.getByText("Extend").click();
+  await expect(page.getByText("Extension requested.")).toBeVisible();
+  await page.getByTestId("identity-switcher").selectOption("cto@example.local");
+  await expect(page.getByText("Extension Queue")).toBeVisible();
+  await page.getByTestId("approve-extension").click();
   await page.getByTestId("identity-switcher").selectOption("admin@example.local");
   await page.getByTestId("expire-amazon_bedrock").click();
   await expect(page.getByTestId("status-CLOSED")).toBeAttached();
