@@ -407,6 +407,67 @@ def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -
     assert denied_export.status_code == 403
 
 
+def test_usage_cost_budget_and_assignment_domain_endpoints(client: TestClient) -> None:
+    provision_demo_request(client)
+    assignments = client.get(
+        "/provider-assignments", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert assignments.status_code == 200
+    assert len(assignments.json()) == 2
+    assignment_id = assignments.json()[0]["id"]
+
+    client.post(
+        "/developer/simulate-usage",
+        headers={"x-dev-user": "admin@example.local"},
+        json={
+            "assignment_id": assignment_id,
+            "tokens": 1234,
+            "request_count": 7,
+            "cost_amount": "12.50",
+        },
+    )
+
+    usage = client.get("/usage", headers={"x-dev-user": "employee@example.local"})
+    assert usage.status_code == 200
+    assert usage.json()[0]["tokens"] == 1234
+
+    usage_for_assignment = client.get(
+        f"/usage?assignment_id={assignment_id}",
+        headers={"x-dev-user": "employee@example.local"},
+    )
+    assert usage_for_assignment.status_code == 200
+    assert usage_for_assignment.json()[0]["assignment_id"] == assignment_id
+
+    costs = client.get("/costs", headers={"x-dev-user": "employee@example.local"})
+    assert costs.status_code == 200
+    assert costs.json()[0]["amount"] == "12.50"
+    assert costs.json()[0]["cost_type"] == "estimated"
+
+    budgets = client.get("/budgets", headers={"x-dev-user": "employee@example.local"})
+    assert budgets.status_code == 200
+    assert budgets.json()[0]["total_spend"] == "12.50"
+    assert budgets.json()[0]["remaining_budget"] == "87.50"
+    assert budgets.json()[0]["utilization_percent"] == 12
+
+    other_user_assignments = client.get(
+        "/provider-assignments", headers={"x-dev-user": "owner@example.local"}
+    )
+    assert other_user_assignments.status_code == 200
+    assert other_user_assignments.json() == []
+
+    denied_usage = client.get(
+        f"/usage?assignment_id={assignment_id}",
+        headers={"x-dev-user": "owner@example.local"},
+    )
+    assert denied_usage.status_code == 403
+
+    auditor_assignments = client.get(
+        "/provider-assignments", headers={"x-dev-user": "auditor@example.local"}
+    )
+    assert auditor_assignments.status_code == 200
+    assert len(auditor_assignments.json()) == 2
+
+
 def test_cto_can_view_executive_report_with_spend_rollups(client: TestClient) -> None:
     provision_demo_request(client)
     assignments = client.get(

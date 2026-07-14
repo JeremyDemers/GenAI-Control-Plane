@@ -74,6 +74,37 @@ export type ProviderAssignment = {
   freshness_at: string | null;
 };
 
+export type UsageRecord = {
+  id: string;
+  assignment_id: string;
+  provider: string;
+  tokens: number;
+  request_count: number;
+  measured_at: string;
+  freshness_at: string;
+};
+
+export type CostRecord = {
+  id: string;
+  assignment_id: string;
+  provider: string;
+  amount: string;
+  currency: string;
+  cost_type: string;
+  freshness_at: string;
+};
+
+export type BudgetSummary = {
+  request_id: string;
+  project_name: string;
+  requested_budget: string;
+  total_spend: string;
+  remaining_budget: string;
+  utilization_percent: number;
+  currency: string;
+  freshness_at: string | null;
+};
+
 export type LifecycleAction = {
   assignment_id: string;
   request_id: string;
@@ -233,6 +264,22 @@ export function decideApproval(user: DevUser, stepId: string, decision: "approve
 
 export function listAssignments(user: DevUser) {
   return request<ProviderAssignment[]>("/developer/assignments", user);
+}
+
+export function listProviderAssignments(user: DevUser) {
+  return request<ProviderAssignment[]>("/provider-assignments", user);
+}
+
+export function listUsageRecords(user: DevUser) {
+  return request<UsageRecord[]>("/usage", user);
+}
+
+export function listCostRecords(user: DevUser) {
+  return request<CostRecord[]>("/costs", user);
+}
+
+export function listBudgetSummaries(user: DevUser) {
+  return request<BudgetSummary[]>("/budgets", user);
 }
 
 export function simulateUsage(

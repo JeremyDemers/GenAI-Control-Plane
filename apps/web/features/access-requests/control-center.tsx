@@ -45,12 +45,16 @@ import {
   listArchives,
   listAssignments,
   listAuditEvents,
+  listBudgetSummaries,
+  listCostRecords,
   listExtensions,
   listIncidents,
   listNotifications,
   listPolicies,
   listPendingApprovals,
+  listProviderAssignments,
   listRequests,
+  listUsageRecords,
   markNotificationRead,
   publishInternalSecurityReviewPolicy,
   restoreAssignment,
@@ -137,6 +141,26 @@ export function ControlCenter() {
     enabled: user === "admin@example.local",
     retry: false
   });
+  const providerAssignments = useQuery({
+    queryKey: ["provider-assignments", user],
+    queryFn: () => listProviderAssignments(user),
+    retry: false
+  });
+  const usageRecords = useQuery({
+    queryKey: ["usage-records", user],
+    queryFn: () => listUsageRecords(user),
+    retry: false
+  });
+  const costRecords = useQuery({
+    queryKey: ["cost-records", user],
+    queryFn: () => listCostRecords(user),
+    retry: false
+  });
+  const budgetSummaries = useQuery({
+    queryKey: ["budget-summaries", user],
+    queryFn: () => listBudgetSummaries(user),
+    retry: false
+  });
   const archives = useQuery({
     queryKey: ["archives", user],
     queryFn: () => listArchives(user),
@@ -200,6 +224,8 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
       void queryClient.invalidateQueries({ queryKey: ["approvals"] });
       void queryClient.invalidateQueries({ queryKey: ["assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["budget-summaries"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
   });
@@ -213,6 +239,8 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["approvals"] });
       void queryClient.invalidateQueries({ queryKey: ["policy-evaluation"] });
       void queryClient.invalidateQueries({ queryKey: ["assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["budget-summaries"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
   });
@@ -222,6 +250,8 @@ export function ControlCenter() {
       setSelectedRequestId(updated.id);
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
       void queryClient.invalidateQueries({ queryKey: ["approvals"] });
+      void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["budget-summaries"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
   });
@@ -246,6 +276,10 @@ export function ControlCenter() {
       setSelectedRequestId(result.request_id);
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
       void queryClient.invalidateQueries({ queryKey: ["assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["usage-records"] });
+      void queryClient.invalidateQueries({ queryKey: ["cost-records"] });
+      void queryClient.invalidateQueries({ queryKey: ["budget-summaries"] });
       void queryClient.invalidateQueries({ queryKey: ["archives"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
@@ -276,6 +310,8 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["extensions"] });
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
       void queryClient.invalidateQueries({ queryKey: ["assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["budget-summaries"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
   });
@@ -305,6 +341,9 @@ export function ControlCenter() {
     requests.data?.filter((request) => request.status.includes("AWAITING")).length ?? 0;
   const unreadNotifications =
     notifications.data?.filter((notification) => !notification.read_at).length ?? 0;
+  const latestUsage = usageRecords.data?.[0];
+  const latestCost = costRecords.data?.[0];
+  const visibleAssignments = providerAssignments.data?.length ?? 0;
 
   return (
     <main className="min-h-screen">
@@ -465,6 +504,57 @@ export function ControlCenter() {
             ) : (
               <p className="text-sm text-slate-500">Select a request with a policy evaluation.</p>
             )}
+          </Panel>
+
+          <Panel title="Usage & Budget" icon={Activity}>
+            <div className="grid gap-4">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <Detail label="Visible assignments" value={visibleAssignments.toString()} />
+                <Detail
+                  label="Latest tokens"
+                  value={latestUsage ? latestUsage.tokens.toLocaleString() : "0"}
+                />
+                <Detail
+                  label="Latest cost"
+                  value={latestCost ? `${latestCost.currency} ${latestCost.amount}` : "USD 0"}
+                />
+                <Detail
+                  label="Cost type"
+                  value={latestCost ? latestCost.cost_type.replaceAll("_", " ") : "pending"}
+                />
+              </div>
+              <div className="grid gap-2">
+                {(budgetSummaries.data ?? []).slice(0, 4).map((summary) => (
+                  <div key={summary.request_id} className="rounded-md border border-line p-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">{summary.project_name}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {summary.freshness_at
+                            ? `Fresh ${new Date(summary.freshness_at).toLocaleTimeString()}`
+                            : "No usage reported yet"}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold">
+                          {summary.currency} {summary.total_spend} / {summary.requested_budget}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {summary.utilization_percent}% used · {summary.currency}{" "}
+                          {summary.remaining_budget} remaining
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {budgetSummaries.data?.length === 0 ? (
+                  <p className="text-sm text-slate-500">Budget evidence will appear after a request is submitted.</p>
+                ) : null}
+                {budgetSummaries.isError || usageRecords.isError || costRecords.isError ? (
+                  <p className="text-sm text-coral">Usage and budget evidence unavailable.</p>
+                ) : null}
+              </div>
+            </div>
           </Panel>
 
           {user === "admin@example.local" ? (

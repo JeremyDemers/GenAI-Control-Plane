@@ -154,6 +154,37 @@ class ProviderAssignmentOut(BaseModel):
     freshness_at: datetime | None
 
 
+class UsageRecordOut(BaseModel):
+    id: str
+    assignment_id: str
+    provider: str
+    tokens: int
+    request_count: int
+    measured_at: datetime
+    freshness_at: datetime
+
+
+class CostRecordOut(BaseModel):
+    id: str
+    assignment_id: str
+    provider: str
+    amount: Decimal
+    currency: str
+    cost_type: str
+    freshness_at: datetime
+
+
+class BudgetSummaryOut(BaseModel):
+    request_id: str
+    project_name: str
+    requested_budget: Decimal
+    total_spend: Decimal
+    remaining_budget: Decimal
+    utilization_percent: int
+    currency: str
+    freshness_at: datetime | None
+
+
 class SimulatedUsageIn(BaseModel):
     assignment_id: str
     tokens: int = Field(ge=1, le=100000000)
