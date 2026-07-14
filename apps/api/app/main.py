@@ -23,6 +23,7 @@ from app.api import (
     reports,
     role_changes,
     usage,
+    webhooks,
 )
 from app.core.config import get_settings
 from app.core.database import Base, SessionLocal, engine
@@ -80,6 +81,7 @@ app.include_router(usage.assignments_router)
 app.include_router(usage.usage_router)
 app.include_router(usage.costs_router)
 app.include_router(usage.budgets_router)
+app.include_router(webhooks.router)
 
 
 @app.get("/")

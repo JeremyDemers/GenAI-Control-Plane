@@ -52,6 +52,7 @@ Local development authentication uses the `x-dev-user` header. The web app inclu
 - Versioned standard policy evaluation.
 - Approval workflow with approver and CTO paths.
 - Mock provider adapter contract and provisioning flow.
+- Signed provider webhook endpoint with replay-window validation.
 - Append-only audit event model from the application perspective.
 - Next.js dashboard with request form, project membership and scoped audit visibility, member addition, ownership reassignment, project suspension, request cancellation, extension workflow, approvals with additional-information handling, CTO override, approval history, role-change, operational health, lifecycle job retry, and provisioning evidence visibility, policy evaluation, policy version/retention management, provider health/configuration/credential visibility, credential rotation evidence, usage and budget evidence, incident handling, notifications, CTO executive reporting, audit/cost allocation export and scheduled delivery, and spend charts.
 - Docker Compose for PostgreSQL, Redis, API, worker, and web.

@@ -1,8 +1,12 @@
+import json
+import time
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.api.webhooks import webhook_signature
+from app.core.config import get_settings
 from app.providers.base import ProviderOperationError
 
 
@@ -1099,6 +1103,58 @@ def test_observability_propagates_trace_and_correlation_ids(client: TestClient) 
         event for event in audit.json() if event["event_type"] == "authorization.failure"
     ]
     assert failures[0]["correlation_id"] == "observability-correlation"
+
+
+def test_provider_webhook_requires_valid_signature(client: TestClient) -> None:
+    payload = {
+        "provider": "amazon_bedrock",
+        "event_type": "budget.threshold",
+        "delivery_id": "delivery-1",
+    }
+    body = json.dumps(payload, separators=(",", ":")).encode()
+    timestamp = str(int(time.time()))
+
+    missing_signature = client.post(
+        "/webhooks/provider-events",
+        content=body,
+        headers={"content-type": "application/json"},
+    )
+    assert missing_signature.status_code == 401
+
+    invalid_signature = client.post(
+        "/webhooks/provider-events",
+        content=body,
+        headers={
+            "content-type": "application/json",
+            "x-provider-timestamp": timestamp,
+            "x-provider-signature": "sha256=invalid",
+        },
+    )
+    assert invalid_signature.status_code == 401
+
+    valid_signature = client.post(
+        "/webhooks/provider-events",
+        content=body,
+        headers={
+            "content-type": "application/json",
+            "x-correlation-id": "provider-webhook",
+            "x-provider-timestamp": timestamp,
+            "x-provider-signature": webhook_signature(
+                timestamp,
+                body,
+                get_settings().provider_webhook_secret,
+            ),
+        },
+    )
+    assert valid_signature.status_code == 200
+    assert valid_signature.json() == {"status": "accepted", "provider": "amazon_bedrock"}
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    webhook_events = [
+        event for event in audit.json() if event["event_type"] == "provider.webhook_received"
+    ]
+    assert webhook_events[0]["correlation_id"] == "provider-webhook"
+    assert webhook_events[0]["provider"] == "amazon_bedrock"
 
 
 def test_cto_can_view_executive_report_with_spend_rollups(client: TestClient) -> None:

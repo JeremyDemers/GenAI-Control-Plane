@@ -22,6 +22,10 @@ class Settings(BaseSettings):
         validation_alias="CORS_ORIGINS",
     )
     provider_mode: str = Field(default="mock", validation_alias="PROVIDER_MODE")
+    provider_webhook_secret: str = Field(
+        default="local-provider-webhook-secret",
+        validation_alias="PROVIDER_WEBHOOK_SECRET",
+    )
 
     model_config = SettingsConfigDict(env_file=(".env", "../../.env"), extra="ignore")
 

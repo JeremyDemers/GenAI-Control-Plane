@@ -27,7 +27,9 @@ shared with authorization and workflow audit events.
 
 ## Secrets
 
-Real provider credentials must be stored outside source control, preferably in a cloud secret manager. `.env.example` contains only non-secret defaults.
+Real provider credentials and webhook signing secrets must be stored outside source control,
+preferably in a cloud secret manager. `.env.example` contains only non-secret defaults and
+placeholder local values.
 
 ## Data Retention
 
