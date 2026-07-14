@@ -1,6 +1,6 @@
 # AI Access Control Center
 
-AI Access Control Center is a production-style internal portal for governed, temporary access to enterprise generative AI platforms. It demonstrates enterprise authentication boundaries, server-side RBAC, request approval workflows, policy evaluation, provider adapter boundaries, budget governance, audit logging, Docker-based local development, and CI readiness.
+AI Access Control Center is a production-style internal portal for governed, temporary access to enterprise generative AI platforms. It demonstrates enterprise authentication boundaries, server-side RBAC, request approval workflows, policy evaluation, provider adapter boundaries, budget governance, user notifications, audit logging, Docker-based local development, and CI readiness.
 
 ## Current Phase
 
@@ -53,7 +53,7 @@ Local development authentication uses the `x-dev-user` header. The web app inclu
 - Approval workflow with approver and CTO paths.
 - Mock provider adapter contract and provisioning flow.
 - Append-only audit event model from the application perspective.
-- Next.js dashboard with request form, approvals, policy evaluation, and spend charts.
+- Next.js dashboard with request form, approvals, policy evaluation, notifications, and spend charts.
 - Docker Compose for PostgreSQL, Redis, API, worker, and web.
 - GitHub Actions workflow for backend, frontend, Docker, and Terraform validation.
 
@@ -65,7 +65,7 @@ make lint
 make typecheck
 ```
 
-Backend tests cover state transitions, RBAC denial/audit logging, request submission, policy evaluation, and mock provisioning through approval. Frontend tests cover request form validation.
+Backend tests cover state transitions, RBAC denial/audit logging, request submission, notifications, policy evaluation, and mock provisioning through approval. Frontend tests cover request form validation.
 Playwright covers the seeded interview demo lifecycle end to end.
 
 For a clean local SQLite migration check:
@@ -79,14 +79,14 @@ cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade 
 
 - OIDC/PKCE is represented as an architecture boundary; local auth uses deterministic development identities.
 - Provider adapters run in mock mode only.
-- Alembic migration files are not yet generated; the phase-1 API creates local tables at startup for demo velocity.
+- The API still creates local tables at startup for demo velocity, with Alembic migrations available for clean database setup.
 - Worker and scheduler are scaffolded; jobs execute inline for the first approval/provisioning slice.
 - `npm audit` currently reports a moderate Next/PostCSS transitive advisory where `next@latest` still bundles the affected range.
 
 ## Roadmap
 
-1. Add Alembic migrations and repository-layer coverage.
-2. Move provisioning, usage, budget, and lifecycle actions to durable async jobs.
-3. Expand dashboard views for project owners, auditors, administrators, and executives.
-4. Add Playwright end-to-end coverage for the interview demo scenario.
-5. Implement live-safe provider configuration and read-only health checks.
+1. Move provisioning, usage, budget, lifecycle actions, and notifications to durable async jobs.
+2. Expand live-safe provider configuration and read-only health checks.
+3. Add repository-layer and service-layer coverage around provider adapters.
+4. Replace local development authentication with OIDC/PKCE and enterprise group mapping.
+5. Add executive reporting and cost allocation exports.

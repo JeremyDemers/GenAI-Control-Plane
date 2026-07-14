@@ -91,6 +91,15 @@ export type ArtifactArchive = {
   retention_expires_at: string;
 };
 
+export type Notification = {
+  id: string;
+  user_id: string;
+  event_type: string;
+  message: string;
+  read_at: string | null;
+  created_at: string;
+};
+
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function request<T>(path: string, user: DevUser, init?: RequestInit): Promise<T> {
@@ -181,4 +190,14 @@ export function listAuditEvents(user: DevUser) {
 
 export function listArchives(user: DevUser) {
   return request<ArtifactArchive[]>("/developer/archives", user);
+}
+
+export function listNotifications(user: DevUser) {
+  return request<Notification[]>("/notifications", user);
+}
+
+export function markNotificationRead(user: DevUser, notificationId: string) {
+  return request<Notification>(`/notifications/${notificationId}/read`, user, {
+    method: "POST"
+  });
 }

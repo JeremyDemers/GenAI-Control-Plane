@@ -6,6 +6,7 @@ import {
   Activity,
   AlertTriangle,
   Archive,
+  Bell,
   CheckCircle2,
   Clock3,
   CloudCog,
@@ -38,8 +39,10 @@ import {
   listArchives,
   listAssignments,
   listAuditEvents,
+  listNotifications,
   listPendingApprovals,
   listRequests,
+  markNotificationRead,
   restoreAssignment,
   simulateUsage,
   type AccessRequest,
@@ -135,6 +138,11 @@ export function ControlCenter() {
     enabled: user === "auditor@example.local",
     retry: false
   });
+  const notifications = useQuery({
+    queryKey: ["notifications", user],
+    queryFn: () => listNotifications(user),
+    retry: false
+  });
   const selectedRequest = useMemo(
     () => requests.data?.find((request) => request.id === selectedRequestId) ?? requests.data?.[0],
     [requests.data, selectedRequestId]
@@ -158,6 +166,7 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
       void queryClient.invalidateQueries({ queryKey: ["approvals"] });
       void queryClient.invalidateQueries({ queryKey: ["assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
   });
 
@@ -170,6 +179,7 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["approvals"] });
       void queryClient.invalidateQueries({ queryKey: ["policy-evaluation"] });
       void queryClient.invalidateQueries({ queryKey: ["assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
   });
 
@@ -195,12 +205,21 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["assignments"] });
       void queryClient.invalidateQueries({ queryKey: ["archives"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    }
+  });
+  const readNotificationMutation = useMutation({
+    mutationFn: (notificationId: string) => markNotificationRead(user, notificationId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
   });
 
   const activeRequests = requests.data?.filter((request) => request.status === "ACTIVE").length ?? 0;
   const pendingRequests =
     requests.data?.filter((request) => request.status.includes("AWAITING")).length ?? 0;
+  const unreadNotifications =
+    notifications.data?.filter((notification) => !notification.read_at).length ?? 0;
 
   return (
     <main className="min-h-screen">
@@ -236,7 +255,7 @@ export function ControlCenter() {
         <div className="mx-auto grid max-w-7xl grid-cols-2 gap-3 px-5 py-5 lg:grid-cols-4">
           <Metric icon={Clock3} label="Pending approvals" value={pendingRequests.toString()} />
           <Metric icon={CheckCircle2} label="Active projects" value={activeRequests.toString()} />
-          <Metric icon={AlertTriangle} label="Budget incidents" value="1" tone="amber" />
+          <Metric icon={Bell} label="Unread alerts" value={unreadNotifications.toString()} tone="amber" />
           <Metric icon={CloudCog} label="Provider health" value="7/7" tone="mint" />
         </div>
       </section>
@@ -448,6 +467,36 @@ export function ControlCenter() {
         </section>
 
         <aside className="grid content-start gap-5">
+          <Panel title="Notifications" icon={Bell}>
+            <div className="grid gap-2">
+              {(notifications.data ?? []).slice(0, 6).map((notification) => (
+                <button
+                  key={notification.id}
+                  className={`rounded-md border border-line p-3 text-left text-sm transition hover:bg-panel ${
+                    notification.read_at ? "bg-white text-slate-500" : "bg-panel text-ink"
+                  }`}
+                  onClick={() => readNotificationMutation.mutate(notification.id)}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-semibold">
+                      {notification.event_type.replaceAll("_", " ")}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      {new Date(notification.created_at).toLocaleTimeString()}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-slate-600">{notification.message}</p>
+                </button>
+              ))}
+              {notifications.data?.length === 0 ? (
+                <p className="text-sm text-slate-500">No notifications for this identity.</p>
+              ) : null}
+              {notifications.isError ? (
+                <p className="text-sm text-coral">Notifications unavailable.</p>
+              ) : null}
+            </div>
+          </Panel>
+
           <Panel title="New Request" icon={CloudCog}>
             <form
               className="grid gap-3"

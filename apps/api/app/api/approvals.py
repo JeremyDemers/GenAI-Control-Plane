@@ -11,6 +11,7 @@ from app.models.entities import AccessRequest, ApprovalDecision, ApprovalStep, U
 from app.models.enums import RequestStatus
 from app.schemas import AccessRequestOut, ApprovalAction
 from app.services.audit import record_audit_event
+from app.services.notifications import notify_approval_step, notify_user
 from app.services.state_machine import transition
 from app.workers.jobs import provision_request
 
@@ -80,10 +81,23 @@ async def decide(
             comments=payload.comments,
         )
     )
+    next_step = None
     if payload.decision == "reject":
         request.status = transition(request.status, RequestStatus.REJECTED)
+        notify_user(
+            db,
+            user_id=request.requester_id,
+            event_type="request_rejected",
+            message=f"{request.project_name} was rejected during approval.",
+        )
     elif payload.decision == "request_information":
         request.status = transition(request.status, RequestStatus.SUBMITTED)
+        notify_user(
+            db,
+            user_id=request.requester_id,
+            event_type="request_information_requested",
+            message=f"{request.project_name} needs more information before approval can continue.",
+        )
     else:
         db.flush()
         next_step = db.scalar(
@@ -99,10 +113,22 @@ async def decide(
             }[next_step.step_type]
             if desired != request.status:
                 request.status = transition(request.status, desired)
+            notify_approval_step(
+                db,
+                step_type=next_step.step_type,
+                project_name=request.project_name,
+                request_id=request.id,
+            )
         else:
             request.status = transition(request.status, RequestStatus.APPROVED)
             request.approved_at = datetime.now(UTC)
             await provision_request(db, request, correlation_id)
+            notify_user(
+                db,
+                user_id=request.requester_id,
+                event_type="request_provisioned",
+                message=f"{request.project_name} was approved and provisioned.",
+            )
 
     record_audit_event(
         db,

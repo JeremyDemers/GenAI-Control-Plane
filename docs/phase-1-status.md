@@ -17,6 +17,7 @@
 - Administrator restore, forced expiration, artifact archival, deprovisioning, and request closure are implemented in mock mode.
 - Frontend developer controls expose assignment cost/token totals, restore, expiration, and archive evidence.
 - Auditor view shows recent audit events for the demo lifecycle.
+- User notification inbox is implemented for request submission, approval handoffs, provisioning, budget thresholds, suspension, restore, and closure.
 - Root `.env` values are respected by local API settings and Docker Compose interpolation while remaining ignored by git.
 - Playwright now covers the full seeded interview demo lifecycle in Chromium.
 - Admins can list lifecycle jobs and request retry for queued or failed jobs.
@@ -37,6 +38,6 @@
 
 ## Remaining Work
 
-- Move provisioning, usage, budget, and lifecycle processing from inline execution to durable asynchronous workers.
+- Move provisioning, usage, budget, lifecycle processing, and notifications from inline execution to durable asynchronous workers.
 - Expand live-safe provider adapters for AWS, Azure, Google Cloud, Microsoft Graph, and GitHub.
 - Track the remaining moderate npm audit advisory for Next's transitive PostCSS dependency; the current `next@latest` still bundles the affected range, and `npm audit fix --force` recommends downgrading to an unusable legacy Next release.

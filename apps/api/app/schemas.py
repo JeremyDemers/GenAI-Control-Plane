@@ -154,5 +154,14 @@ class LifecycleJobOut(BaseModel):
     updated_at: datetime
 
 
+class NotificationOut(BaseModel):
+    id: str
+    user_id: str
+    event_type: str
+    message: str
+    read_at: datetime | None
+    created_at: datetime
+
+
 class ErrorEnvelope(BaseModel):
     error: dict[str, str]

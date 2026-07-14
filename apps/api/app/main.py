@@ -12,6 +12,7 @@ from app.api import (
     developer,
     health,
     lifecycle_jobs,
+    notifications,
     providers,
 )
 from app.core.config import get_settings
@@ -57,6 +58,7 @@ app.include_router(providers.router)
 app.include_router(audit.router)
 app.include_router(developer.router)
 app.include_router(lifecycle_jobs.router)
+app.include_router(notifications.router)
 
 
 @app.get("/")

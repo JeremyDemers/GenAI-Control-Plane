@@ -10,6 +10,7 @@ from app.models.entities import AccessRequest, ApprovalStep, PolicyEvaluation, U
 from app.models.enums import RequestStatus
 from app.schemas import AccessRequestCreate, AccessRequestOut, PolicyEvaluationOut
 from app.services.audit import record_audit_event
+from app.services.notifications import notify_approval_step, notify_user
 from app.services.policies import evaluate_request
 from app.services.state_machine import transition
 
@@ -120,6 +121,20 @@ def create_request(
                 }[step],
                 sequence=sequence,
             )
+        )
+
+    notify_user(
+        db,
+        user_id=user.id,
+        event_type="request_submitted",
+        message=f"{request.project_name} was submitted for governed AI access.",
+    )
+    if evaluation.final_decision != "denied":
+        notify_approval_step(
+            db,
+            step_type=evaluation.approval_path[0],
+            project_name=request.project_name,
+            request_id=request.id,
         )
 
     record_audit_event(

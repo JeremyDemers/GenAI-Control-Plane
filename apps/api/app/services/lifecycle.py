@@ -16,6 +16,7 @@ from app.models.entities import (
 from app.models.enums import RequestStatus
 from app.providers.registry import get_provider_adapter
 from app.services.audit import record_audit_event
+from app.services.notifications import notify_roles, notify_user
 from app.services.state_machine import transition
 
 
@@ -90,10 +91,34 @@ def record_usage_and_cost(
                 },
             )
         )
+        notify_user(
+            db,
+            user_id=request.requester_id,
+            event_type="access_suspended",
+            message=f"{request.project_name} reached its budget limit and was suspended.",
+        )
+        notify_roles(
+            db,
+            role_names={"platform_admin"},
+            event_type="budget_enforcement",
+            message=f"{request.project_name} was suspended at {percent}% of budget.",
+        )
     elif percent >= 90:
         threshold = "critical"
+        notify_roles(
+            db,
+            role_names={"platform_admin"},
+            event_type="budget_critical",
+            message=f"{request.project_name} reached {percent}% of budget.",
+        )
     elif percent >= 70:
         threshold = "warning"
+        notify_user(
+            db,
+            user_id=request.requester_id,
+            event_type="budget_warning",
+            message=f"{request.project_name} reached {percent}% of budget.",
+        )
 
     event = record_audit_event(
         db,
@@ -153,6 +178,12 @@ async def restore_assignment(
         result="success",
         reason=reason,
         correlation_id=correlation_id,
+    )
+    notify_user(
+        db,
+        user_id=request.requester_id,
+        event_type="access_restored",
+        message=f"{request.project_name} access was restored.",
     )
     return event.event_type
 
@@ -217,5 +248,17 @@ async def expire_and_archive_assignment(
         reason=reason,
         correlation_id=correlation_id,
         metadata_json={"archive_location": archive.storage_location},
+    )
+    notify_user(
+        db,
+        user_id=request.requester_id,
+        event_type="request_closed",
+        message=f"{request.project_name} was archived and closed.",
+    )
+    notify_roles(
+        db,
+        role_names={"platform_admin"},
+        event_type="lifecycle_closed",
+        message=f"{request.project_name} was archived and deprovisioned.",
     )
     return event.event_type, archive

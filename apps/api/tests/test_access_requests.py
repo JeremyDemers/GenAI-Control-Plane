@@ -48,6 +48,36 @@ def test_employee_can_submit_request_and_policy_records_cto_path(client: TestCli
     assert evaluation.status_code == 200
     assert evaluation.json()["approval_path"] == ["manager", "cto"]
 
+    employee_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert employee_notifications.status_code == 200
+    assert {
+        notification["event_type"] for notification in employee_notifications.json()
+    } >= {"request_submitted"}
+
+    approver_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "approver@example.local"}
+    )
+    assert approver_notifications.status_code == 200
+    assert {
+        notification["event_type"] for notification in approver_notifications.json()
+    } >= {"approval_required"}
+
+    notification_id = employee_notifications.json()[0]["id"]
+    read_response = client.post(
+        f"/notifications/{notification_id}/read",
+        headers={"x-dev-user": "employee@example.local"},
+    )
+    assert read_response.status_code == 200
+    assert read_response.json()["read_at"] is not None
+
+    denied_read = client.post(
+        f"/notifications/{notification_id}/read",
+        headers={"x-dev-user": "approver@example.local"},
+    )
+    assert denied_read.status_code == 404
+
 
 def test_auditor_cannot_submit_request_and_failure_is_audited(client: TestClient) -> None:
     response = client.post(
@@ -86,6 +116,12 @@ def test_approval_workflow_provisions_mock_assignments(client: TestClient) -> No
     )
     assert manager_decision.status_code == 200
     assert manager_decision.json()["status"] == "AWAITING_CTO_APPROVAL"
+    cto_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "cto@example.local"}
+    ).json()
+    assert {notification["event_type"] for notification in cto_notifications} >= {
+        "approval_required"
+    }
 
     cto_steps = client.get("/approvals/pending", headers={"x-dev-user": "cto@example.local"}).json()
     assert len(cto_steps) == 1
@@ -97,6 +133,12 @@ def test_approval_workflow_provisions_mock_assignments(client: TestClient) -> No
     assert cto_decision.status_code == 200
     assert cto_decision.json()["id"] == created["id"]
     assert cto_decision.json()["status"] == "ACTIVE"
+    employee_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "employee@example.local"}
+    ).json()
+    assert {notification["event_type"] for notification in employee_notifications} >= {
+        "request_provisioned"
+    }
 
 
 def provision_demo_request(client: TestClient) -> dict[str, object]:
@@ -171,6 +213,20 @@ def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -
     assert enforcement.status_code == 200
     assert enforcement.json()["status"] == "suspended"
     assert enforcement.json()["request_status"] == "SUSPENDED"
+    employee_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "employee@example.local"}
+    ).json()
+    admin_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "admin@example.local"}
+    ).json()
+    assert {notification["event_type"] for notification in employee_notifications} >= {
+        "budget_warning",
+        "access_suspended",
+    }
+    assert {notification["event_type"] for notification in admin_notifications} >= {
+        "budget_critical",
+        "budget_enforcement",
+    }
 
     restored = client.post(
         "/developer/restore",
@@ -179,6 +235,12 @@ def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -
     )
     assert restored.status_code == 200
     assert restored.json()["request_status"] == "ACTIVE"
+    employee_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "employee@example.local"}
+    ).json()
+    assert {notification["event_type"] for notification in employee_notifications} >= {
+        "access_restored"
+    }
 
     expired = client.post(
         "/developer/expire",
@@ -188,6 +250,18 @@ def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -
     assert expired.status_code == 200
     assert expired.json()["status"] == "deprovisioned"
     assert expired.json()["request_status"] == "CLOSED"
+    employee_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "employee@example.local"}
+    ).json()
+    admin_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "admin@example.local"}
+    ).json()
+    assert {notification["event_type"] for notification in employee_notifications} >= {
+        "request_closed"
+    }
+    assert {notification["event_type"] for notification in admin_notifications} >= {
+        "lifecycle_closed"
+    }
 
     archives = client.get("/developer/archives", headers={"x-dev-user": "admin@example.local"})
     assert archives.status_code == 200

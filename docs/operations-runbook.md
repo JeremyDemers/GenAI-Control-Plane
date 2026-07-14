@@ -22,12 +22,18 @@ Show data freshness timestamps, distinguish estimated and provider-reported cost
 
 Platform administrators can suspend assignments. The action must create audit events and notify project owners.
 
+## Notifications
+
+Users can review their own notifications at `/notifications`. The local portal shows a notification
+inbox for request submission, approval handoffs, provisioning, budget thresholds, suspension, restore,
+and closure. Reading another user's notification returns `404`.
+
 ## Local Demo Lifecycle
 
 In local mode, the developer panel can simulate budget warning, critical, and enforcement thresholds.
-Enforcement suspends the assignment and creates an incident. Restore and forced expiration actions use
-the mock provider adapter, write audit events, archive artifacts locally, deprovision access, and close
-the request.
+Enforcement suspends the assignment, creates an incident, and notifies the requester and platform
+administrators. Restore and forced expiration actions use the mock provider adapter, write audit events,
+archive artifacts locally, deprovision access, notify participants, and close the request.
 
 ## Credential Rotation
 
