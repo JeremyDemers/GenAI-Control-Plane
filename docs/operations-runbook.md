@@ -22,6 +22,12 @@ Show data freshness timestamps, distinguish estimated and provider-reported cost
 
 Platform administrators can suspend assignments. The action must create audit events and notify project owners.
 
+## Incidents
+
+Budget enforcement creates high-severity incidents. Platform administrators and auditors can review
+incidents at `/incidents`; administrators can resolve incidents with a reason at
+`/incidents/{incident_id}/resolve`, which emits `incident.resolved` audit evidence.
+
 ## Notifications
 
 Users can review their own notifications at `/notifications`. The local portal shows a notification

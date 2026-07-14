@@ -14,6 +14,7 @@
 - Initial Alembic migration generated and verified with `alembic upgrade head`.
 - Local developer lifecycle controls now simulate 70%, 90%, and 100% budget thresholds.
 - Budget enforcement suspends assignments, creates incidents, and emits audit events.
+- Platform administrators and auditors can view incidents; administrators can resolve them with audit evidence.
 - Administrator restore, forced expiration, artifact archival, deprovisioning, and request closure are implemented in mock mode.
 - Frontend developer controls expose assignment cost/token totals, restore, expiration, and archive evidence.
 - Auditor view shows recent audit events for the demo lifecycle.

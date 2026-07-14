@@ -91,6 +91,16 @@ export type ArtifactArchive = {
   retention_expires_at: string;
 };
 
+export type Incident = {
+  id: string;
+  severity: string;
+  status: string;
+  summary: string;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Notification = {
   id: string;
   user_id: string;
@@ -256,6 +266,17 @@ export function markNotificationRead(user: DevUser, notificationId: string) {
 
 export function getExecutiveReport(user: DevUser) {
   return request<ExecutiveReport>("/reports/executive", user);
+}
+
+export function listIncidents(user: DevUser) {
+  return request<Incident[]>("/incidents", user);
+}
+
+export function resolveIncident(user: DevUser, incidentId: string) {
+  return request<Incident>(`/incidents/${incidentId}/resolve`, user, {
+    method: "POST",
+    body: JSON.stringify({ reason: "Reviewed and resolved in the local operations demo." })
+  });
 }
 
 export function listExtensions(user: DevUser) {

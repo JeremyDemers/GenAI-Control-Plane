@@ -260,6 +260,32 @@ def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -
         "budget_critical",
         "budget_enforcement",
     }
+    incidents = client.get("/incidents", headers={"x-dev-user": "admin@example.local"})
+    assert incidents.status_code == 200
+    assert incidents.json()[0]["status"] == "open"
+    assert incidents.json()[0]["severity"] == "high"
+
+    auditor_incidents = client.get("/incidents", headers={"x-dev-user": "auditor@example.local"})
+    assert auditor_incidents.status_code == 200
+    assert auditor_incidents.json()[0]["id"] == incidents.json()[0]["id"]
+
+    denied_incidents = client.get("/incidents", headers={"x-dev-user": "employee@example.local"})
+    assert denied_incidents.status_code == 403
+
+    denied_resolve = client.post(
+        f"/incidents/{incidents.json()[0]['id']}/resolve",
+        headers={"x-dev-user": "auditor@example.local"},
+        json={"reason": "Auditors cannot resolve incidents."},
+    )
+    assert denied_resolve.status_code == 403
+
+    resolved = client.post(
+        f"/incidents/{incidents.json()[0]['id']}/resolve",
+        headers={"x-dev-user": "admin@example.local"},
+        json={"reason": "Budget enforcement reviewed and access restored."},
+    )
+    assert resolved.status_code == 200
+    assert resolved.json()["status"] == "resolved"
 
     restored = client.post(
         "/developer/restore",
@@ -314,6 +340,7 @@ def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -
         "budget.warning",
         "budget.critical",
         "budget.enforcement",
+        "incident.resolved",
         "lifecycle.closed",
     } <= event_types
 

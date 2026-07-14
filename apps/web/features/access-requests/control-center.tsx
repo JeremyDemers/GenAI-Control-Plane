@@ -46,11 +46,13 @@ import {
   listAssignments,
   listAuditEvents,
   listExtensions,
+  listIncidents,
   listNotifications,
   listPendingApprovals,
   listRequests,
   markNotificationRead,
   restoreAssignment,
+  resolveIncident,
   simulateUsage,
   type AccessRequest,
   type DevUser
@@ -156,6 +158,12 @@ export function ControlCenter() {
     enabled: user === "cto@example.local",
     retry: false
   });
+  const incidents = useQuery({
+    queryKey: ["incidents", user],
+    queryFn: () => listIncidents(user),
+    enabled: user === "admin@example.local" || user === "auditor@example.local" || user === "cto@example.local",
+    retry: false
+  });
   const extensions = useQuery({
     queryKey: ["extensions", user],
     queryFn: () => listExtensions(user),
@@ -233,6 +241,7 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["archives"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["incidents"] });
     }
   });
   const readNotificationMutation = useMutation({
@@ -260,6 +269,13 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
       void queryClient.invalidateQueries({ queryKey: ["assignments"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    }
+  });
+  const incidentResolveMutation = useMutation({
+    mutationFn: (incidentId: string) => resolveIncident(user, incidentId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["incidents"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
     }
   });
 
@@ -518,6 +534,40 @@ export function ControlCenter() {
                     <p className="font-semibold">Latest archive</p>
                     <p className="mt-1 break-all text-slate-600">{archives.data[0].storage_location}</p>
                   </div>
+                ) : null}
+              </div>
+            </Panel>
+          ) : null}
+
+          {user === "admin@example.local" || user === "auditor@example.local" ? (
+            <Panel title="Incidents" icon={AlertTriangle}>
+              <div className="grid gap-2">
+                {(incidents.data ?? []).slice(0, 5).map((incident) => (
+                  <div key={incident.id} className="rounded-md border border-line p-3 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold">{incident.summary}</p>
+                          <StatusPill status={incident.status} />
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {incident.severity} · {new Date(incident.created_at).toLocaleTimeString()}
+                        </p>
+                      </div>
+                      {user === "admin@example.local" && incident.status !== "resolved" ? (
+                        <button
+                          data-testid="resolve-incident"
+                          className="rounded-md border border-line px-3 py-2 text-xs font-semibold"
+                          onClick={() => incidentResolveMutation.mutate(incident.id)}
+                        >
+                          Resolve
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+                {incidents.data?.length === 0 ? (
+                  <p className="text-sm text-slate-500">No incidents.</p>
                 ) : null}
               </div>
             </Panel>

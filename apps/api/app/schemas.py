@@ -165,6 +165,20 @@ class ArtifactArchiveOut(BaseModel):
     retention_expires_at: datetime
 
 
+class IncidentOut(BaseModel):
+    id: str
+    severity: str
+    status: str
+    summary: str
+    metadata_json: dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+
+
+class IncidentResolveIn(BaseModel):
+    reason: str = Field(min_length=5, max_length=500)
+
+
 class LifecycleJobOut(BaseModel):
     id: str
     job_type: str

@@ -10,7 +10,7 @@
 8. Show the request becoming `ACTIVE`.
 9. Select `admin@example.local`.
 10. Use Developer Controls to trigger 70%, 90%, and 100% budget thresholds.
-11. Show automatic suspension at enforcement and the admin budget notifications.
+11. Show automatic suspension, incident creation, incident resolution, and admin budget notifications.
 12. Restore the assignment.
 13. Switch to `cto@example.local` and show the executive spend report.
 14. Switch to `employee@example.local`, request a one-week extension, then approve it as the CTO.
