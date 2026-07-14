@@ -54,11 +54,29 @@ class AccessRequestCreate(BaseModel):
 class PolicyEvaluationOut(BaseModel):
     id: str
     request_id: str
+    policy_version_id: str
     triggered_rules: list[str]
     approval_path: list[str]
     restrictions: list[str]
     final_decision: str
     evaluated_at: datetime
+
+
+class PolicyVersionOut(BaseModel):
+    id: str
+    policy_definition_id: str
+    name: str
+    description: str
+    version: int
+    document: dict[str, Any]
+    active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class PolicyVersionCreate(BaseModel):
+    document: dict[str, Any]
+    description: str = Field(default="", max_length=500)
 
 
 class AccessRequestOut(BaseModel):

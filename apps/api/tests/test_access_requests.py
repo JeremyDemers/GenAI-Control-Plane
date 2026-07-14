@@ -79,6 +79,55 @@ def test_employee_can_submit_request_and_policy_records_cto_path(client: TestCli
     assert denied_read.status_code == 404
 
 
+def test_admin_can_publish_policy_version_used_by_new_requests(client: TestClient) -> None:
+    policies = client.get("/policies", headers={"x-dev-user": "admin@example.local"})
+    assert policies.status_code == 200
+    active_policy = next(policy for policy in policies.json() if policy["active"])
+    document = active_policy["document"]
+    document["approval_rules"]["require_security_review_for"] = [
+        "internal",
+        "confidential",
+        "regulated",
+    ]
+
+    published = client.post(
+        "/policies/standard-ai-sandbox/versions",
+        headers={"x-dev-user": "admin@example.local"},
+        json={
+            "document": document,
+            "description": "Default governed sandbox policy with internal security review.",
+        },
+    )
+    assert published.status_code == 201
+    assert published.json()["version"] == active_policy["version"] + 1
+    assert published.json()["active"] is True
+
+    denied = client.post(
+        "/policies/standard-ai-sandbox/versions",
+        headers={"x-dev-user": "employee@example.local"},
+        json={"document": document},
+    )
+    assert denied.status_code == 403
+
+    payload = request_payload()
+    payload["requested_providers"] = ["amazon_bedrock"]
+    created = client.post(
+        "/access-requests",
+        headers={"x-dev-user": "employee@example.local"},
+        json=payload,
+    ).json()
+    evaluation = client.get(
+        f"/access-requests/{created['id']}/policy-evaluation",
+        headers={"x-dev-user": "employee@example.local"},
+    ).json()
+    assert evaluation["policy_version_id"] == published.json()["id"]
+    assert evaluation["approval_path"] == ["manager", "security"]
+    assert "security_review_required" in evaluation["triggered_rules"]
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    assert any(event["event_type"] == "policy.version_published" for event in audit.json())
+
+
 def test_auditor_cannot_submit_request_and_failure_is_audited(client: TestClient) -> None:
     response = client.post(
         "/access-requests",

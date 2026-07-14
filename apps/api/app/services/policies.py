@@ -35,6 +35,8 @@ def ensure_standard_policy(db: Session) -> PolicyVersion:
         select(PolicyVersion)
         .join(PolicyDefinition)
         .where(PolicyDefinition.name == "standard-ai-sandbox")
+        .where(PolicyVersion.active.is_(True))
+        .order_by(PolicyVersion.version.desc())
     )
     if existing:
         return existing

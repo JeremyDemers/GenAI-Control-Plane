@@ -35,6 +35,7 @@ export type CurrentUser = {
 export type PolicyEvaluation = {
   id: string;
   request_id: string;
+  policy_version_id: string;
   triggered_rules: string[];
   approval_path: string[];
   restrictions: string[];
@@ -47,6 +48,18 @@ export type PendingApproval = {
   request_id: string;
   step_type: string;
   assigned_role: string;
+};
+
+export type PolicyVersion = {
+  id: string;
+  policy_definition_id: string;
+  name: string;
+  description: string;
+  version: number;
+  document: Record<string, unknown>;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ProviderAssignment = {
@@ -184,6 +197,27 @@ export function cancelAccessRequest(user: DevUser, requestId: string) {
 
 export function getPolicyEvaluation(user: DevUser, requestId: string) {
   return request<PolicyEvaluation>(`/access-requests/${requestId}/policy-evaluation`, user);
+}
+
+export function listPolicies(user: DevUser) {
+  return request<PolicyVersion[]>("/policies", user);
+}
+
+export function publishInternalSecurityReviewPolicy(user: DevUser, activePolicy: PolicyVersion) {
+  const document = JSON.parse(JSON.stringify(activePolicy.document)) as {
+    approval_rules?: { require_security_review_for?: string[] };
+  } & Record<string, unknown>;
+  document.approval_rules = {
+    ...(document.approval_rules ?? {}),
+    require_security_review_for: ["internal", "confidential", "regulated"]
+  };
+  return request<PolicyVersion>("/policies/standard-ai-sandbox/versions", user, {
+    method: "POST",
+    body: JSON.stringify({
+      document,
+      description: "Default governed sandbox policy with internal security review."
+    })
+  });
 }
 
 export function listPendingApprovals(user: DevUser) {

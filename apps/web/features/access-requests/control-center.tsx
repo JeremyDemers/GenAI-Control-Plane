@@ -48,9 +48,11 @@ import {
   listExtensions,
   listIncidents,
   listNotifications,
+  listPolicies,
   listPendingApprovals,
   listRequests,
   markNotificationRead,
+  publishInternalSecurityReviewPolicy,
   restoreAssignment,
   resolveIncident,
   simulateUsage,
@@ -164,6 +166,12 @@ export function ControlCenter() {
     enabled: user === "admin@example.local" || user === "auditor@example.local" || user === "cto@example.local",
     retry: false
   });
+  const policies = useQuery({
+    queryKey: ["policies", user],
+    queryFn: () => listPolicies(user),
+    enabled: user === "admin@example.local" || user === "auditor@example.local",
+    retry: false
+  });
   const extensions = useQuery({
     queryKey: ["extensions", user],
     queryFn: () => listExtensions(user),
@@ -275,6 +283,19 @@ export function ControlCenter() {
     mutationFn: (incidentId: string) => resolveIncident(user, incidentId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["incidents"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+    }
+  });
+  const policyPublishMutation = useMutation({
+    mutationFn: () => {
+      const activePolicy = policies.data?.find((policy) => policy.active);
+      if (!activePolicy) {
+        throw new Error("No active policy version found.");
+      }
+      return publishInternalSecurityReviewPolicy(user, activePolicy);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["policies"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
     }
   });
@@ -534,6 +555,42 @@ export function ControlCenter() {
                     <p className="font-semibold">Latest archive</p>
                     <p className="mt-1 break-all text-slate-600">{archives.data[0].storage_location}</p>
                   </div>
+                ) : null}
+              </div>
+            </Panel>
+          ) : null}
+
+          {user === "admin@example.local" || user === "auditor@example.local" ? (
+            <Panel title="Policies" icon={ShieldCheck}>
+              <div className="grid gap-3 text-sm">
+                {policies.data?.find((policy) => policy.active) ? (
+                  <div className="rounded-md border border-line p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">
+                          {policies.data.find((policy) => policy.active)?.name}
+                        </p>
+                        <p className="mt-1 text-slate-600">
+                          Version {policies.data.find((policy) => policy.active)?.version} · active
+                        </p>
+                      </div>
+                      {user === "admin@example.local" ? (
+                        <button
+                          className="rounded-md border border-line px-3 py-2 text-xs font-semibold"
+                          onClick={() => policyPublishMutation.mutate()}
+                        >
+                          Publish Review Policy
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">Policy versions unavailable.</p>
+                )}
+                {policyPublishMutation.data ? (
+                  <p className="rounded-md bg-panel p-2 text-xs text-slate-600">
+                    Published policy version {policyPublishMutation.data.version}.
+                  </p>
                 ) : null}
               </div>
             </Panel>

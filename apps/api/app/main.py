@@ -15,6 +15,7 @@ from app.api import (
     incidents,
     lifecycle_jobs,
     notifications,
+    policies,
     providers,
     reports,
 )
@@ -65,6 +66,7 @@ app.include_router(notifications.router)
 app.include_router(reports.router)
 app.include_router(extensions.router)
 app.include_router(incidents.router)
+app.include_router(policies.router)
 
 
 @app.get("/")

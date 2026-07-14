@@ -9,7 +9,7 @@
 7. Select `cto@example.local`, show the approval notification, and approve final access.
 8. Show the request becoming `ACTIVE`.
 9. Select `admin@example.local`.
-10. Use Developer Controls to trigger 70%, 90%, and 100% budget thresholds.
+10. Show the active policy version, then use Developer Controls to trigger 70%, 90%, and 100% budget thresholds.
 11. Show automatic suspension, incident creation, incident resolution, and admin budget notifications.
 12. Restore the assignment.
 13. Switch to `cto@example.local` and show the executive spend report.

@@ -14,6 +14,12 @@ Suspend assignments first, collect final usage and cost data, retry deprovisioni
 
 Mark provider health degraded, pause new provisioning for that provider, notify platform administrators, and retry queued jobs with exponential backoff.
 
+## Policy Versioning
+
+Platform administrators can inspect policy versions at `/policies` and publish a new active standard
+policy at `/policies/standard-ai-sandbox/versions`. Existing requests retain their evaluated
+`policy_version_id`; newly submitted requests use the active policy version.
+
 ## Budget Delay
 
 Show data freshness timestamps, distinguish estimated and provider-reported cost, and reconcile delayed records before final closure.

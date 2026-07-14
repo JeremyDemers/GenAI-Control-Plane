@@ -235,6 +235,7 @@ def get_policy_evaluation(
     return PolicyEvaluationOut(
         id=evaluation.id,
         request_id=evaluation.request_id,
+        policy_version_id=evaluation.policy_version_id,
         triggered_rules=evaluation.triggered_rules,
         approval_path=evaluation.approval_path,
         restrictions=evaluation.restrictions,

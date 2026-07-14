@@ -32,6 +32,7 @@ test("interview demo lifecycle", async ({ page }) => {
 
   await page.getByTestId("identity-switcher").selectOption("admin@example.local");
   await expect(page.getByText("Developer Controls")).toBeVisible();
+  await expect(page.getByText("Policies")).toBeVisible();
   await page.getByTestId("usage-warning-amazon_bedrock").click();
   await page.getByTestId("usage-critical-amazon_bedrock").click();
   await page.getByTestId("usage-enforcement-amazon_bedrock").click();
