@@ -19,7 +19,7 @@
 - `npm --workspace apps/web run lint`
 - `npm --workspace apps/web run build`
 - Manual local smoke test with API on `8010` and web on `3001` because `8000` and `3000` were already occupied on this workstation.
-- `docker compose config --quiet` could not be verified locally because the Docker shim is backed by a Podman storage database with a static-dir mismatch outside the repository.
+- `make compose-config`
 
 ## Remaining Work
 

@@ -1,11 +1,13 @@
-.PHONY: setup dev test lint typecheck migrate seed reset e2e api web docker-build
+.PHONY: setup dev test lint typecheck migrate seed reset e2e api web compose-config docker-build
+
+PODMAN_ENV = case "$${XDG_DATA_HOME:-}" in "$$HOME"/snap/code/*/.local/share) unset XDG_DATA_HOME ;; esac;
 
 setup:
 	cd apps/api && uv sync --all-groups
 	npm install
 
 dev:
-	docker compose up --build
+	$(PODMAN_ENV) docker compose up --build
 
 api:
 	cd apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -39,5 +41,7 @@ e2e:
 	npm --workspace apps/web exec playwright test
 
 docker-build:
-	docker compose build
+	$(PODMAN_ENV) docker compose build
 
+compose-config:
+	$(PODMAN_ENV) docker compose config --quiet

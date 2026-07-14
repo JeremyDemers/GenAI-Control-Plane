@@ -11,6 +11,7 @@ Phase 1 foundation is implemented with a working FastAPI API, Next.js portal, de
 ```bash
 make setup
 make test
+make compose-config
 make dev
 ```
 
@@ -21,6 +22,9 @@ If those host ports are already taken, run:
 ```bash
 API_PORT=8010 WEB_PORT=3001 NEXT_PUBLIC_API_URL=http://localhost:8010 make dev
 ```
+
+The Makefile also clears Snap VS Code's revision-specific `XDG_DATA_HOME` before Docker-compatible
+commands, which avoids a local Podman storage database mismatch seen on this workstation.
 
 ## Demo Users
 
