@@ -180,6 +180,17 @@ export type LifecycleAction = {
   audit_event: string;
 };
 
+export type LifecycleJob = {
+  id: string;
+  job_type: string;
+  status: string;
+  attempt_count: number;
+  idempotency_key: string;
+  failure_information: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AuditEvent = {
   id: string;
   event_type: string;
@@ -574,6 +585,16 @@ export function expireAssignment(user: DevUser, assignmentId: string) {
       assignment_id: assignmentId,
       reason: "Developer panel forced expiration for demo."
     })
+  });
+}
+
+export function listLifecycleJobs(user: DevUser) {
+  return request<LifecycleJob[]>("/lifecycle-jobs", user);
+}
+
+export function retryLifecycleJob(user: DevUser, jobId: string) {
+  return request<LifecycleJob>(`/lifecycle-jobs/${jobId}/retry`, user, {
+    method: "POST"
   });
 }
 

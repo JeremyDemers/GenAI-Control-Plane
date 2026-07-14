@@ -27,6 +27,7 @@
 - Frontend usage and budget evidence shows visible assignments, latest usage, latest cost, spend, remaining budget, and data freshness.
 - Provider health checks and privileged provider configuration validation are exposed in the dashboard.
 - Provider credential inventory exposes safe vault-style references, admin-only rotation, due dates, and audit evidence without returning secrets.
+- Retryable provider provisioning failures now create failed lifecycle jobs, sanitized failure metadata, requester notifications, and provider failure audit evidence.
 - Access request submission creates project membership records, and project owners can review project requests, members, scoped audit history, evidence, and add existing users to a project with audit and notification evidence.
 - Project ownership reassignment now supports owner request, proposed-owner acceptance, admin/CTO approval, member-role transfer, notifications, and audit evidence.
 - Security auditors can view role-change evidence derived from audited project membership and reassignment events.
@@ -40,7 +41,7 @@
 - Platform administrators can update artifact retention policy versions, and archive expiration uses the active retention value.
 - Root `.env` values are respected by local API settings and Docker Compose interpolation while remaining ignored by git.
 - Playwright now covers the full seeded interview demo lifecycle in Chromium.
-- Admins can list lifecycle jobs and request retry for queued or failed jobs.
+- Admins can list lifecycle jobs in the portal and request retry for queued or failed jobs.
 
 ## Verified
 

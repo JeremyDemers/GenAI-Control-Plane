@@ -1,6 +1,9 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
+
+from app.providers.base import ProviderOperationError
 
 
 def request_payload() -> dict[str, object]:
@@ -641,6 +644,90 @@ def provision_demo_request(client: TestClient) -> dict[str, object]:
         json={"decision": "approve", "comments": "Approved."},
     )
     return created
+
+
+def test_retryable_provider_failure_creates_safe_lifecycle_job(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FailingAdapter:
+        def __init__(self, provider: str) -> None:
+            self.name = provider
+
+        async def provision_access(
+            self, request_id: str, idempotency_key: str
+        ) -> dict[str, object]:
+            del request_id, idempotency_key
+            raise ProviderOperationError(
+                "Mock provider timeout",
+                retryable=True,
+                details={
+                    "code": "timeout",
+                    "message": "Provider API timed out.",
+                    "operation": "provision_access",
+                    "secret": "do-not-log",
+                },
+            )
+
+    monkeypatch.setattr(
+        "app.workers.jobs.get_provider_adapter",
+        lambda provider: FailingAdapter(provider),
+    )
+    created = client.post(
+        "/access-requests",
+        headers={"x-dev-user": "employee@example.local"},
+        json=request_payload(),
+    ).json()
+    manager_step = client.get(
+        "/approvals/pending", headers={"x-dev-user": "approver@example.local"}
+    ).json()[0]
+    client.post(
+        f"/approvals/{manager_step['step_id']}",
+        headers={"x-dev-user": "approver@example.local"},
+        json={"decision": "approve", "comments": "Approved."},
+    )
+    cto_step = client.get("/approvals/pending", headers={"x-dev-user": "cto@example.local"}).json()[
+        0
+    ]
+
+    provision_failed = client.post(
+        f"/approvals/{cto_step['step_id']}",
+        headers={"x-dev-user": "cto@example.local", "x-correlation-id": "provider-failure"},
+        json={"decision": "approve", "comments": "Approved."},
+    )
+    assert provision_failed.status_code == 200
+    assert provision_failed.json()["status"] == "PROVISIONING_FAILED"
+
+    jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"})
+    assert jobs.status_code == 200
+    failed_job = jobs.json()[0]
+    assert failed_job["status"] == "failed"
+    assert failed_job["attempt_count"] == 1
+    assert failed_job["failure_information"]["retryable"] is True
+    assert failed_job["failure_information"]["details"]["code"] == "timeout"
+    assert "secret" not in failed_job["failure_information"]["details"]
+
+    denied_jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "employee@example.local"})
+    assert denied_jobs.status_code == 403
+
+    retried = client.post(
+        f"/lifecycle-jobs/{failed_job['id']}/retry",
+        headers={"x-dev-user": "admin@example.local", "x-correlation-id": "job-retry"},
+    )
+    assert retried.status_code == 200
+    assert retried.json()["status"] == "queued"
+    assert retried.json()["attempt_count"] == 2
+    assert retried.json()["failure_information"] == {}
+
+    notifications = client.get(
+        "/notifications", headers={"x-dev-user": "employee@example.local"}
+    ).json()
+    assert "provisioning_failed" in {
+        notification["event_type"] for notification in notifications
+    }
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    event_types = {event["event_type"] for event in audit.json()}
+    assert {"provider.provision_failed", "lifecycle_job.retry_requested"} <= event_types
+    assert created["id"] == provision_failed.json()["id"]
 
 
 def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -> None:

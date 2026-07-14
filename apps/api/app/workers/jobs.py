@@ -4,9 +4,16 @@ from sqlalchemy.orm import Session
 
 from app.models.entities import AccessRequest, LifecycleJob, ProviderAssignment
 from app.models.enums import RequestStatus
+from app.providers.base import ProviderOperationError
 from app.providers.registry import get_provider_adapter
 from app.services.audit import record_audit_event
 from app.services.state_machine import transition
+
+SAFE_PROVIDER_ERROR_KEYS = {"code", "message", "operation", "provider_status", "retry_after"}
+
+
+def safe_provider_error_details(details: dict[str, object]) -> dict[str, object]:
+    return {key: value for key, value in details.items() if key in SAFE_PROVIDER_ERROR_KEYS}
 
 
 async def provision_request(
@@ -24,7 +31,33 @@ async def provision_request(
         db.add(job)
         db.flush()
         adapter = get_provider_adapter(provider)
-        result = await adapter.provision_access(request.id, job.idempotency_key)
+        try:
+            result = await adapter.provision_access(request.id, job.idempotency_key)
+        except ProviderOperationError as exc:
+            job.status = "failed"
+            job.failure_information = {
+                "retryable": exc.retryable,
+                "message": str(exc),
+                "details": safe_provider_error_details(exc.details),
+            }
+            request.status = transition(request.status, RequestStatus.PROVISIONING_FAILED)
+            record_audit_event(
+                db,
+                event_type="provider.provision_failed",
+                actor_user_id=None,
+                target_type="lifecycle_job",
+                target_id=job.id,
+                request_id=request.id,
+                project_id=request.project_id,
+                provider=provider,
+                action="provision_access",
+                result="retryable_failure" if exc.retryable else "permanent_failure",
+                correlation_id=correlation_id,
+                reason=str(exc),
+                metadata_json=job.failure_information,
+            )
+            db.flush()
+            return assignments
         assignment = ProviderAssignment(
             request_id=request.id,
             project_id=request.project_id,
@@ -43,6 +76,7 @@ async def provision_request(
             target_type="provider_assignment",
             target_id=assignment.id,
             request_id=request.id,
+            project_id=request.project_id,
             provider=provider,
             action="provision_access",
             result="success",

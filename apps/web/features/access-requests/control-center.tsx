@@ -59,6 +59,7 @@ import {
   listExtensions,
   listIncidents,
   listIntegrationCredentials,
+  listLifecycleJobs,
   listNotifications,
   listPolicies,
   listPendingApprovals,
@@ -79,6 +80,7 @@ import {
   respondToInformationRequest,
   restoreAssignment,
   rotateIntegrationCredential,
+  retryLifecycleJob,
   resolveIncident,
   scheduleCostAllocationDelivery,
   simulateUsage,
@@ -224,6 +226,12 @@ export function ControlCenter() {
     enabled: user === "admin@example.local",
     retry: false
   });
+  const lifecycleJobs = useQuery({
+    queryKey: ["lifecycle-jobs", user],
+    queryFn: () => listLifecycleJobs(user),
+    enabled: user === "admin@example.local",
+    retry: false
+  });
   const auditEvents = useQuery({
     queryKey: ["audit-events", user],
     queryFn: () => listAuditEvents(user),
@@ -340,6 +348,7 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["assignments"] });
       void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
       void queryClient.invalidateQueries({ queryKey: ["budget-summaries"] });
+      void queryClient.invalidateQueries({ queryKey: ["lifecycle-jobs"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
   });
@@ -380,6 +389,7 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["approval-history"] });
       void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
       void queryClient.invalidateQueries({ queryKey: ["budget-summaries"] });
+      void queryClient.invalidateQueries({ queryKey: ["lifecycle-jobs"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
     }
@@ -486,9 +496,17 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["cost-records"] });
       void queryClient.invalidateQueries({ queryKey: ["budget-summaries"] });
       void queryClient.invalidateQueries({ queryKey: ["archives"] });
+      void queryClient.invalidateQueries({ queryKey: ["lifecycle-jobs"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
       void queryClient.invalidateQueries({ queryKey: ["incidents"] });
+    }
+  });
+  const retryLifecycleJobMutation = useMutation({
+    mutationFn: (jobId: string) => retryLifecycleJob(user, jobId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["lifecycle-jobs"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
     }
   });
   const readNotificationMutation = useMutation({
@@ -1154,6 +1172,42 @@ export function ControlCenter() {
                   <div className="rounded-md border border-line bg-panel p-3 text-sm">
                     <p className="font-semibold">Latest archive</p>
                     <p className="mt-1 break-all text-slate-600">{archives.data[0].storage_location}</p>
+                  </div>
+                ) : null}
+                {lifecycleJobs.data && lifecycleJobs.data.length > 0 ? (
+                  <div className="rounded-md border border-line bg-panel p-3 text-sm">
+                    <p className="font-semibold">Lifecycle jobs</p>
+                    <div className="mt-2 grid gap-2">
+                      {lifecycleJobs.data.slice(0, 4).map((job) => (
+                        <div
+                          key={job.id}
+                          className="grid gap-2 rounded-md border border-line bg-white p-2"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="font-semibold">{job.job_type}</span>
+                            <StatusPill status={job.status} />
+                          </div>
+                          <p className="break-all text-xs text-slate-500">
+                            {job.idempotency_key}
+                          </p>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-xs text-slate-500">
+                              Attempt {job.attempt_count}
+                            </span>
+                            {job.status === "failed" || job.status === "queued" ? (
+                              <button
+                                type="button"
+                                className="h-8 rounded-md border border-line bg-white px-2 text-xs font-semibold text-ink shadow-quiet disabled:cursor-not-allowed disabled:opacity-60"
+                                onClick={() => retryLifecycleJobMutation.mutate(job.id)}
+                                disabled={retryLifecycleJobMutation.isPending}
+                              >
+                                Retry
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ) : null}
               </div>
