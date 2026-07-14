@@ -40,6 +40,28 @@ def test_employee_can_submit_request_and_policy_records_cto_path(client: TestCli
     assert response.status_code == 201
     created = response.json()
     assert created["status"] == "AWAITING_MANAGER_APPROVAL"
+    assert created["project_id"] is not None
+
+    owner_projects = client.get("/projects", headers={"x-dev-user": "owner@example.local"})
+    assert owner_projects.status_code == 200
+    assert owner_projects.json()[0]["id"] == created["project_id"]
+    assert owner_projects.json()[0]["member_count"] == 2
+
+    project_members = client.get(
+        f"/projects/{created['project_id']}/members",
+        headers={"x-dev-user": "owner@example.local"},
+    )
+    assert project_members.status_code == 200
+    assert {member["email"] for member in project_members.json()} == {
+        "employee@example.local",
+        "owner@example.local",
+    }
+
+    owner_requests = client.get(
+        "/access-requests", headers={"x-dev-user": "owner@example.local"}
+    )
+    assert owner_requests.status_code == 200
+    assert owner_requests.json()[0]["id"] == created["id"]
 
     evaluation = client.get(
         f"/access-requests/{created['id']}/policy-evaluation",
@@ -77,6 +99,113 @@ def test_employee_can_submit_request_and_policy_records_cto_path(client: TestCli
         headers={"x-dev-user": "approver@example.local"},
     )
     assert denied_read.status_code == 404
+
+
+def test_project_owner_can_add_existing_user_to_project(client: TestClient) -> None:
+    created = client.post(
+        "/access-requests",
+        headers={"x-dev-user": "employee@example.local"},
+        json=request_payload(),
+    ).json()
+
+    added = client.post(
+        f"/projects/{created['project_id']}/members",
+        headers={"x-dev-user": "owner@example.local", "x-correlation-id": "member-add"},
+        json={"email": "security@example.local", "member_role": "collaborator"},
+    )
+    assert added.status_code == 201
+    assert added.json()["email"] == "security@example.local"
+    assert added.json()["member_role"] == "collaborator"
+
+    duplicate = client.post(
+        f"/projects/{created['project_id']}/members",
+        headers={"x-dev-user": "owner@example.local"},
+        json={"email": "security@example.local", "member_role": "collaborator"},
+    )
+    assert duplicate.status_code == 409
+
+    members = client.get(
+        f"/projects/{created['project_id']}/members",
+        headers={"x-dev-user": "owner@example.local"},
+    )
+    assert {member["email"] for member in members.json()} == {
+        "employee@example.local",
+        "owner@example.local",
+        "security@example.local",
+    }
+
+    security_requests = client.get(
+        "/access-requests", headers={"x-dev-user": "security@example.local"}
+    )
+    assert security_requests.status_code == 200
+    assert security_requests.json()[0]["id"] == created["id"]
+
+    security_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "security@example.local"}
+    )
+    assert {notification["event_type"] for notification in security_notifications.json()} >= {
+        "project_member_added"
+    }
+
+    denied = client.post(
+        f"/projects/{created['project_id']}/members",
+        headers={"x-dev-user": "employee@example.local"},
+        json={"email": "cto@example.local", "member_role": "collaborator"},
+    )
+    assert denied.status_code == 403
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    event_types = {event["event_type"] for event in audit.json()}
+    assert {"project.member_added", "authorization.failure"} <= event_types
+
+
+def test_admin_can_publish_policy_version_used_by_new_requests(client: TestClient) -> None:
+    policies = client.get("/policies", headers={"x-dev-user": "admin@example.local"})
+    assert policies.status_code == 200
+    active_policy = next(policy for policy in policies.json() if policy["active"])
+    document = active_policy["document"]
+    document["approval_rules"]["require_security_review_for"] = [
+        "internal",
+        "confidential",
+        "regulated",
+    ]
+
+    published = client.post(
+        "/policies/standard-ai-sandbox/versions",
+        headers={"x-dev-user": "admin@example.local"},
+        json={
+            "document": document,
+            "description": "Default governed sandbox policy with internal security review.",
+        },
+    )
+    assert published.status_code == 201
+    assert published.json()["version"] == active_policy["version"] + 1
+    assert published.json()["active"] is True
+
+    denied = client.post(
+        "/policies/standard-ai-sandbox/versions",
+        headers={"x-dev-user": "employee@example.local"},
+        json={"document": document},
+    )
+    assert denied.status_code == 403
+
+    payload = request_payload()
+    payload["requested_providers"] = ["amazon_bedrock"]
+    created = client.post(
+        "/access-requests",
+        headers={"x-dev-user": "employee@example.local"},
+        json=payload,
+    ).json()
+    evaluation = client.get(
+        f"/access-requests/{created['id']}/policy-evaluation",
+        headers={"x-dev-user": "employee@example.local"},
+    ).json()
+    assert evaluation["policy_version_id"] == published.json()["id"]
+    assert evaluation["approval_path"] == ["manager", "security"]
+    assert "security_review_required" in evaluation["triggered_rules"]
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    assert any(event["event_type"] == "policy.version_published" for event in audit.json())
 
 
 def test_auditor_cannot_submit_request_and_failure_is_audited(client: TestClient) -> None:
@@ -138,6 +267,75 @@ def test_approval_workflow_provisions_mock_assignments(client: TestClient) -> No
     ).json()
     assert {notification["event_type"] for notification in employee_notifications} >= {
         "request_provisioned"
+    }
+
+    history = client.get("/approvals/history", headers={"x-dev-user": "auditor@example.local"})
+    assert history.status_code == 200
+    decisions = [row for row in history.json() if row["decision"] == "approve"]
+    assert {row["actor_email"] for row in decisions} == {
+        "approver@example.local",
+        "cto@example.local",
+    }
+    assert {row["request_id"] for row in decisions} == {created["id"]}
+
+    denied_history = client.get(
+        "/approvals/history", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert denied_history.status_code == 403
+
+
+def test_approver_can_request_information_and_requester_can_respond(
+    client: TestClient,
+) -> None:
+    created = client.post(
+        "/access-requests",
+        headers={"x-dev-user": "employee@example.local"},
+        json=request_payload(),
+    ).json()
+    manager_step = client.get(
+        "/approvals/pending", headers={"x-dev-user": "approver@example.local"}
+    ).json()[0]
+
+    information_request = client.post(
+        f"/approvals/{manager_step['step_id']}",
+        headers={"x-dev-user": "approver@example.local"},
+        json={
+            "decision": "request_information",
+            "comments": "Clarify source-code retention controls.",
+        },
+    )
+    assert information_request.status_code == 200
+    assert information_request.json()["status"] == "SUBMITTED"
+
+    pending_after_request = client.get(
+        "/approvals/pending", headers={"x-dev-user": "approver@example.local"}
+    )
+    assert pending_after_request.status_code == 200
+    assert pending_after_request.json() == []
+
+    response = client.post(
+        f"/access-requests/{created['id']}/information-response",
+        headers={"x-dev-user": "employee@example.local"},
+        json={
+            "response": (
+                "Artifacts are retained for seven days, then archived with checksum evidence."
+            )
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "AWAITING_MANAGER_APPROVAL"
+
+    pending_after_response = client.get(
+        "/approvals/pending", headers={"x-dev-user": "approver@example.local"}
+    )
+    assert pending_after_response.status_code == 200
+    assert pending_after_response.json()[0]["step_id"] == manager_step["step_id"]
+
+    notifications = client.get(
+        "/notifications", headers={"x-dev-user": "employee@example.local"}
+    ).json()
+    assert {notification["event_type"] for notification in notifications} >= {
+        "request_information_requested"
     }
 
 
@@ -356,6 +554,88 @@ def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -
         "/audit-events/export", headers={"x-dev-user": "employee@example.local"}
     )
     assert denied_export.status_code == 403
+
+
+def test_usage_cost_budget_and_assignment_domain_endpoints(client: TestClient) -> None:
+    provision_demo_request(client)
+    assignments = client.get(
+        "/provider-assignments", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert assignments.status_code == 200
+    assert len(assignments.json()) == 2
+    assignment_id = assignments.json()[0]["id"]
+
+    client.post(
+        "/developer/simulate-usage",
+        headers={"x-dev-user": "admin@example.local"},
+        json={
+            "assignment_id": assignment_id,
+            "tokens": 1234,
+            "request_count": 7,
+            "cost_amount": "12.50",
+        },
+    )
+
+    usage = client.get("/usage", headers={"x-dev-user": "employee@example.local"})
+    assert usage.status_code == 200
+    assert usage.json()[0]["tokens"] == 1234
+
+    usage_for_assignment = client.get(
+        f"/usage?assignment_id={assignment_id}",
+        headers={"x-dev-user": "employee@example.local"},
+    )
+    assert usage_for_assignment.status_code == 200
+    assert usage_for_assignment.json()[0]["assignment_id"] == assignment_id
+
+    costs = client.get("/costs", headers={"x-dev-user": "employee@example.local"})
+    assert costs.status_code == 200
+    assert costs.json()[0]["amount"] == "12.50"
+    assert costs.json()[0]["cost_type"] == "estimated"
+
+    budgets = client.get("/budgets", headers={"x-dev-user": "employee@example.local"})
+    assert budgets.status_code == 200
+    assert budgets.json()[0]["total_spend"] == "12.50"
+    assert budgets.json()[0]["remaining_budget"] == "87.50"
+    assert budgets.json()[0]["utilization_percent"] == 12
+
+    owner_assignments = client.get(
+        "/provider-assignments", headers={"x-dev-user": "owner@example.local"}
+    )
+    assert owner_assignments.status_code == 200
+    assert len(owner_assignments.json()) == 2
+
+    owner_usage = client.get(
+        f"/usage?assignment_id={assignment_id}",
+        headers={"x-dev-user": "owner@example.local"},
+    )
+    assert owner_usage.status_code == 200
+    assert owner_usage.json()[0]["assignment_id"] == assignment_id
+
+    auditor_assignments = client.get(
+        "/provider-assignments", headers={"x-dev-user": "auditor@example.local"}
+    )
+    assert auditor_assignments.status_code == 200
+    assert len(auditor_assignments.json()) == 2
+
+
+def test_provider_health_and_configuration_visibility(client: TestClient) -> None:
+    health = client.get("/providers/health", headers={"x-dev-user": "employee@example.local"})
+    assert health.status_code == 200
+    assert len(health.json()) == 7
+    assert {check["status"] for check in health.json()} == {"healthy"}
+
+    configuration = client.get(
+        "/providers/configuration", headers={"x-dev-user": "admin@example.local"}
+    )
+    assert configuration.status_code == 200
+    assert len(configuration.json()) == 7
+    assert {check["mode"] for check in configuration.json()} == {"mock"}
+    assert all(check["configured"] for check in configuration.json())
+
+    denied_configuration = client.get(
+        "/providers/configuration", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert denied_configuration.status_code == 403
 
 
 def test_cto_can_view_executive_report_with_spend_rollups(client: TestClient) -> None:

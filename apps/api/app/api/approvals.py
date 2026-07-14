@@ -9,7 +9,7 @@ from app.auth.dependencies import get_correlation_id, require_permission
 from app.core.database import get_db
 from app.models.entities import AccessRequest, ApprovalDecision, ApprovalStep, User
 from app.models.enums import RequestStatus
-from app.schemas import AccessRequestOut, ApprovalAction
+from app.schemas import AccessRequestOut, ApprovalAction, ApprovalHistoryOut
 from app.services.audit import record_audit_event
 from app.services.notifications import notify_approval_step, notify_user
 from app.services.state_machine import transition
@@ -42,6 +42,41 @@ def pending_approvals(
             "assigned_role": step.assigned_role,
         }
         for step in steps
+    ]
+
+
+@router.get("/history", response_model=list[ApprovalHistoryOut])
+def approval_history(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("requests:read_all")),
+) -> list[ApprovalHistoryOut]:
+    rows = db.execute(
+        select(ApprovalStep, AccessRequest, ApprovalDecision, User)
+        .join(AccessRequest, AccessRequest.id == ApprovalStep.request_id)
+        .outerjoin(ApprovalDecision, ApprovalDecision.approval_step_id == ApprovalStep.id)
+        .outerjoin(User, User.id == ApprovalDecision.actor_user_id)
+        .order_by(
+            AccessRequest.created_at.desc(),
+            ApprovalStep.sequence.asc(),
+            ApprovalDecision.created_at.asc(),
+        )
+    ).all()
+    return [
+        ApprovalHistoryOut(
+            approval_step_id=step.id,
+            request_id=request.id,
+            project_name=request.project_name,
+            step_type=step.step_type,
+            assigned_role=step.assigned_role,
+            step_status=step.status,
+            decision_id=decision.id if decision else None,
+            decision=decision.decision if decision else None,
+            comments=decision.comments if decision else "",
+            actor_email=actor.email if actor else None,
+            decided_at=decision.created_at if decision else None,
+            step_created_at=step.created_at,
+        )
+        for step, request, decision, actor in rows
     ]
 
 

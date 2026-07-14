@@ -32,11 +32,12 @@ test("interview demo lifecycle", async ({ page }) => {
 
   await page.getByTestId("identity-switcher").selectOption("admin@example.local");
   await expect(page.getByText("Developer Controls")).toBeVisible();
+  await expect(page.getByText("Policies")).toBeVisible();
   await page.getByTestId("usage-warning-amazon_bedrock").click();
   await page.getByTestId("usage-critical-amazon_bedrock").click();
   await page.getByTestId("usage-enforcement-amazon_bedrock").click();
   await expect(page.getByTestId("status-SUSPENDED")).toBeAttached();
-  await expect(page.getByText("Incidents")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Incidents" })).toBeVisible();
   await page.getByTestId("resolve-incident").click();
   await page.getByTestId("restore-amazon_bedrock").click();
   await expect(page.getByTestId("status-ACTIVE")).toBeAttached();

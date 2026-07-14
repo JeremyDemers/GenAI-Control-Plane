@@ -20,8 +20,15 @@
 - Auditor view shows recent audit events for the demo lifecycle.
 - Security auditors can export recent audit events as CSV through `/audit-events/export`.
 - CTO executive report summarizes request volume, active/suspended projects, remaining budget, provider spend, and cost-center spend.
+- Domain endpoints now expose visible provider assignments, usage records, cost records, and per-request budget summaries.
+- Frontend usage and budget evidence shows visible assignments, latest usage, latest cost, spend, remaining budget, and data freshness.
+- Provider health checks and privileged provider configuration validation are exposed in the dashboard.
+- Access request submission creates project membership records, and project owners can review project requests, members, evidence, and add existing users to a project with audit and notification evidence.
+- Approvers can request additional information, and requesters can respond to requeue the same approval step.
+- Approval history is exposed for admin, auditor, and CTO review with request, step, decision, actor, and pending-step context.
 - User notification inbox is implemented for request submission, approval handoffs, provisioning, budget thresholds, suspension, restore, and closure.
 - Employees can cancel pending requests and request access extensions; CTOs and platform admins can approve or reject extension requests.
+- Platform administrators can publish new active standard-policy versions, and subsequent requests retain the policy version used during evaluation.
 - Root `.env` values are respected by local API settings and Docker Compose interpolation while remaining ignored by git.
 - Playwright now covers the full seeded interview demo lifecycle in Chromium.
 - Admins can list lifecycle jobs and request retry for queued or failed jobs.
@@ -43,5 +50,5 @@
 ## Remaining Work
 
 - Move provisioning, usage, budget, lifecycle processing, and notifications from inline execution to durable asynchronous workers.
-- Expand live-safe provider adapters for AWS, Azure, Google Cloud, Microsoft Graph, and GitHub.
+- Expand live provider adapters for AWS, Azure, Google Cloud, Microsoft Graph, and GitHub behind safe feature flags.
 - Track the remaining moderate npm audit advisory for Next's transitive PostCSS dependency; the current `next@latest` still bundles the affected range, and `npm audit fix --force` recommends downgrading to an unusable legacy Next release.

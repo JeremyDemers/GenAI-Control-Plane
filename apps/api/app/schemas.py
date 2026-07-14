@@ -54,6 +54,7 @@ class AccessRequestCreate(BaseModel):
 class PolicyEvaluationOut(BaseModel):
     id: str
     request_id: str
+    policy_version_id: str
     triggered_rules: list[str]
     approval_path: list[str]
     restrictions: list[str]
@@ -61,8 +62,26 @@ class PolicyEvaluationOut(BaseModel):
     evaluated_at: datetime
 
 
+class PolicyVersionOut(BaseModel):
+    id: str
+    policy_definition_id: str
+    name: str
+    description: str
+    version: int
+    document: dict[str, Any]
+    active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class PolicyVersionCreate(BaseModel):
+    document: dict[str, Any]
+    description: str = Field(default="", max_length=500)
+
+
 class AccessRequestOut(BaseModel):
     id: str
+    project_id: str | None
     project_name: str
     requester_id: str
     status: RequestStatus
@@ -75,6 +94,35 @@ class AccessRequestOut(BaseModel):
     requested_end_at: datetime
     submitted_at: datetime | None
     expires_at: datetime | None
+
+
+class AdditionalInformationIn(BaseModel):
+    response: str = Field(min_length=10, max_length=2000)
+
+
+class ProjectOut(BaseModel):
+    id: str
+    name: str
+    cost_center: str
+    owner_user_id: str | None
+    status: str
+    member_count: int
+    created_at: datetime
+
+
+class ProjectMemberCreate(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    member_role: str = Field(default="member", pattern="^(member|collaborator|owner)$")
+
+
+class ProjectMemberOut(BaseModel):
+    id: str
+    project_id: str
+    user_id: str
+    email: str
+    display_name: str
+    member_role: str
+    created_at: datetime
 
 
 class ExtensionRequestCreate(BaseModel):
@@ -104,6 +152,21 @@ class ApprovalAction(BaseModel):
     comments: str = Field(default="", max_length=2000)
 
 
+class ApprovalHistoryOut(BaseModel):
+    approval_step_id: str
+    request_id: str
+    project_name: str
+    step_type: str
+    assigned_role: str
+    step_status: str
+    decision_id: str | None
+    decision: str | None
+    comments: str
+    actor_email: str | None
+    decided_at: datetime | None
+    step_created_at: datetime
+
+
 class AuditEventOut(BaseModel):
     id: str
     event_type: str
@@ -124,6 +187,13 @@ class ProviderHealthOut(BaseModel):
     details: dict[str, Any]
 
 
+class ProviderConfigurationOut(BaseModel):
+    provider: str
+    configured: bool
+    mode: str
+    details: dict[str, Any]
+
+
 class ProviderAssignmentOut(BaseModel):
     id: str
     request_id: str
@@ -133,6 +203,37 @@ class ProviderAssignmentOut(BaseModel):
     expires_at: datetime | None
     total_cost: Decimal
     total_tokens: int
+    freshness_at: datetime | None
+
+
+class UsageRecordOut(BaseModel):
+    id: str
+    assignment_id: str
+    provider: str
+    tokens: int
+    request_count: int
+    measured_at: datetime
+    freshness_at: datetime
+
+
+class CostRecordOut(BaseModel):
+    id: str
+    assignment_id: str
+    provider: str
+    amount: Decimal
+    currency: str
+    cost_type: str
+    freshness_at: datetime
+
+
+class BudgetSummaryOut(BaseModel):
+    request_id: str
+    project_name: str
+    requested_budget: Decimal
+    total_spend: Decimal
+    remaining_budget: Decimal
+    utilization_percent: int
+    currency: str
     freshness_at: datetime | None
 
 

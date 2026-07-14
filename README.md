@@ -53,7 +53,7 @@ Local development authentication uses the `x-dev-user` header. The web app inclu
 - Approval workflow with approver and CTO paths.
 - Mock provider adapter contract and provisioning flow.
 - Append-only audit event model from the application perspective.
-- Next.js dashboard with request form, request cancellation, extension workflow, approvals, policy evaluation, incident handling, notifications, CTO executive reporting, audit export, and spend charts.
+- Next.js dashboard with request form, project membership visibility and member addition, request cancellation, extension workflow, approvals with additional-information handling, approval history, policy evaluation, policy version management, provider health/configuration visibility, usage and budget evidence, incident handling, notifications, CTO executive reporting, audit export, and spend charts.
 - Docker Compose for PostgreSQL, Redis, API, worker, and web.
 - GitHub Actions workflow for backend, frontend, Docker, and Terraform validation.
 
@@ -65,7 +65,7 @@ make lint
 make typecheck
 ```
 
-Backend tests cover state transitions, RBAC denial/audit logging, request submission, cancellation, extension requests, incidents, notifications, executive reporting, audit export, policy evaluation, and mock provisioning through approval. Frontend tests cover request form validation.
+Backend tests cover state transitions, RBAC denial/audit logging, request submission, project ownership visibility, project member management, approval information requests, approval history visibility, cancellation, extension requests, incidents, notifications, executive reporting, usage/cost/budget evidence, audit export, policy versioning/evaluation, and mock provisioning through approval. Frontend tests cover request form validation.
 Playwright covers the seeded interview demo lifecycle end to end.
 
 For a clean local SQLite migration check:
@@ -86,7 +86,7 @@ cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade 
 ## Roadmap
 
 1. Move provisioning, usage, budget, lifecycle actions, and notifications to durable async jobs.
-2. Expand live-safe provider configuration and read-only health checks.
+2. Expand live provider adapters for AWS, Azure, Google Cloud, Microsoft Graph, and GitHub behind safe feature flags.
 3. Add repository-layer and service-layer coverage around provider adapters.
 4. Replace local development authentication with OIDC/PKCE and enterprise group mapping.
 5. Add cost allocation exports and scheduled delivery.

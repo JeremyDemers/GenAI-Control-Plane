@@ -15,8 +15,11 @@ from app.api import (
     incidents,
     lifecycle_jobs,
     notifications,
+    policies,
+    projects,
     providers,
     reports,
+    usage,
 )
 from app.core.config import get_settings
 from app.core.database import Base, SessionLocal, engine
@@ -65,6 +68,12 @@ app.include_router(notifications.router)
 app.include_router(reports.router)
 app.include_router(extensions.router)
 app.include_router(incidents.router)
+app.include_router(policies.router)
+app.include_router(projects.router)
+app.include_router(usage.assignments_router)
+app.include_router(usage.usage_router)
+app.include_router(usage.costs_router)
+app.include_router(usage.budgets_router)
 
 
 @app.get("/")

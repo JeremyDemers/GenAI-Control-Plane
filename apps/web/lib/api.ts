@@ -11,6 +11,7 @@ export type DevUser =
 
 export type AccessRequest = {
   id: string;
+  project_id: string | null;
   project_name: string;
   requester_id: string;
   status: string;
@@ -25,6 +26,26 @@ export type AccessRequest = {
   expires_at: string | null;
 };
 
+export type Project = {
+  id: string;
+  name: string;
+  cost_center: string;
+  owner_user_id: string | null;
+  status: string;
+  member_count: number;
+  created_at: string;
+};
+
+export type ProjectMember = {
+  id: string;
+  project_id: string;
+  user_id: string;
+  email: string;
+  display_name: string;
+  member_role: string;
+  created_at: string;
+};
+
 export type CurrentUser = {
   id: string;
   email: string;
@@ -35,6 +56,7 @@ export type CurrentUser = {
 export type PolicyEvaluation = {
   id: string;
   request_id: string;
+  policy_version_id: string;
   triggered_rules: string[];
   approval_path: string[];
   restrictions: string[];
@@ -49,6 +71,47 @@ export type PendingApproval = {
   assigned_role: string;
 };
 
+export type ApprovalHistory = {
+  approval_step_id: string;
+  request_id: string;
+  project_name: string;
+  step_type: string;
+  assigned_role: string;
+  step_status: string;
+  decision_id: string | null;
+  decision: string | null;
+  comments: string;
+  actor_email: string | null;
+  decided_at: string | null;
+  step_created_at: string;
+};
+
+export type PolicyVersion = {
+  id: string;
+  policy_definition_id: string;
+  name: string;
+  description: string;
+  version: number;
+  document: Record<string, unknown>;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProviderHealth = {
+  provider: string;
+  status: string;
+  latency_ms: number;
+  details: Record<string, unknown>;
+};
+
+export type ProviderConfiguration = {
+  provider: string;
+  configured: boolean;
+  mode: string;
+  details: Record<string, unknown>;
+};
+
 export type ProviderAssignment = {
   id: string;
   request_id: string;
@@ -58,6 +121,37 @@ export type ProviderAssignment = {
   expires_at: string | null;
   total_cost: string;
   total_tokens: number;
+  freshness_at: string | null;
+};
+
+export type UsageRecord = {
+  id: string;
+  assignment_id: string;
+  provider: string;
+  tokens: number;
+  request_count: number;
+  measured_at: string;
+  freshness_at: string;
+};
+
+export type CostRecord = {
+  id: string;
+  assignment_id: string;
+  provider: string;
+  amount: string;
+  currency: string;
+  cost_type: string;
+  freshness_at: string;
+};
+
+export type BudgetSummary = {
+  request_id: string;
+  project_name: string;
+  requested_budget: string;
+  total_spend: string;
+  remaining_budget: string;
+  utilization_percent: number;
+  currency: string;
   freshness_at: string | null;
 };
 
@@ -169,6 +263,26 @@ export function listRequests(user: DevUser) {
   return request<AccessRequest[]>("/access-requests", user);
 }
 
+export function listProjects(user: DevUser) {
+  return request<Project[]>("/projects", user);
+}
+
+export function listProjectMembers(user: DevUser, projectId: string) {
+  return request<ProjectMember[]>(`/projects/${projectId}/members`, user);
+}
+
+export function addProjectMember(
+  user: DevUser,
+  projectId: string,
+  email = "security@example.local",
+  memberRole = "collaborator"
+) {
+  return request<ProjectMember>(`/projects/${projectId}/members`, user, {
+    method: "POST",
+    body: JSON.stringify({ email, member_role: memberRole })
+  });
+}
+
 export function createAccessRequest(user: DevUser, payload: AccessRequestFormValues) {
   return request<AccessRequest>("/access-requests", user, {
     method: "POST",
@@ -186,19 +300,88 @@ export function getPolicyEvaluation(user: DevUser, requestId: string) {
   return request<PolicyEvaluation>(`/access-requests/${requestId}/policy-evaluation`, user);
 }
 
+export function listPolicies(user: DevUser) {
+  return request<PolicyVersion[]>("/policies", user);
+}
+
+export function publishInternalSecurityReviewPolicy(user: DevUser, activePolicy: PolicyVersion) {
+  const document = JSON.parse(JSON.stringify(activePolicy.document)) as {
+    approval_rules?: { require_security_review_for?: string[] };
+  } & Record<string, unknown>;
+  document.approval_rules = {
+    ...(document.approval_rules ?? {}),
+    require_security_review_for: ["internal", "confidential", "regulated"]
+  };
+  return request<PolicyVersion>("/policies/standard-ai-sandbox/versions", user, {
+    method: "POST",
+    body: JSON.stringify({
+      document,
+      description: "Default governed sandbox policy with internal security review."
+    })
+  });
+}
+
 export function listPendingApprovals(user: DevUser) {
   return request<PendingApproval[]>("/approvals/pending", user);
 }
 
-export function decideApproval(user: DevUser, stepId: string, decision: "approve" | "reject") {
+export function listApprovalHistory(user: DevUser) {
+  return request<ApprovalHistory[]>("/approvals/history", user);
+}
+
+export function listProviderHealth(user: DevUser) {
+  return request<ProviderHealth[]>("/providers/health", user);
+}
+
+export function listProviderConfiguration(user: DevUser) {
+  return request<ProviderConfiguration[]>("/providers/configuration", user);
+}
+
+export function decideApproval(
+  user: DevUser,
+  stepId: string,
+  decision: "approve" | "reject" | "request_information"
+) {
   return request<AccessRequest>(`/approvals/${stepId}`, user, {
     method: "POST",
-    body: JSON.stringify({ decision, comments: "Reviewed in local demo." })
+    body: JSON.stringify({
+      decision,
+      comments:
+        decision === "request_information"
+          ? "Please clarify retention and artifact handling before approval."
+          : "Reviewed in local demo."
+    })
+  });
+}
+
+export function respondToInformationRequest(user: DevUser, requestId: string) {
+  return request<AccessRequest>(`/access-requests/${requestId}/information-response`, user, {
+    method: "POST",
+    body: JSON.stringify({
+      response:
+        "Artifacts will be retained for seven days, archived with checksum evidence, and removed during closure."
+    })
   });
 }
 
 export function listAssignments(user: DevUser) {
   return request<ProviderAssignment[]>("/developer/assignments", user);
+}
+
+export function listProviderAssignments(user: DevUser) {
+  return request<ProviderAssignment[]>("/provider-assignments", user);
+}
+
+export function listUsageRecords(user: DevUser) {
+  return request<UsageRecord[]>("/usage", user);
+}
+
+export function listCostRecords(user: DevUser) {
+  return request<CostRecord[]>("/costs", user);
+}
+
+export function listBudgetSummaries(user: DevUser) {
+  return request<BudgetSummary[]>("/budgets", user);
 }
 
 export function simulateUsage(

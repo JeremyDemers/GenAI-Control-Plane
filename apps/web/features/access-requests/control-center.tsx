@@ -14,6 +14,7 @@ import {
   LineChart,
   RotateCcw,
   ShieldCheck,
+  UserPlus,
   UserRound,
   Zap
 } from "lucide-react";
@@ -32,6 +33,7 @@ import {
 } from "recharts";
 
 import {
+  addProjectMember,
   cancelAccessRequest,
   createAccessRequest,
   createExtensionRequest,
@@ -43,14 +45,26 @@ import {
   getMe,
   getPolicyEvaluation,
   listArchives,
+  listApprovalHistory,
   listAssignments,
   listAuditEvents,
+  listBudgetSummaries,
+  listCostRecords,
   listExtensions,
   listIncidents,
   listNotifications,
+  listPolicies,
   listPendingApprovals,
+  listProviderConfiguration,
+  listProviderAssignments,
+  listProviderHealth,
+  listProjectMembers,
+  listProjects,
   listRequests,
+  listUsageRecords,
   markNotificationRead,
+  publishInternalSecurityReviewPolicy,
+  respondToInformationRequest,
   restoreAssignment,
   resolveIncident,
   simulateUsage,
@@ -65,6 +79,7 @@ import {
 
 const users: DevUser[] = [
   "employee@example.local",
+  "owner@example.local",
   "approver@example.local",
   "cto@example.local",
   "admin@example.local",
@@ -124,15 +139,56 @@ export function ControlCenter() {
   const queryClient = useQueryClient();
   const me = useQuery({ queryKey: ["me", user], queryFn: () => getMe(user) });
   const requests = useQuery({ queryKey: ["requests", user], queryFn: () => listRequests(user) });
+  const projects = useQuery({ queryKey: ["projects", user], queryFn: () => listProjects(user) });
   const approvals = useQuery({
     queryKey: ["approvals", user],
     queryFn: () => listPendingApprovals(user),
+    retry: false
+  });
+  const approvalHistory = useQuery({
+    queryKey: ["approval-history", user],
+    queryFn: () => listApprovalHistory(user),
+    enabled:
+      user === "admin@example.local" ||
+      user === "auditor@example.local" ||
+      user === "cto@example.local",
+    retry: false
+  });
+  const providerHealth = useQuery({
+    queryKey: ["provider-health", user],
+    queryFn: () => listProviderHealth(user),
+    retry: false
+  });
+  const providerConfiguration = useQuery({
+    queryKey: ["provider-configuration", user],
+    queryFn: () => listProviderConfiguration(user),
+    enabled: user === "admin@example.local" || user === "auditor@example.local" || user === "cto@example.local",
     retry: false
   });
   const assignments = useQuery({
     queryKey: ["assignments", user],
     queryFn: () => listAssignments(user),
     enabled: user === "admin@example.local",
+    retry: false
+  });
+  const providerAssignments = useQuery({
+    queryKey: ["provider-assignments", user],
+    queryFn: () => listProviderAssignments(user),
+    retry: false
+  });
+  const usageRecords = useQuery({
+    queryKey: ["usage-records", user],
+    queryFn: () => listUsageRecords(user),
+    retry: false
+  });
+  const costRecords = useQuery({
+    queryKey: ["cost-records", user],
+    queryFn: () => listCostRecords(user),
+    retry: false
+  });
+  const budgetSummaries = useQuery({
+    queryKey: ["budget-summaries", user],
+    queryFn: () => listBudgetSummaries(user),
     retry: false
   });
   const archives = useQuery({
@@ -164,6 +220,12 @@ export function ControlCenter() {
     enabled: user === "admin@example.local" || user === "auditor@example.local" || user === "cto@example.local",
     retry: false
   });
+  const policies = useQuery({
+    queryKey: ["policies", user],
+    queryFn: () => listPolicies(user),
+    enabled: user === "admin@example.local" || user === "auditor@example.local",
+    retry: false
+  });
   const extensions = useQuery({
     queryKey: ["extensions", user],
     queryFn: () => listExtensions(user),
@@ -173,6 +235,16 @@ export function ControlCenter() {
     () => requests.data?.find((request) => request.id === selectedRequestId) ?? requests.data?.[0],
     [requests.data, selectedRequestId]
   );
+  const selectedRequestProjectId = selectedRequest?.project_id;
+  const selectedProjectId = projects.data?.some((project) => project.id === selectedRequestProjectId)
+    ? selectedRequestProjectId
+    : projects.data?.[0]?.id;
+  const projectMembers = useQuery({
+    queryKey: ["project-members", user, selectedProjectId],
+    queryFn: () => listProjectMembers(user, selectedProjectId ?? ""),
+    enabled: Boolean(selectedProjectId),
+    retry: false
+  });
   const evaluation = useQuery({
     queryKey: ["policy-evaluation", user, selectedRequest?.id],
     queryFn: () => getPolicyEvaluation(user, selectedRequest?.id ?? ""),
@@ -190,22 +262,45 @@ export function ControlCenter() {
     onSuccess: (created) => {
       setSelectedRequestId(created.id);
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      void queryClient.invalidateQueries({ queryKey: ["project-members"] });
       void queryClient.invalidateQueries({ queryKey: ["approvals"] });
       void queryClient.invalidateQueries({ queryKey: ["assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["budget-summaries"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
   });
 
   const approvalMutation = useMutation({
-    mutationFn: ({ stepId, decision }: { stepId: string; decision: "approve" | "reject" }) =>
+    mutationFn: ({
+      stepId,
+      decision
+    }: {
+      stepId: string;
+      decision: "approve" | "reject" | "request_information";
+    }) =>
       decideApproval(user, stepId, decision),
     onSuccess: (updated) => {
       setSelectedRequestId(updated.id);
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
       void queryClient.invalidateQueries({ queryKey: ["approvals"] });
+      void queryClient.invalidateQueries({ queryKey: ["approval-history"] });
       void queryClient.invalidateQueries({ queryKey: ["policy-evaluation"] });
       void queryClient.invalidateQueries({ queryKey: ["assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["budget-summaries"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    }
+  });
+  const informationResponseMutation = useMutation({
+    mutationFn: (requestId: string) => respondToInformationRequest(user, requestId),
+    onSuccess: (updated) => {
+      setSelectedRequestId(updated.id);
+      void queryClient.invalidateQueries({ queryKey: ["requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["approvals"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
     }
   });
   const cancelMutation = useMutation({
@@ -214,7 +309,19 @@ export function ControlCenter() {
       setSelectedRequestId(updated.id);
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
       void queryClient.invalidateQueries({ queryKey: ["approvals"] });
+      void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["budget-summaries"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    }
+  });
+  const addProjectMemberMutation = useMutation({
+    mutationFn: (projectId: string) => addProjectMember(user, projectId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      void queryClient.invalidateQueries({ queryKey: ["project-members"] });
+      void queryClient.invalidateQueries({ queryKey: ["requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
     }
   });
 
@@ -238,6 +345,10 @@ export function ControlCenter() {
       setSelectedRequestId(result.request_id);
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
       void queryClient.invalidateQueries({ queryKey: ["assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["usage-records"] });
+      void queryClient.invalidateQueries({ queryKey: ["cost-records"] });
+      void queryClient.invalidateQueries({ queryKey: ["budget-summaries"] });
       void queryClient.invalidateQueries({ queryKey: ["archives"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
@@ -268,6 +379,8 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["extensions"] });
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
       void queryClient.invalidateQueries({ queryKey: ["assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["budget-summaries"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
   });
@@ -278,12 +391,36 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
     }
   });
+  const policyPublishMutation = useMutation({
+    mutationFn: () => {
+      const activePolicy = policies.data?.find((policy) => policy.active);
+      if (!activePolicy) {
+        throw new Error("No active policy version found.");
+      }
+      return publishInternalSecurityReviewPolicy(user, activePolicy);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["policies"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+    }
+  });
 
   const activeRequests = requests.data?.filter((request) => request.status === "ACTIVE").length ?? 0;
   const pendingRequests =
     requests.data?.filter((request) => request.status.includes("AWAITING")).length ?? 0;
   const unreadNotifications =
     notifications.data?.filter((notification) => !notification.read_at).length ?? 0;
+  const latestUsage = usageRecords.data?.[0];
+  const latestCost = costRecords.data?.[0];
+  const visibleAssignments = providerAssignments.data?.length ?? 0;
+  const healthyProviders =
+    providerHealth.data?.filter((provider) => provider.status === "healthy").length ?? 0;
+  const totalProviders = providerHealth.data?.length ?? 0;
+  const allProvidersHealthy = totalProviders > 0 && healthyProviders === totalProviders;
+  const canManageSelectedProject =
+    me.data?.roles.some((role) => role === "project_owner" || role === "platform_admin") ?? false;
+  const securityAlreadyMember =
+    projectMembers.data?.some((member) => member.email === "security@example.local") ?? false;
 
   return (
     <main className="min-h-screen">
@@ -320,7 +457,12 @@ export function ControlCenter() {
           <Metric icon={Clock3} label="Pending approvals" value={pendingRequests.toString()} />
           <Metric icon={CheckCircle2} label="Active projects" value={activeRequests.toString()} />
           <Metric icon={Bell} label="Unread alerts" value={unreadNotifications.toString()} tone="amber" />
-          <Metric icon={CloudCog} label="Provider health" value="7/7" tone="mint" />
+          <Metric
+            icon={CloudCog}
+            label="Provider health"
+            value={`${healthyProviders}/${totalProviders || 7}`}
+            tone={allProvidersHealthy ? "mint" : "amber"}
+          />
         </div>
       </section>
 
@@ -354,6 +496,92 @@ export function ControlCenter() {
               </div>
             </Panel>
           </div>
+
+          <Panel title="Provider Health" icon={CloudCog}>
+            <div className="grid gap-3 md:grid-cols-2">
+              {(providerHealth.data ?? []).map((provider) => (
+                <div key={provider.provider} className="rounded-md border border-line p-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-semibold">{provider.provider.replaceAll("_", " ")}</p>
+                    <StatusPill status={provider.status} />
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    {provider.latency_ms}ms · {String(provider.details.mode ?? "unknown")}
+                  </p>
+                </div>
+              ))}
+              {providerHealth.data?.length === 0 ? (
+                <p className="text-sm text-slate-500">Provider checks unavailable.</p>
+              ) : null}
+            </div>
+            {providerConfiguration.data ? (
+              <div className="mt-4 grid gap-2 border-t border-line pt-4">
+                {providerConfiguration.data.map((provider) => (
+                  <div
+                    key={provider.provider}
+                    className="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <span>{provider.provider.replaceAll("_", " ")}</span>
+                    <span className="font-semibold">
+                      {provider.configured ? "configured" : "missing"} · {provider.mode}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </Panel>
+
+          <Panel title="Projects" icon={UserRound}>
+            <div className="grid gap-3">
+              {(projects.data ?? []).slice(0, 4).map((project) => (
+                <div key={project.id} className="rounded-md border border-line p-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{project.name}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {project.cost_center} · {project.member_count} members
+                      </p>
+                    </div>
+                    <StatusPill status={project.status} />
+                  </div>
+                </div>
+              ))}
+              {projectMembers.data && projectMembers.data.length > 0 ? (
+                <div className="rounded-md border border-line bg-panel p-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-semibold">Project members</p>
+                    {canManageSelectedProject && selectedProjectId && !securityAlreadyMember ? (
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center gap-2 rounded-md border border-line bg-white px-2 text-xs font-semibold text-ink shadow-quiet disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => addProjectMemberMutation.mutate(selectedProjectId)}
+                        disabled={addProjectMemberMutation.isPending}
+                      >
+                        <UserPlus className="h-4 w-4" aria-hidden />
+                        Add Sam
+                      </button>
+                    ) : null}
+                  </div>
+                  {addProjectMemberMutation.isSuccess ? (
+                    <p className="mt-2 text-xs text-emerald-700">Project member added.</p>
+                  ) : null}
+                  <div className="mt-2 grid gap-2">
+                    {projectMembers.data.map((member) => (
+                      <div key={member.id} className="flex items-center justify-between gap-3">
+                        <span>{member.email}</span>
+                        <span className="text-xs font-semibold text-slate-500">
+                          {member.member_role}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {projects.data?.length === 0 ? (
+                <p className="text-sm text-slate-500">No projects visible for this identity.</p>
+              ) : null}
+            </div>
+          </Panel>
 
           <Panel title="Requests" icon={FileClock}>
             {extensionMutation.isSuccess ? (
@@ -419,6 +647,17 @@ export function ControlCenter() {
                             Extend
                           </button>
                         ) : null}
+                        {user === "employee@example.local" && request.status === "SUBMITTED" ? (
+                          <button
+                            className="rounded-md border border-line px-2 py-1 text-xs font-semibold"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              informationResponseMutation.mutate(request.id);
+                            }}
+                          >
+                            Respond
+                          </button>
+                        ) : null}
                       </td>
                     </tr>
                   ))}
@@ -444,6 +683,57 @@ export function ControlCenter() {
             ) : (
               <p className="text-sm text-slate-500">Select a request with a policy evaluation.</p>
             )}
+          </Panel>
+
+          <Panel title="Usage & Budget" icon={Activity}>
+            <div className="grid gap-4">
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <Detail label="Visible assignments" value={visibleAssignments.toString()} />
+                <Detail
+                  label="Latest tokens"
+                  value={latestUsage ? latestUsage.tokens.toLocaleString() : "0"}
+                />
+                <Detail
+                  label="Latest cost"
+                  value={latestCost ? `${latestCost.currency} ${latestCost.amount}` : "USD 0"}
+                />
+                <Detail
+                  label="Cost type"
+                  value={latestCost ? latestCost.cost_type.replaceAll("_", " ") : "pending"}
+                />
+              </div>
+              <div className="grid gap-2">
+                {(budgetSummaries.data ?? []).slice(0, 4).map((summary) => (
+                  <div key={summary.request_id} className="rounded-md border border-line p-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">{summary.project_name}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {summary.freshness_at
+                            ? `Fresh ${new Date(summary.freshness_at).toLocaleTimeString()}`
+                            : "No usage reported yet"}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold">
+                          {summary.currency} {summary.total_spend} / {summary.requested_budget}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {summary.utilization_percent}% used · {summary.currency}{" "}
+                          {summary.remaining_budget} remaining
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {budgetSummaries.data?.length === 0 ? (
+                  <p className="text-sm text-slate-500">Budget evidence will appear after a request is submitted.</p>
+                ) : null}
+                {budgetSummaries.isError || usageRecords.isError || costRecords.isError ? (
+                  <p className="text-sm text-coral">Usage and budget evidence unavailable.</p>
+                ) : null}
+              </div>
+            </div>
           </Panel>
 
           {user === "admin@example.local" ? (
@@ -540,6 +830,42 @@ export function ControlCenter() {
           ) : null}
 
           {user === "admin@example.local" || user === "auditor@example.local" ? (
+            <Panel title="Policies" icon={ShieldCheck}>
+              <div className="grid gap-3 text-sm">
+                {policies.data?.find((policy) => policy.active) ? (
+                  <div className="rounded-md border border-line p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">
+                          {policies.data.find((policy) => policy.active)?.name}
+                        </p>
+                        <p className="mt-1 text-slate-600">
+                          Version {policies.data.find((policy) => policy.active)?.version} · active
+                        </p>
+                      </div>
+                      {user === "admin@example.local" ? (
+                        <button
+                          className="rounded-md border border-line px-3 py-2 text-xs font-semibold"
+                          onClick={() => policyPublishMutation.mutate()}
+                        >
+                          Publish Review Policy
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">Policy versions unavailable.</p>
+                )}
+                {policyPublishMutation.data ? (
+                  <p className="rounded-md bg-panel p-2 text-xs text-slate-600">
+                    Published policy version {policyPublishMutation.data.version}.
+                  </p>
+                ) : null}
+              </div>
+            </Panel>
+          ) : null}
+
+          {user === "admin@example.local" || user === "auditor@example.local" ? (
             <Panel title="Incidents" icon={AlertTriangle}>
               <div className="grid gap-2">
                 {(incidents.data ?? []).slice(0, 5).map((incident) => (
@@ -568,6 +894,38 @@ export function ControlCenter() {
                 ))}
                 {incidents.data?.length === 0 ? (
                   <p className="text-sm text-slate-500">No incidents.</p>
+                ) : null}
+              </div>
+            </Panel>
+          ) : null}
+
+          {user === "admin@example.local" ||
+          user === "auditor@example.local" ||
+          user === "cto@example.local" ? (
+            <Panel title="Approval History" icon={CheckCircle2}>
+              <div className="grid gap-2">
+                {(approvalHistory.data ?? []).slice(0, 8).map((row) => (
+                  <div
+                    key={`${row.approval_step_id}-${row.decision_id ?? "pending"}`}
+                    className="rounded-md border border-line p-3 text-sm"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">{row.project_name}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {row.step_type} · {row.assigned_role}
+                        </p>
+                      </div>
+                      <StatusPill status={row.decision ?? row.step_status} />
+                    </div>
+                    <p className="mt-2 text-xs text-slate-600">
+                      {row.actor_email ?? "Awaiting reviewer"}
+                      {row.decided_at ? ` · ${new Date(row.decided_at).toLocaleTimeString()}` : ""}
+                    </p>
+                  </div>
+                ))}
+                {approvalHistory.data?.length === 0 ? (
+                  <p className="text-sm text-slate-500">No approval history yet.</p>
                 ) : null}
               </div>
             </Panel>
@@ -848,6 +1206,17 @@ export function ControlCenter() {
                       >
                         Reject
                       </button>
+                      <button
+                        className="rounded-md border border-line px-3 py-2 text-xs font-semibold"
+                        onClick={() =>
+                          approvalMutation.mutate({
+                            stepId: step.step_id,
+                            decision: "request_information"
+                          })
+                        }
+                      >
+                        Need Info
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -909,7 +1278,7 @@ function Panel({
   );
 }
 
-function StatusPill({ status }: { status: AccessRequest["status"] }) {
+function StatusPill({ status }: { status: AccessRequest["status"] | string }) {
   const className = status === "ACTIVE" ? "bg-mint/10 text-mint" : "bg-amber/10 text-amber";
   return (
     <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${className}`}>
