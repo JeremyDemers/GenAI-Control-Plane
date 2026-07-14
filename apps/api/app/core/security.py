@@ -58,6 +58,7 @@ ROLE_PERMISSIONS: dict[RoleName, set[str]] = {
         "budgets:read_all",
         "evidence:read",
         "reports:cost_export",
+        "reports:schedule",
         "extensions:approve",
         "incidents:manage",
         "incidents:read",
@@ -99,6 +100,7 @@ ROLE_PERMISSIONS: dict[RoleName, set[str]] = {
         "budgets:read_all",
         "evidence:read",
         "reports:cost_export",
+        "reports:schedule",
         "roles:read_changes",
     },
 }

@@ -391,5 +391,19 @@ class ExecutiveReportOut(BaseModel):
     spend_by_cost_center: list[CostCenterSpendOut]
 
 
+class CostAllocationDeliveryCreate(BaseModel):
+    frequency: str = Field(pattern="^(daily|weekly|monthly)$")
+    recipients: list[str] = Field(min_length=1, max_length=10)
+
+
+class CostAllocationDeliveryOut(BaseModel):
+    id: str
+    status: str
+    frequency: str
+    recipients: list[str]
+    row_count: int
+    created_at: datetime
+
+
 class ErrorEnvelope(BaseModel):
     error: dict[str, str]

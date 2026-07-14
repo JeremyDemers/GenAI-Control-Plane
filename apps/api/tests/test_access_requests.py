@@ -962,6 +962,40 @@ def test_cost_allocation_export_rolls_up_assignment_spend_and_is_audited(
     assert "report.cost_allocation_exported" in {event["event_type"] for event in audit.json()}
 
 
+def test_cto_can_schedule_cost_allocation_delivery(client: TestClient) -> None:
+    provision_demo_request(client)
+
+    delivery = client.post(
+        "/reports/cost-allocation/deliveries",
+        headers={"x-dev-user": "cto@example.local", "x-correlation-id": "schedule-report"},
+        json={"frequency": "weekly", "recipients": ["finance@example.local"]},
+    )
+    assert delivery.status_code == 201
+    assert delivery.json()["status"] == "completed"
+    assert delivery.json()["frequency"] == "weekly"
+    assert delivery.json()["recipients"] == ["finance@example.local"]
+    assert delivery.json()["row_count"] == 2
+
+    deliveries = client.get(
+        "/reports/cost-allocation/deliveries",
+        headers={"x-dev-user": "auditor@example.local"},
+    )
+    assert deliveries.status_code == 200
+    assert deliveries.json()[0]["id"] == delivery.json()["id"]
+
+    denied = client.post(
+        "/reports/cost-allocation/deliveries",
+        headers={"x-dev-user": "auditor@example.local"},
+        json={"frequency": "weekly", "recipients": ["finance@example.local"]},
+    )
+    assert denied.status_code == 403
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    assert "report.cost_allocation_delivery_scheduled" in {
+        event["event_type"] for event in audit.json()
+    }
+
+
 def test_employee_can_request_extension_and_cto_can_approve(client: TestClient) -> None:
     created = provision_demo_request(client)
     current_end = datetime.fromisoformat(str(created["requested_end_at"]))

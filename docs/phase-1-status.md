@@ -21,6 +21,7 @@
 - Auditor view shows recent audit events for the demo lifecycle.
 - Security auditors can export recent audit events as CSV through `/audit-events/export`.
 - CTOs, platform admins, and auditors can export assignment-level cost allocation CSVs through `/reports/cost-allocation/export`.
+- CTOs and platform admins can schedule auditable cost allocation delivery jobs, visible to auditors.
 - CTO executive report summarizes request volume, active/suspended projects, remaining budget, provider spend, and cost-center spend.
 - Domain endpoints now expose visible provider assignments, usage records, cost records, and per-request budget summaries.
 - Frontend usage and budget evidence shows visible assignments, latest usage, latest cost, spend, remaining budget, and data freshness.

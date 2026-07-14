@@ -53,6 +53,7 @@ import {
   listAssignments,
   listAuditEvents,
   listBudgetSummaries,
+  listCostAllocationDeliveries,
   listCostRecords,
   listExtensions,
   listIncidents,
@@ -75,6 +76,7 @@ import {
   respondToInformationRequest,
   restoreAssignment,
   resolveIncident,
+  scheduleCostAllocationDelivery,
   simulateUsage,
   suspendProject,
   type AccessRequest,
@@ -223,6 +225,15 @@ export function ControlCenter() {
     queryKey: ["executive-report", user],
     queryFn: () => getExecutiveReport(user),
     enabled: user === "cto@example.local",
+    retry: false
+  });
+  const costAllocationDeliveries = useQuery({
+    queryKey: ["cost-allocation-deliveries", user],
+    queryFn: () => listCostAllocationDeliveries(user),
+    enabled:
+      user === "admin@example.local" ||
+      user === "auditor@example.local" ||
+      user === "cto@example.local",
     retry: false
   });
   const incidents = useQuery({
@@ -465,6 +476,14 @@ export function ControlCenter() {
 
   const costAllocationExportMutation = useMutation({
     mutationFn: () => exportCostAllocation(user)
+  });
+
+  const costAllocationDeliveryMutation = useMutation({
+    mutationFn: () => scheduleCostAllocationDelivery(user),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["cost-allocation-deliveries"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+    }
   });
   const extensionMutation = useMutation({
     mutationFn: ({ requestId, currentEndAt }: { requestId: string; currentEndAt: string }) =>
@@ -1246,12 +1265,20 @@ export function ControlCenter() {
                 <div className="grid gap-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm text-slate-600">Cost allocation evidence</p>
-                    <button
-                      className="h-10 rounded-md border border-line px-3 text-sm font-semibold"
-                      onClick={() => costAllocationExportMutation.mutate()}
-                    >
-                      Export CSV
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        className="h-10 rounded-md border border-line px-3 text-sm font-semibold"
+                        onClick={() => costAllocationDeliveryMutation.mutate()}
+                      >
+                        Schedule
+                      </button>
+                      <button
+                        className="h-10 rounded-md border border-line px-3 text-sm font-semibold"
+                        onClick={() => costAllocationExportMutation.mutate()}
+                      >
+                        Export CSV
+                      </button>
+                    </div>
                   </div>
                   {costAllocationExportMutation.data ? (
                     <p className="rounded-md bg-panel p-2 text-xs text-slate-600">
@@ -1308,6 +1335,24 @@ export function ControlCenter() {
                       </div>
                     </div>
                   </div>
+                  {costAllocationDeliveries.data && costAllocationDeliveries.data.length > 0 ? (
+                    <div className="rounded-md border border-line p-3">
+                      <p className="text-sm font-semibold">Scheduled deliveries</p>
+                      <div className="mt-2 grid gap-2">
+                        {costAllocationDeliveries.data.slice(0, 3).map((delivery) => (
+                          <div
+                            key={delivery.id}
+                            className="flex items-center justify-between gap-3 text-sm"
+                          >
+                            <span>{delivery.frequency}</span>
+                            <span className="font-semibold">
+                              {delivery.status} · {delivery.row_count} rows
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <p className="text-sm text-slate-500">Executive report will populate after activity.</p>

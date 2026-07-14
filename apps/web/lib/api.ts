@@ -283,6 +283,15 @@ export type RoleChange = {
   created_at: string;
 };
 
+export type CostAllocationDelivery = {
+  id: string;
+  status: string;
+  frequency: string;
+  recipients: string[];
+  row_count: number;
+  created_at: string;
+};
+
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function request<T>(path: string, user: DevUser, init?: RequestInit): Promise<T> {
@@ -566,6 +575,17 @@ export function markNotificationRead(user: DevUser, notificationId: string) {
 
 export function getExecutiveReport(user: DevUser) {
   return request<ExecutiveReport>("/reports/executive", user);
+}
+
+export function listCostAllocationDeliveries(user: DevUser) {
+  return request<CostAllocationDelivery[]>("/reports/cost-allocation/deliveries", user);
+}
+
+export function scheduleCostAllocationDelivery(user: DevUser) {
+  return request<CostAllocationDelivery>("/reports/cost-allocation/deliveries", user, {
+    method: "POST",
+    body: JSON.stringify({ frequency: "weekly", recipients: ["finance@example.local"] })
+  });
 }
 
 export function listIncidents(user: DevUser) {
