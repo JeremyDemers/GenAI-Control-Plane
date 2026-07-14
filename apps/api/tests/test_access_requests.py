@@ -710,6 +710,23 @@ def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -
     job_types = {job["job_type"] for job in jobs.json()}
     assert {"provision_access", "restore_access", "archive_and_deprovision"} <= job_types
 
+    evidence = client.get(
+        "/evidence/provisioning", headers={"x-dev-user": "auditor@example.local"}
+    )
+    assert evidence.status_code == 200
+    evidence_row = next(
+        row for row in evidence.json() if row["assignment_id"] == assignment_id
+    )
+    assert evidence_row["provision_job_status"] == "completed"
+    assert evidence_row["archive_job_status"] == "completed"
+    assert evidence_row["archive_checksum"] == archives.json()[0]["checksum"]
+    assert evidence_row["evidence_result"] == "closed"
+
+    denied_evidence = client.get(
+        "/evidence/provisioning", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert denied_evidence.status_code == 403
+
     denied_jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "employee@example.local"})
     assert denied_jobs.status_code == 403
 

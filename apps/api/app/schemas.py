@@ -338,6 +338,23 @@ class LifecycleJobOut(BaseModel):
     updated_at: datetime
 
 
+class ProvisioningEvidenceOut(BaseModel):
+    assignment_id: str
+    request_id: str
+    project_id: str | None
+    project_name: str
+    provider: str
+    assignment_status: str
+    external_resource_id: str
+    provision_job_status: str | None
+    archive_job_status: str | None
+    archive_location: str | None
+    archive_checksum: str | None
+    deprovisioned_at: datetime | None
+    evidence_result: str
+    updated_at: datetime
+
+
 class NotificationOut(BaseModel):
     id: str
     user_id: str

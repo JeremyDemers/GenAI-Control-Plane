@@ -16,6 +16,7 @@
 - Budget enforcement suspends assignments, creates incidents, and emits audit events.
 - Platform administrators and auditors can view incidents; administrators can resolve them with audit evidence.
 - Administrator restore, forced expiration, artifact archival, deprovisioning, and request closure are implemented in mock mode.
+- Admins, CTOs, and security auditors can view provisioning, archive, and deprovisioning evidence through `/evidence/provisioning`.
 - Frontend developer controls expose assignment cost/token totals, restore, expiration, and archive evidence.
 - Auditor view shows recent audit events for the demo lifecycle.
 - Security auditors can export recent audit events as CSV through `/audit-events/export`.

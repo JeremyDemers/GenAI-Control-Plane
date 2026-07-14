@@ -59,6 +59,7 @@ import {
   listNotifications,
   listPolicies,
   listPendingApprovals,
+  listProvisioningEvidence,
   listProviderConfiguration,
   listProviderAssignments,
   listProviderHealth,
@@ -228,6 +229,15 @@ export function ControlCenter() {
     queryKey: ["incidents", user],
     queryFn: () => listIncidents(user),
     enabled: user === "admin@example.local" || user === "auditor@example.local" || user === "cto@example.local",
+    retry: false
+  });
+  const provisioningEvidence = useQuery({
+    queryKey: ["provisioning-evidence", user],
+    queryFn: () => listProvisioningEvidence(user),
+    enabled:
+      user === "admin@example.local" ||
+      user === "auditor@example.local" ||
+      user === "cto@example.local",
     retry: false
   });
   const policies = useQuery({
@@ -1158,6 +1168,39 @@ export function ControlCenter() {
                 ))}
                 {roleChanges.data?.length === 0 ? (
                   <p className="text-sm text-slate-500">No role changes yet.</p>
+                ) : null}
+              </div>
+            </Panel>
+          ) : null}
+
+          {user === "admin@example.local" ||
+          user === "auditor@example.local" ||
+          user === "cto@example.local" ? (
+            <Panel title="Provisioning Evidence" icon={FileClock}>
+              <div className="grid gap-2">
+                {(provisioningEvidence.data ?? []).slice(0, 5).map((evidence) => (
+                  <div
+                    key={evidence.assignment_id}
+                    className="rounded-md border border-line p-3 text-sm"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">{evidence.project_name}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {evidence.provider.replaceAll("_", " ")} · provision{" "}
+                          {evidence.provision_job_status ?? "pending"} · archive{" "}
+                          {evidence.archive_job_status ?? "pending"}
+                        </p>
+                      </div>
+                      <StatusPill status={evidence.evidence_result} />
+                    </div>
+                    <p className="mt-2 break-all text-xs text-slate-500">
+                      {evidence.archive_checksum ?? evidence.external_resource_id}
+                    </p>
+                  </div>
+                ))}
+                {provisioningEvidence.data?.length === 0 ? (
+                  <p className="text-sm text-slate-500">No provisioning evidence yet.</p>
                 ) : null}
               </div>
             </Panel>

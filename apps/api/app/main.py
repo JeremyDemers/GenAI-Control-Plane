@@ -10,6 +10,7 @@ from app.api import (
     audit,
     auth,
     developer,
+    evidence,
     extensions,
     health,
     incidents,
@@ -65,6 +66,7 @@ app.include_router(approvals.router)
 app.include_router(providers.router)
 app.include_router(audit.router)
 app.include_router(developer.router)
+app.include_router(evidence.router)
 app.include_router(lifecycle_jobs.router)
 app.include_router(notifications.router)
 app.include_router(reports.router)

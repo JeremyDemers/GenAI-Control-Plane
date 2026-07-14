@@ -186,6 +186,23 @@ export type ArtifactArchive = {
   retention_expires_at: string;
 };
 
+export type ProvisioningEvidence = {
+  assignment_id: string;
+  request_id: string;
+  project_id: string | null;
+  project_name: string;
+  provider: string;
+  assignment_status: string;
+  external_resource_id: string;
+  provision_job_status: string | null;
+  archive_job_status: string | null;
+  archive_location: string | null;
+  archive_checksum: string | null;
+  deprovisioned_at: string | null;
+  evidence_result: string;
+  updated_at: string;
+};
+
 export type Incident = {
   id: string;
   severity: string;
@@ -531,6 +548,10 @@ export async function exportCostAllocation(user: DevUser) {
 
 export function listArchives(user: DevUser) {
   return request<ArtifactArchive[]>("/developer/archives", user);
+}
+
+export function listProvisioningEvidence(user: DevUser) {
+  return request<ProvisioningEvidence[]>("/evidence/provisioning", user);
 }
 
 export function listNotifications(user: DevUser) {
