@@ -16,6 +16,7 @@
 - API middleware applies local rate limiting with rate-limit headers and correlated `429` responses.
 - Provisioning now writes durable queued lifecycle jobs with payloads; local API execution drains them inline by default, and the worker process can drain queued jobs independently.
 - Restore and archive/deprovision actions now use durable lifecycle jobs with worker drain support while keeping local inline execution enabled by default.
+- Usage and budget processing now queue as lifecycle jobs and can be drained by the worker while preserving local inline execution for demos.
 - Provider webhook callbacks require timestamped HMAC signatures and produce audit evidence on accepted deliveries.
 - `PROVIDER_MODE=live` now selects safe live adapter boundaries with provider-specific readiness checks while mutating operations remain disabled by default.
 - Local developer lifecycle controls now simulate 70%, 90%, and 100% budget thresholds.
@@ -73,6 +74,6 @@
 
 ## Remaining Work
 
-- Move usage, budget processing, and notification delivery from inline execution to durable asynchronous workers.
+- Move notification delivery from inline execution to durable asynchronous workers.
 - Install concrete AWS, Azure, Google Cloud, Microsoft Graph, and GitHub SDK operations behind the live adapter feature flag.
 - Track the remaining moderate npm audit advisory for Next's transitive PostCSS dependency; the current `next@latest` still bundles the affected range, and `npm audit fix --force` recommends downgrading to an unusable legacy Next release.

@@ -2,6 +2,7 @@ import asyncio
 import json
 import time
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -995,6 +996,7 @@ def test_worker_drains_queued_restore_and_archive_jobs(client: TestClient) -> No
                 "cost_amount": "100",
             },
         )
+        assert asyncio.run(drain_once(limit=10)) == 1
 
         restore = client.post(
             "/developer/restore",
@@ -1047,6 +1049,60 @@ def test_worker_drains_queued_restore_and_archive_jobs(client: TestClient) -> No
             for job in completed_jobs
             if job["job_type"] in {"restore_access", "archive_and_deprovision"}
         } == {"restore_access": "completed", "archive_and_deprovision": "completed"}
+    finally:
+        settings.lifecycle_inline_execution = original_inline_execution
+
+
+def test_worker_drains_queued_usage_and_budget_job(client: TestClient) -> None:
+    settings = get_settings()
+    original_inline_execution = settings.lifecycle_inline_execution
+    provision_demo_request(client)
+    try:
+        settings.lifecycle_inline_execution = False
+        assignments = client.get(
+            "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+        ).json()
+        assignment_id = assignments[0]["id"]
+
+        queued = client.post(
+            "/developer/simulate-usage",
+            headers={"x-dev-user": "admin@example.local", "x-correlation-id": "queued-usage"},
+            json={
+                "assignment_id": assignment_id,
+                "tokens": 100000,
+                "request_count": 200,
+                "cost_amount": "100",
+            },
+        )
+        assert queued.status_code == 200
+        assert queued.json()["audit_event"] == "lifecycle_job.queued"
+        assert queued.json()["status"] == "active"
+
+        budgets_before = client.get("/budgets", headers={"x-dev-user": "admin@example.local"})
+        assert budgets_before.status_code == 200
+        assert Decimal(str(budgets_before.json()[0]["total_spend"])) == Decimal("0")
+
+        jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"}).json()
+        usage_job = next(job for job in jobs if job["job_type"] == "record_usage_and_cost")
+        assert usage_job["status"] == "queued"
+        assert usage_job["payload"]["correlation_id"] == "queued-usage"
+
+        assert asyncio.run(drain_once(limit=10)) == 1
+        assignments_after = client.get(
+            "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+        ).json()
+        assert assignments_after[0]["status"] == "suspended"
+        budgets_after = client.get("/budgets", headers={"x-dev-user": "admin@example.local"})
+        assert budgets_after.json()[0]["total_spend"] == "100.00"
+
+        completed_jobs = client.get(
+            "/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"}
+        ).json()
+        completed_usage_job = next(
+            job for job in completed_jobs if job["job_type"] == "record_usage_and_cost"
+        )
+        assert completed_usage_job["status"] == "completed"
+        assert completed_usage_job["payload"]["audit_event"] == "budget.enforcement"
     finally:
         settings.lifecycle_inline_execution = original_inline_execution
 

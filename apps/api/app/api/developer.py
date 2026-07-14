@@ -13,11 +13,11 @@ from app.schemas import (
     ProviderAssignmentOut,
     SimulatedUsageIn,
 )
-from app.services.lifecycle import (
-    assignment_totals,
-    record_usage_and_cost,
+from app.services.lifecycle import assignment_totals
+from app.workers.jobs import (
+    enqueue_and_maybe_run_lifecycle_action,
+    enqueue_and_maybe_run_usage_processing,
 )
-from app.workers.jobs import enqueue_and_maybe_run_lifecycle_action
 
 router = APIRouter(prefix="/developer", tags=["developer controls"])
 
@@ -57,7 +57,7 @@ def list_assignments(
 
 
 @router.post("/simulate-usage", response_model=LifecycleActionOut)
-def simulate_usage(
+async def simulate_usage(
     payload: SimulatedUsageIn,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("admin:*")),
@@ -70,7 +70,7 @@ def simulate_usage(
             status_code=404,
             detail={"code": "NOT_FOUND", "message": "Provider assignment not found."},
         )
-    event_type = record_usage_and_cost(
+    job = await enqueue_and_maybe_run_usage_processing(
         db,
         assignment=assignment,
         actor_user_id=user.id,
@@ -91,7 +91,9 @@ def simulate_usage(
         request_id=assignment.request_id,
         status=assignment.status,
         request_status=access_request.status,
-        audit_event=event_type,
+        audit_event="lifecycle_job.queued"
+        if job.status == "queued"
+        else str(job.payload.get("audit_event", "budget.normal")),
     )
 
 

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,7 +10,11 @@ from app.models.enums import RequestStatus
 from app.providers.base import ProviderOperationError
 from app.providers.registry import get_provider_adapter
 from app.services.audit import record_audit_event
-from app.services.lifecycle import expire_and_archive_assignment, restore_assignment
+from app.services.lifecycle import (
+    expire_and_archive_assignment,
+    record_usage_and_cost,
+    restore_assignment,
+)
 from app.services.notifications import notify_roles, notify_user
 from app.services.reports import cost_allocation_csv
 from app.services.state_machine import transition
@@ -31,6 +36,10 @@ def _restore_key(assignment_id: str) -> str:
 
 def _archive_key(assignment_id: str) -> str:
     return f"archive:{assignment_id}"
+
+
+def _usage_key(assignment_id: str, correlation_id: str) -> str:
+    return f"usage:{assignment_id}:{correlation_id}"
 
 
 def _start_job(job: LifecycleJob) -> None:
@@ -170,6 +179,58 @@ def enqueue_lifecycle_action_job(
     return job
 
 
+def enqueue_usage_processing_job(
+    db: Session,
+    *,
+    assignment: ProviderAssignment,
+    actor_user_id: str,
+    tokens: int,
+    request_count: int,
+    cost_amount: Decimal,
+    correlation_id: str,
+) -> LifecycleJob:
+    idempotency_key = _usage_key(assignment.id, correlation_id)
+    existing_job = db.scalar(
+        select(LifecycleJob).where(LifecycleJob.idempotency_key == idempotency_key)
+    )
+    if existing_job:
+        return existing_job
+
+    job = LifecycleJob(
+        job_type="record_usage_and_cost",
+        status="queued",
+        attempt_count=0,
+        idempotency_key=idempotency_key,
+        payload={
+            "assignment_id": assignment.id,
+            "request_id": assignment.request_id,
+            "provider": assignment.provider,
+            "actor_user_id": actor_user_id,
+            "tokens": tokens,
+            "request_count": request_count,
+            "cost_amount": str(cost_amount),
+            "correlation_id": correlation_id,
+        },
+    )
+    db.add(job)
+    db.flush()
+    record_audit_event(
+        db,
+        event_type="lifecycle_job.queued",
+        actor_user_id=actor_user_id,
+        target_type="lifecycle_job",
+        target_id=job.id,
+        request_id=assignment.request_id,
+        project_id=assignment.project_id,
+        provider=assignment.provider,
+        action="enqueue_record_usage_and_cost",
+        result="queued",
+        correlation_id=correlation_id,
+    )
+    db.flush()
+    return job
+
+
 def _provision_jobs_for_request(db: Session, request: AccessRequest) -> list[LifecycleJob]:
     keys = [_provision_key(request.id, provider) for provider in request.provider_names]
     statement = select(LifecycleJob).where(LifecycleJob.idempotency_key.in_(keys))
@@ -298,6 +359,7 @@ async def run_queued_lifecycle_jobs(db: Session, limit: int = 10) -> int:
                     "restore_access",
                     "archive_and_deprovision",
                     "cost_allocation_delivery",
+                    "record_usage_and_cost",
                 }
             ),
         )
@@ -313,6 +375,8 @@ async def run_queued_lifecycle_jobs(db: Session, limit: int = 10) -> int:
             await run_archive_and_deprovision_job(db, job)
         elif job.job_type == "cost_allocation_delivery":
             run_cost_allocation_delivery_job(db, job)
+        elif job.job_type == "record_usage_and_cost":
+            run_usage_processing_job(db, job)
     return len(jobs)
 
 
@@ -431,6 +495,73 @@ async def enqueue_and_maybe_run_lifecycle_action(
         job_type=job_type,
         actor_user_id=actor_user_id,
         reason=reason,
+        correlation_id=correlation_id,
+    )
+    if get_settings().lifecycle_inline_execution and job.status == "queued":
+        await run_queued_lifecycle_jobs(db, limit=1)
+    return job
+
+
+def run_usage_processing_job(db: Session, job: LifecycleJob) -> str | None:
+    _start_job(job)
+    payload = job.payload or {}
+    assignment_id = str(payload.get("assignment_id", ""))
+    actor_user_id = str(payload.get("actor_user_id", ""))
+    correlation_id = str(payload.get("correlation_id", "worker"))
+    assignment = db.get(ProviderAssignment, assignment_id)
+    if not assignment or not actor_user_id:
+        _fail_job(
+            db,
+            job=job,
+            message="Usage processing job is missing assignment or actor context.",
+            operation="record_usage_and_cost",
+            retryable=False,
+            details={"code": "invalid_job_payload", "operation": "record_usage_and_cost"},
+        )
+        return None
+    try:
+        event_type = record_usage_and_cost(
+            db,
+            assignment=assignment,
+            actor_user_id=actor_user_id,
+            tokens=int(payload.get("tokens", 0)),
+            request_count=int(payload.get("request_count", 0)),
+            cost_amount=Decimal(str(payload.get("cost_amount", "0"))),
+            correlation_id=correlation_id,
+        )
+    except (ValueError, ArithmeticError) as exc:
+        _fail_job(
+            db,
+            job=job,
+            message=str(exc),
+            operation="record_usage_and_cost",
+            retryable=False,
+            details={"code": "usage_processing_failed", "operation": "record_usage_and_cost"},
+        )
+        return None
+    job.payload = {**payload, "audit_event": event_type}
+    job.status = "completed"
+    db.flush()
+    return event_type
+
+
+async def enqueue_and_maybe_run_usage_processing(
+    db: Session,
+    *,
+    assignment: ProviderAssignment,
+    actor_user_id: str,
+    tokens: int,
+    request_count: int,
+    cost_amount: Decimal,
+    correlation_id: str,
+) -> LifecycleJob:
+    job = enqueue_usage_processing_job(
+        db,
+        assignment=assignment,
+        actor_user_id=actor_user_id,
+        tokens=tokens,
+        request_count=request_count,
+        cost_amount=cost_amount,
         correlation_id=correlation_id,
     )
     if get_settings().lifecycle_inline_execution and job.status == "queued":
