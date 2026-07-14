@@ -20,7 +20,12 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.add_column(
         "notifications",
-        sa.Column("delivery_status", sa.String(length=40), nullable=False, server_default="pending"),
+        sa.Column(
+            "delivery_status",
+            sa.String(length=40),
+            nullable=False,
+            server_default="pending",
+        ),
     )
     op.add_column(
         "notifications",
