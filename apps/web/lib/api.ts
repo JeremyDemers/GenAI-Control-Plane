@@ -121,6 +121,14 @@ export type ProviderConfiguration = {
   details: Record<string, unknown>;
 };
 
+export type IntegrationCredential = {
+  id: string;
+  provider: string;
+  credential_reference: string;
+  rotation_due_at: string | null;
+  updated_at: string;
+};
+
 export type ProviderAssignment = {
   id: string;
   request_id: string;
@@ -457,6 +465,19 @@ export function listProviderHealth(user: DevUser) {
 
 export function listProviderConfiguration(user: DevUser) {
   return request<ProviderConfiguration[]>("/providers/configuration", user);
+}
+
+export function listIntegrationCredentials(user: DevUser) {
+  return request<IntegrationCredential[]>("/providers/credentials", user);
+}
+
+export function rotateIntegrationCredential(user: DevUser, credentialId: string) {
+  return request<IntegrationCredential>(`/providers/credentials/${credentialId}/rotate`, user, {
+    method: "POST",
+    body: JSON.stringify({
+      reason: "Rotate demo provider credential reference for governance evidence."
+    })
+  });
 }
 
 export function decideApproval(

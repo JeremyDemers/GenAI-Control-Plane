@@ -254,6 +254,18 @@ class ProviderConfigurationOut(BaseModel):
     details: dict[str, Any]
 
 
+class IntegrationCredentialOut(BaseModel):
+    id: str
+    provider: str
+    credential_reference: str
+    rotation_due_at: datetime | None
+    updated_at: datetime
+
+
+class IntegrationCredentialRotateIn(BaseModel):
+    reason: str = Field(min_length=10, max_length=500)
+
+
 class ProviderAssignmentOut(BaseModel):
     id: str
     request_id: str

@@ -58,6 +58,7 @@ import {
   listCostRecords,
   listExtensions,
   listIncidents,
+  listIntegrationCredentials,
   listNotifications,
   listPolicies,
   listPendingApprovals,
@@ -76,6 +77,7 @@ import {
   publishInternalSecurityReviewPolicy,
   respondToInformationRequest,
   restoreAssignment,
+  rotateIntegrationCredential,
   resolveIncident,
   scheduleCostAllocationDelivery,
   simulateUsage,
@@ -178,6 +180,15 @@ export function ControlCenter() {
     queryKey: ["provider-configuration", user],
     queryFn: () => listProviderConfiguration(user),
     enabled: user === "admin@example.local" || user === "auditor@example.local" || user === "cto@example.local",
+    retry: false
+  });
+  const integrationCredentials = useQuery({
+    queryKey: ["integration-credentials", user],
+    queryFn: () => listIntegrationCredentials(user),
+    enabled:
+      user === "admin@example.local" ||
+      user === "auditor@example.local" ||
+      user === "cto@example.local",
     retry: false
   });
   const assignments = useQuery({
@@ -541,6 +552,13 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
     }
   });
+  const credentialRotationMutation = useMutation({
+    mutationFn: (credentialId: string) => rotateIntegrationCredential(user, credentialId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["integration-credentials"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+    }
+  });
 
   const activeRequests = requests.data?.filter((request) => request.status === "ACTIVE").length ?? 0;
   const pendingRequests =
@@ -667,6 +685,41 @@ export function ControlCenter() {
                     <span className="font-semibold">
                       {provider.configured ? "configured" : "missing"} · {provider.mode}
                     </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {integrationCredentials.data ? (
+              <div className="mt-4 grid gap-2 border-t border-line pt-4">
+                {integrationCredentials.data.slice(0, 4).map((credential) => (
+                  <div
+                    key={credential.id}
+                    className="grid gap-2 rounded-md border border-line p-3 text-sm"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold">
+                        {credential.provider.replaceAll("_", " ")}
+                      </span>
+                      {user === "admin@example.local" ? (
+                        <button
+                          type="button"
+                          className="h-8 rounded-md border border-line bg-white px-2 text-xs font-semibold text-ink shadow-quiet disabled:cursor-not-allowed disabled:opacity-60"
+                          onClick={() => credentialRotationMutation.mutate(credential.id)}
+                          disabled={credentialRotationMutation.isPending}
+                        >
+                          Rotate
+                        </button>
+                      ) : null}
+                    </div>
+                    <p className="break-all text-xs text-slate-500">
+                      {credential.credential_reference}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Rotation due{" "}
+                      {credential.rotation_due_at
+                        ? new Date(credential.rotation_due_at).toLocaleDateString()
+                        : "not scheduled"}
+                    </p>
                   </div>
                 ))}
               </div>

@@ -925,6 +925,45 @@ def test_provider_health_and_configuration_visibility(client: TestClient) -> Non
     )
     assert denied_configuration.status_code == 403
 
+    credentials = client.get(
+        "/providers/credentials", headers={"x-dev-user": "auditor@example.local"}
+    )
+    assert credentials.status_code == 200
+    assert len(credentials.json()) == 7
+    first_credential = credentials.json()[0]
+    assert first_credential["credential_reference"].startswith("vault://mock/")
+    assert "secret" not in first_credential
+
+    denied_credentials = client.get(
+        "/providers/credentials", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert denied_credentials.status_code == 403
+
+    denied_rotation = client.post(
+        f"/providers/credentials/{first_credential['id']}/rotate",
+        headers={"x-dev-user": "auditor@example.local"},
+        json={"reason": "Auditor attempted credential rotation during evidence review."},
+    )
+    assert denied_rotation.status_code == 403
+
+    rotated = client.post(
+        f"/providers/credentials/{first_credential['id']}/rotate",
+        headers={"x-dev-user": "admin@example.local", "x-correlation-id": "credential-rotate"},
+        json={"reason": "Rotate provider credential reference for demo governance evidence."},
+    )
+    assert rotated.status_code == 200
+    assert rotated.json()["credential_reference"].startswith(
+        f"vault://mock/{first_credential['provider']}/rotated-"
+    )
+    assert rotated.json()["credential_reference"] != first_credential["credential_reference"]
+    assert rotated.json()["rotation_due_at"] is not None
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    rotated_events = [
+        event for event in audit.json() if event["event_type"] == "provider.credential_rotated"
+    ]
+    assert rotated_events[0]["correlation_id"] == "credential-rotate"
+
 
 def test_cto_can_view_executive_report_with_spend_rollups(client: TestClient) -> None:
     provision_demo_request(client)

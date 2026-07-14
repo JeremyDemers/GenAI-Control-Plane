@@ -26,6 +26,7 @@
 - Domain endpoints now expose visible provider assignments, usage records, cost records, and per-request budget summaries.
 - Frontend usage and budget evidence shows visible assignments, latest usage, latest cost, spend, remaining budget, and data freshness.
 - Provider health checks and privileged provider configuration validation are exposed in the dashboard.
+- Provider credential inventory exposes safe vault-style references, admin-only rotation, due dates, and audit evidence without returning secrets.
 - Access request submission creates project membership records, and project owners can review project requests, members, evidence, and add existing users to a project with audit and notification evidence.
 - Project ownership reassignment now supports owner request, proposed-owner acceptance, admin/CTO approval, member-role transfer, notifications, and audit evidence.
 - Security auditors can view role-change evidence derived from audited project membership and reassignment events.
