@@ -12,6 +12,27 @@ class Settings(BaseSettings):
     )
     redis_url: str = Field(default="redis://localhost:6379/0", validation_alias="REDIS_URL")
     dev_auth_enabled: bool = Field(default=True, validation_alias="DEV_AUTH_ENABLED")
+    oidc_issuer: str = Field(default="", validation_alias="OIDC_ISSUER")
+    oidc_audience: str = Field(default="", validation_alias="OIDC_AUDIENCE")
+    oidc_jwks_url: str = Field(default="", validation_alias="OIDC_JWKS_URL")
+    oidc_jwks_json: str = Field(default="", validation_alias="OIDC_JWKS_JSON")
+    oidc_hs256_secret: str = Field(default="", validation_alias="OIDC_HS256_SECRET")
+    oidc_allowed_algorithms: list[str] = Field(
+        default=["RS256", "ES256", "HS256"],
+        validation_alias="OIDC_ALLOWED_ALGORITHMS",
+    )
+    oidc_email_claims: list[str] = Field(
+        default=["email", "preferred_username", "upn"],
+        validation_alias="OIDC_EMAIL_CLAIMS",
+    )
+    oidc_group_claims: list[str] = Field(
+        default=["groups", "roles"],
+        validation_alias="OIDC_GROUP_CLAIMS",
+    )
+    oidc_group_role_map_json: str = Field(
+        default="",
+        validation_alias="OIDC_GROUP_ROLE_MAP_JSON",
+    )
     cors_origins: list[str] = Field(
         default=[
             "http://localhost:3000",

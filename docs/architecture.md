@@ -28,7 +28,12 @@ Cloud-specific behavior is hidden behind `AIProviderAdapter`. Mock adapters are 
 
 ## Authentication Flow
 
-Production is designed for OIDC authorization-code flow with PKCE, short-lived access tokens, secure refresh token handling, and Microsoft Entra ID compatibility. Local development uses seeded identities passed through `x-dev-user`.
+Production uses an OIDC-compatible API boundary: with `DEV_AUTH_ENABLED=false`, requests must carry a
+signed bearer token whose issuer and audience match configuration and whose signing key resolves from
+`OIDC_JWKS_URL` or `OIDC_JWKS_JSON`. Optional `OIDC_GROUP_ROLE_MAP_JSON` maps enterprise groups to
+server-side roles. Local development uses seeded identities passed through `x-dev-user`. Frontend
+authorization-code flow with PKCE and secure refresh token handling remain the next identity-layer
+step.
 
 ## Failure Handling
 

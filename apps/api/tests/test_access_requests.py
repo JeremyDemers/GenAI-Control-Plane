@@ -2,8 +2,11 @@ import asyncio
 import json
 import time
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
+import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 
 from app.api.webhooks import webhook_signature
@@ -11,6 +14,10 @@ from app.core.config import get_settings
 from app.observability.middleware import rate_limiter
 from app.providers.base import ProviderOperationError
 from app.workers.scheduler import drain_once
+
+OIDC_TEST_AUDIENCE = "api://genai-control-plane-test"
+OIDC_TEST_ISSUER = "https://login.example.test/tenant/v2.0"
+OIDC_TEST_SECRET = "local-oidc-test-secret-with-32-bytes-minimum"
 
 
 def request_payload() -> dict[str, object]:
@@ -39,6 +46,188 @@ def request_payload() -> dict[str, object]:
         "estimated_monthly_volume": 200000,
         "additional_notes": "Seeded for the portfolio demo.",
     }
+
+
+def oidc_auth_header(
+    email: str,
+    *,
+    audience: str = OIDC_TEST_AUDIENCE,
+    issuer: str = OIDC_TEST_ISSUER,
+    groups: list[str] | None = None,
+) -> dict[str, str]:
+    now = int(time.time())
+    claims: dict[str, object] = {
+        "iss": issuer,
+        "aud": audience,
+        "email": email,
+        "iat": now,
+        "exp": now + 300,
+    }
+    if groups is not None:
+        claims["groups"] = groups
+    token = jwt.encode(
+        claims,
+        OIDC_TEST_SECRET,
+        algorithm="HS256",
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
+def oidc_rs256_auth_header(
+    email: str,
+    private_key: rsa.RSAPrivateKey,
+    *,
+    key_id: str,
+) -> dict[str, str]:
+    now = int(time.time())
+    token = jwt.encode(
+        {
+            "iss": OIDC_TEST_ISSUER,
+            "aud": OIDC_TEST_AUDIENCE,
+            "email": email,
+            "iat": now,
+            "exp": now + 300,
+        },
+        private_key,
+        algorithm="RS256",
+        headers={"kid": key_id},
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
+def configure_oidc_auth_for_test() -> dict[str, object]:
+    settings = get_settings()
+    original = {
+        "dev_auth_enabled": settings.dev_auth_enabled,
+        "oidc_issuer": settings.oidc_issuer,
+        "oidc_audience": settings.oidc_audience,
+        "oidc_hs256_secret": settings.oidc_hs256_secret,
+        "oidc_jwks_url": settings.oidc_jwks_url,
+        "oidc_jwks_json": settings.oidc_jwks_json,
+        "oidc_allowed_algorithms": list(settings.oidc_allowed_algorithms),
+        "oidc_group_claims": list(settings.oidc_group_claims),
+        "oidc_group_role_map_json": settings.oidc_group_role_map_json,
+    }
+    settings.dev_auth_enabled = False
+    settings.oidc_issuer = OIDC_TEST_ISSUER
+    settings.oidc_audience = OIDC_TEST_AUDIENCE
+    settings.oidc_hs256_secret = OIDC_TEST_SECRET
+    settings.oidc_jwks_url = ""
+    settings.oidc_jwks_json = ""
+    settings.oidc_allowed_algorithms = ["HS256"]
+    settings.oidc_group_claims = ["groups", "roles"]
+    settings.oidc_group_role_map_json = ""
+    return original
+
+
+def restore_auth_settings(original: dict[str, object]) -> None:
+    settings = get_settings()
+    settings.dev_auth_enabled = bool(original["dev_auth_enabled"])
+    settings.oidc_issuer = str(original["oidc_issuer"])
+    settings.oidc_audience = str(original["oidc_audience"])
+    settings.oidc_hs256_secret = str(original["oidc_hs256_secret"])
+    settings.oidc_jwks_url = str(original["oidc_jwks_url"])
+    settings.oidc_jwks_json = str(original["oidc_jwks_json"])
+    settings.oidc_allowed_algorithms = list(original["oidc_allowed_algorithms"])
+    settings.oidc_group_claims = list(original["oidc_group_claims"])
+    settings.oidc_group_role_map_json = str(original["oidc_group_role_map_json"])
+
+
+def test_oidc_bearer_token_authenticates_seeded_user(client: TestClient) -> None:
+    original = configure_oidc_auth_for_test()
+    try:
+        response = client.get("/auth/me", headers=oidc_auth_header("employee@example.local"))
+    finally:
+        restore_auth_settings(original)
+
+    assert response.status_code == 200
+    assert response.json()["email"] == "employee@example.local"
+    assert "employee" in response.json()["roles"]
+
+
+def test_oidc_static_jwks_authenticates_rs256_token(client: TestClient) -> None:
+    key_id = "test-rs256-key"
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_jwk = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(private_key.public_key()))
+    public_jwk["kid"] = key_id
+
+    original = configure_oidc_auth_for_test()
+    settings = get_settings()
+    settings.oidc_hs256_secret = ""
+    settings.oidc_jwks_json = json.dumps({"keys": [public_jwk]})
+    settings.oidc_allowed_algorithms = ["RS256"]
+    try:
+        response = client.get(
+            "/auth/me",
+            headers=oidc_rs256_auth_header(
+                "employee@example.local",
+                private_key,
+                key_id=key_id,
+            ),
+        )
+    finally:
+        restore_auth_settings(original)
+
+    assert response.status_code == 200
+    assert response.json()["email"] == "employee@example.local"
+
+
+def test_oidc_group_claims_sync_application_roles(client: TestClient) -> None:
+    original = configure_oidc_auth_for_test()
+    settings = get_settings()
+    settings.oidc_group_role_map_json = json.dumps(
+        {
+            "entra-platform-admins": ["platform_admin"],
+            "entra-auditors": ["security_auditor"],
+        }
+    )
+    try:
+        admin_headers = oidc_auth_header(
+            "employee@example.local",
+            groups=["entra-platform-admins"],
+        )
+        me = client.get("/auth/me", headers=admin_headers)
+        jobs = client.get("/lifecycle-jobs", headers=admin_headers)
+
+        auditor_headers = oidc_auth_header(
+            "auditor@example.local",
+            groups=["entra-auditors"],
+        )
+        audit = client.get("/audit-events", headers=auditor_headers)
+    finally:
+        restore_auth_settings(original)
+
+    assert me.status_code == 200
+    assert set(me.json()["roles"]) == {"platform_admin"}
+    assert jobs.status_code == 200
+    assert "identity.roles_synchronized" in {event["event_type"] for event in audit.json()}
+
+
+def test_dev_identity_header_is_rejected_when_dev_auth_is_disabled(
+    client: TestClient,
+) -> None:
+    original = configure_oidc_auth_for_test()
+    try:
+        response = client.get("/auth/me", headers={"x-dev-user": "employee@example.local"})
+    finally:
+        restore_auth_settings(original)
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["code"] == "UNAUTHENTICATED"
+
+
+def test_oidc_bearer_token_rejects_wrong_audience(client: TestClient) -> None:
+    original = configure_oidc_auth_for_test()
+    try:
+        response = client.get(
+            "/auth/me",
+            headers=oidc_auth_header("employee@example.local", audience="api://wrong"),
+        )
+    finally:
+        restore_auth_settings(original)
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["code"] == "UNAUTHENTICATED"
 
 
 def test_employee_can_submit_request_and_policy_records_cto_path(client: TestClient) -> None:
@@ -95,6 +284,9 @@ def test_employee_can_submit_request_and_policy_records_cto_path(client: TestCli
     assert {
         notification["event_type"] for notification in approver_notifications.json()
     } >= {"approval_required"}
+    assert {notification["delivery_status"] for notification in employee_notifications.json()} == {
+        "pending"
+    }
 
     notification_id = employee_notifications.json()[0]["id"]
     read_response = client.post(
@@ -109,6 +301,29 @@ def test_employee_can_submit_request_and_policy_records_cto_path(client: TestCli
         headers={"x-dev-user": "approver@example.local"},
     )
     assert denied_read.status_code == 404
+
+
+def test_worker_delivers_pending_notifications(client: TestClient) -> None:
+    client.post(
+        "/access-requests",
+        headers={"x-dev-user": "employee@example.local"},
+        json=request_payload(),
+    )
+    pending = client.get("/notifications", headers={"x-dev-user": "employee@example.local"})
+    assert pending.status_code == 200
+    assert pending.json()[0]["delivery_status"] == "pending"
+    assert pending.json()[0]["delivered_at"] is None
+
+    processed = asyncio.run(drain_once(limit=25, include_notifications=True))
+    assert processed >= 2
+
+    delivered = client.get("/notifications", headers={"x-dev-user": "employee@example.local"})
+    assert delivered.json()[0]["delivery_status"] == "delivered"
+    assert delivered.json()[0]["delivery_attempts"] == 1
+    assert delivered.json()[0]["delivered_at"] is not None
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    assert "notification.delivered" in {event["event_type"] for event in audit.json()}
 
 
 def test_project_owner_can_add_existing_user_to_project(client: TestClient) -> None:
@@ -995,6 +1210,7 @@ def test_worker_drains_queued_restore_and_archive_jobs(client: TestClient) -> No
                 "cost_amount": "100",
             },
         )
+        assert asyncio.run(drain_once(limit=10)) == 1
 
         restore = client.post(
             "/developer/restore",
@@ -1047,6 +1263,60 @@ def test_worker_drains_queued_restore_and_archive_jobs(client: TestClient) -> No
             for job in completed_jobs
             if job["job_type"] in {"restore_access", "archive_and_deprovision"}
         } == {"restore_access": "completed", "archive_and_deprovision": "completed"}
+    finally:
+        settings.lifecycle_inline_execution = original_inline_execution
+
+
+def test_worker_drains_queued_usage_and_budget_job(client: TestClient) -> None:
+    settings = get_settings()
+    original_inline_execution = settings.lifecycle_inline_execution
+    provision_demo_request(client)
+    try:
+        settings.lifecycle_inline_execution = False
+        assignments = client.get(
+            "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+        ).json()
+        assignment_id = assignments[0]["id"]
+
+        queued = client.post(
+            "/developer/simulate-usage",
+            headers={"x-dev-user": "admin@example.local", "x-correlation-id": "queued-usage"},
+            json={
+                "assignment_id": assignment_id,
+                "tokens": 100000,
+                "request_count": 200,
+                "cost_amount": "100",
+            },
+        )
+        assert queued.status_code == 200
+        assert queued.json()["audit_event"] == "lifecycle_job.queued"
+        assert queued.json()["status"] == "active"
+
+        budgets_before = client.get("/budgets", headers={"x-dev-user": "admin@example.local"})
+        assert budgets_before.status_code == 200
+        assert Decimal(str(budgets_before.json()[0]["total_spend"])) == Decimal("0")
+
+        jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"}).json()
+        usage_job = next(job for job in jobs if job["job_type"] == "record_usage_and_cost")
+        assert usage_job["status"] == "queued"
+        assert usage_job["payload"]["correlation_id"] == "queued-usage"
+
+        assert asyncio.run(drain_once(limit=10)) == 1
+        assignments_after = client.get(
+            "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+        ).json()
+        assert assignments_after[0]["status"] == "suspended"
+        budgets_after = client.get("/budgets", headers={"x-dev-user": "admin@example.local"})
+        assert budgets_after.json()[0]["total_spend"] == "100.00"
+
+        completed_jobs = client.get(
+            "/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"}
+        ).json()
+        completed_usage_job = next(
+            job for job in completed_jobs if job["job_type"] == "record_usage_and_cost"
+        )
+        assert completed_usage_job["status"] == "completed"
+        assert completed_usage_job["payload"]["audit_event"] == "budget.enforcement"
     finally:
         settings.lifecycle_inline_execution = original_inline_execution
 

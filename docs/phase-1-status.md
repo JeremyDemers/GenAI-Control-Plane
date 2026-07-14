@@ -3,7 +3,7 @@
 ## Completed
 
 - Monorepo scaffold with `apps/api`, `apps/web`, infrastructure, docs, CI, and Make targets.
-- FastAPI application with development authentication, RBAC, seeded users, health endpoints, policy evaluation, approval workflow, mock provider provisioning, and audit events.
+- FastAPI application with development authentication, OIDC-compatible bearer-token validation, enterprise group-to-role mapping, RBAC, seeded users, health endpoints, policy evaluation, approval workflow, mock provider provisioning, and audit events.
 - SQLAlchemy domain model covering the required control-plane tables.
 - Next.js portal with role switching, request submission, request list, approval queue, policy evaluation, and dashboard charts.
 - Docker Compose for PostgreSQL, Redis, API, worker, and web.
@@ -16,6 +16,8 @@
 - API middleware applies local rate limiting with rate-limit headers and correlated `429` responses.
 - Provisioning now writes durable queued lifecycle jobs with payloads; local API execution drains them inline by default, and the worker process can drain queued jobs independently.
 - Restore and archive/deprovision actions now use durable lifecycle jobs with worker drain support while keeping local inline execution enabled by default.
+- Usage and budget processing now queue as lifecycle jobs and can be drained by the worker while preserving local inline execution for demos.
+- Notifications now track pending/delivered state, delivery attempts, and worker-driven delivery audit evidence.
 - Provider webhook callbacks require timestamped HMAC signatures and produce audit evidence on accepted deliveries.
 - `PROVIDER_MODE=live` now selects safe live adapter boundaries with provider-specific readiness checks while mutating operations remain disabled by default.
 - Local developer lifecycle controls now simulate 70%, 90%, and 100% budget thresholds.
@@ -73,6 +75,6 @@
 
 ## Remaining Work
 
-- Move usage, budget processing, and notification delivery from inline execution to durable asynchronous workers.
+- Add frontend OIDC/PKCE login and secure refresh-token handling.
 - Install concrete AWS, Azure, Google Cloud, Microsoft Graph, and GitHub SDK operations behind the live adapter feature flag.
 - Track the remaining moderate npm audit advisory for Next's transitive PostCSS dependency; the current `next@latest` still bundles the affected range, and `npm audit fix --force` recommends downgrading to an unusable legacy Next release.

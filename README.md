@@ -40,12 +40,15 @@ commands, which avoids a local Podman storage database mismatch seen on this wor
 - `auditor@example.local`
 - `cto@example.local`
 
-Local development authentication uses the `x-dev-user` header. The web app includes an identity switcher for the seeded users.
+Local development authentication uses the `x-dev-user` header while `DEV_AUTH_ENABLED=true`. When
+`DEV_AUTH_ENABLED=false`, the API requires a signed OIDC-compatible bearer token with matching
+issuer and audience claims. Optional OIDC group-to-role mapping can synchronize enterprise group
+claims to application roles. The web app includes an identity switcher for the seeded users.
 
 ## Implemented Features
 
 - FastAPI application with health, observability, and OpenAPI docs.
-- Development authentication and server-side RBAC.
+- Development authentication, OIDC-compatible API bearer-token validation, enterprise group-to-role mapping, and server-side RBAC.
 - Seeded enterprise roles and users.
 - Access request API with backend validation.
 - Explicit request state machine.
@@ -56,7 +59,7 @@ Local development authentication uses the `x-dev-user` header. The web app inclu
 - Signed provider webhook endpoint with replay-window validation.
 - Process-local API rate limiting with response headers for local/demo protection.
 - Append-only audit event model from the application perspective.
-- Next.js dashboard with request form, project membership and scoped audit visibility, member addition, ownership reassignment, project suspension, request cancellation, extension workflow, approvals with additional-information handling, CTO override, approval history, role-change, operational health, lifecycle job retry, and provisioning evidence visibility, policy evaluation, policy version/retention management, provider health/configuration/credential visibility, credential rotation evidence, usage and budget evidence, incident handling, notifications, CTO executive reporting, audit/cost allocation export and queued scheduled delivery, and spend charts.
+- Next.js dashboard with request form, project membership and scoped audit visibility, member addition, ownership reassignment, project suspension, request cancellation, extension workflow, approvals with additional-information handling, CTO override, approval history, role-change, operational health, lifecycle job retry, and provisioning evidence visibility, policy evaluation, policy version/retention management, provider health/configuration/credential visibility, credential rotation evidence, usage and budget evidence, incident handling, notification delivery state, CTO executive reporting, audit/cost allocation export and queued scheduled delivery, and spend charts.
 - Docker Compose for PostgreSQL, Redis, API, worker, and web.
 - Production-style Dockerfiles with Node 24 web builds, uv-locked API installs, and a uv-backed worker command.
 - GitHub Actions workflow for backend, frontend, migration, high-severity dependency audit, Docker, and Terraform validation.
@@ -83,16 +86,15 @@ cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade 
 
 ## Known Limitations
 
-- OIDC/PKCE is represented as an architecture boundary; local auth uses deterministic development identities.
+- OIDC-compatible API bearer-token validation and group-to-role mapping are implemented; the frontend PKCE login client remains future work.
 - Concrete live provider SDK operations are intentionally disabled until `PROVIDER_LIVE_OPERATIONS_ENABLED=true` and provider implementations are installed.
 - The API still creates local tables at startup for demo velocity, with Alembic migrations available for clean database setup.
-- Provisioning, restore, archive/deprovision, and cost allocation delivery jobs are durably queued and can be drained by the worker; local inline execution remains enabled by default for demo velocity.
+- Provisioning, usage/budget processing, restore, archive/deprovision, cost allocation delivery, and notification delivery are durably tracked and can be drained by the worker; local inline execution remains enabled by default for demo velocity.
 - `npm audit --audit-level=high` passes; full `npm audit` currently reports a moderate Next/PostCSS transitive advisory where `next@latest` still bundles the affected range.
 
 ## Roadmap
 
-1. Move usage, budget processing, and notification delivery to durable async jobs.
-2. Expand live provider adapters for AWS, Azure, Google Cloud, Microsoft Graph, and GitHub behind safe feature flags.
-3. Add repository-layer and service-layer coverage around provider adapters.
-4. Replace local development authentication with OIDC/PKCE and enterprise group mapping.
-5. Move scheduled report delivery from inline demo jobs to an external mail/notification worker.
+1. Expand live provider adapters for AWS, Azure, Google Cloud, Microsoft Graph, and GitHub behind safe feature flags.
+2. Add repository-layer and service-layer coverage around provider adapters.
+3. Add frontend OIDC/PKCE login and secure refresh-token handling.
+4. Move scheduled report delivery from local worker evidence to external email infrastructure.

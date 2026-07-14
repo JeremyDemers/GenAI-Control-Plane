@@ -390,6 +390,9 @@ class NotificationOut(BaseModel):
     event_type: str
     message: str
     read_at: datetime | None
+    delivery_status: str
+    delivery_attempts: int
+    delivered_at: datetime | None
     created_at: datetime
 
 
