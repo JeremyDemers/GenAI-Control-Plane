@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import current_user, get_correlation_id, require_permission
@@ -41,11 +41,19 @@ def list_requests(
 ) -> list[AccessRequestOut]:
     role_names = {role.name for role in user.roles}
     statement = select(AccessRequest).order_by(AccessRequest.created_at.desc())
-    if (
-        "platform_admin" not in role_names
-        and "security_auditor" not in role_names
-        and "cto" not in role_names
-    ):
+    if {"platform_admin", "security_auditor", "cto"} & role_names:
+        pass
+    elif {"approver", "security_reviewer"} & role_names:
+        assigned_request_ids = select(ApprovalStep.request_id).where(
+            ApprovalStep.assigned_role.in_(role_names)
+        )
+        statement = statement.where(
+            or_(
+                AccessRequest.requester_id == user.id,
+                AccessRequest.id.in_(assigned_request_ids),
+            )
+        )
+    else:
         statement = statement.where(AccessRequest.requester_id == user.id)
     return [to_request_out(request) for request in db.scalars(statement).all()]
 

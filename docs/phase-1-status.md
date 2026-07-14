@@ -18,6 +18,7 @@
 - Frontend developer controls expose assignment cost/token totals, restore, expiration, and archive evidence.
 - Auditor view shows recent audit events for the demo lifecycle.
 - Root `.env` values are respected by local API settings and Docker Compose interpolation while remaining ignored by git.
+- Playwright now covers the full seeded interview demo lifecycle in Chromium.
 
 ## Verified
 
@@ -27,14 +28,14 @@
 - `npm --workspace apps/web run test`
 - `npm --workspace apps/web run typecheck`
 - `npm --workspace apps/web run lint`
+- `npm --workspace apps/web run test:e2e`
 - `npm --workspace apps/web run build`
 - Manual local smoke test with API on `8010` and web on `3001` because `8000` and `3000` were already occupied on this workstation.
 - `make compose-config`
-- `cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade head`
+- `rm -f apps/api/control_plane.db && cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade head`
 
 ## Remaining Work
 
 - Move provisioning, usage, budget, and lifecycle processing into durable asynchronous workers.
-- Add Playwright coverage for the full interview demo scenario.
 - Expand live-safe provider adapters for AWS, Azure, Google Cloud, Microsoft Graph, and GitHub.
 - Track the remaining moderate npm audit advisory for Next's transitive PostCSS dependency; the current `next@latest` still bundles the affected range, and `npm audit fix --force` recommends downgrading to an unusable legacy Next release.

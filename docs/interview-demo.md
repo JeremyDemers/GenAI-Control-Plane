@@ -14,3 +14,9 @@
 12. Restore the assignment.
 13. Force expiration and show archive evidence.
 14. Switch to `auditor@example.local` and review the audit trail.
+
+The scenario is also automated:
+
+```bash
+make e2e
+```

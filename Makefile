@@ -38,7 +38,7 @@ reset:
 	rm -f apps/api/control_plane.db apps/api/tests/test_control_plane.db
 
 e2e:
-	npm --workspace apps/web exec playwright test
+	npm --workspace apps/web run test:e2e
 
 docker-build:
 	$(PODMAN_ENV) docker compose build

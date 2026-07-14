@@ -11,6 +11,7 @@ Phase 1 foundation is implemented with a working FastAPI API, Next.js portal, de
 ```bash
 make setup
 make test
+make e2e
 make compose-config
 make dev
 ```
@@ -65,6 +66,14 @@ make typecheck
 ```
 
 Backend tests cover state transitions, RBAC denial/audit logging, request submission, policy evaluation, and mock provisioning through approval. Frontend tests cover request form validation.
+Playwright covers the seeded interview demo lifecycle end to end.
+
+For a clean local SQLite migration check:
+
+```bash
+rm -f apps/api/control_plane.db
+cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade head
+```
 
 ## Known Limitations
 

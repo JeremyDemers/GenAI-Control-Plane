@@ -147,7 +147,8 @@ export function ControlCenter() {
 
   const form = useForm<AccessRequestFormValues>({
     resolver: zodResolver(accessRequestSchema),
-    defaultValues
+    defaultValues,
+    shouldUnregister: false
   });
 
   const createMutation = useMutation({
@@ -216,6 +217,7 @@ export function ControlCenter() {
           <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
             <UserRound className="h-4 w-4" aria-hidden />
             <select
+              data-testid="identity-switcher"
               className="h-10 rounded-md border border-line bg-white px-3 shadow-quiet"
               value={user}
               onChange={(event) => setUser(event.target.value as DevUser)}
@@ -350,6 +352,7 @@ export function ControlCenter() {
                         <ActionButton
                           icon={AlertTriangle}
                           label="70%"
+                          testId={`usage-warning-${assignment.provider}`}
                           onClick={() =>
                             lifecycleMutation.mutate({
                               assignmentId: assignment.id,
@@ -360,6 +363,7 @@ export function ControlCenter() {
                         <ActionButton
                           icon={AlertTriangle}
                           label="90%"
+                          testId={`usage-critical-${assignment.provider}`}
                           onClick={() =>
                             lifecycleMutation.mutate({
                               assignmentId: assignment.id,
@@ -370,6 +374,7 @@ export function ControlCenter() {
                         <ActionButton
                           icon={ShieldCheck}
                           label="100%"
+                          testId={`usage-enforcement-${assignment.provider}`}
                           onClick={() =>
                             lifecycleMutation.mutate({
                               assignmentId: assignment.id,
@@ -380,6 +385,7 @@ export function ControlCenter() {
                         <ActionButton
                           icon={RotateCcw}
                           label="Restore"
+                          testId={`restore-${assignment.provider}`}
                           onClick={() =>
                             lifecycleMutation.mutate({
                               assignmentId: assignment.id,
@@ -390,6 +396,7 @@ export function ControlCenter() {
                         <ActionButton
                           icon={Archive}
                           label="Expire"
+                          testId={`expire-${assignment.provider}`}
                           onClick={() =>
                             lifecycleMutation.mutate({
                               assignmentId: assignment.id,
@@ -487,15 +494,29 @@ export function ControlCenter() {
                 type="number"
                 {...form.register("estimated_monthly_volume")}
               />
-              <input type="hidden" {...form.register("requested_start_at")} />
-              <input type="hidden" {...form.register("requested_end_at")} />
-              <input type="hidden" {...form.register("currency")} />
+              <input
+                type="hidden"
+                {...form.register("requested_start_at")}
+                defaultValue={defaultValues.requested_start_at}
+              />
+              <input
+                type="hidden"
+                {...form.register("requested_end_at")}
+                defaultValue={defaultValues.requested_end_at}
+              />
+              <input type="hidden" {...form.register("currency")} defaultValue="USD" />
               <button
+                data-testid="submit-request"
                 className="h-10 rounded-md bg-ink px-4 text-sm font-semibold text-white disabled:opacity-60"
                 disabled={createMutation.isPending}
               >
                 Submit Request
               </button>
+              {Object.keys(form.formState.errors).length > 0 ? (
+                <p className="text-sm text-coral" data-testid="form-errors">
+                  Check the request details before submitting.
+                </p>
+              ) : null}
               {createMutation.error ? (
                 <p className="text-sm text-coral">{createMutation.error.message}</p>
               ) : null}
@@ -513,6 +534,7 @@ export function ControlCenter() {
                     </div>
                     <div className="flex gap-2">
                       <button
+                        data-testid={`approve-${step.step_type}`}
                         className="rounded-md bg-mint px-3 py-2 text-xs font-semibold text-white"
                         onClick={() =>
                           approvalMutation.mutate({ stepId: step.step_id, decision: "approve" })
@@ -593,6 +615,7 @@ function StatusPill({ status }: { status: AccessRequest["status"] }) {
   const className = status === "ACTIVE" ? "bg-mint/10 text-mint" : "bg-amber/10 text-amber";
   return (
     <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${className}`}>
+      <span className="sr-only" data-testid={`status-${status}`} />
       {status.replaceAll("_", " ")}
     </span>
   );
@@ -610,14 +633,17 @@ function Detail({ label, value }: { label: string; value: string }) {
 function ActionButton({
   icon: Icon,
   label,
+  testId,
   onClick
 }: {
   icon: typeof Activity;
   label: string;
+  testId?: string;
   onClick: () => void;
 }) {
   return (
     <button
+      data-testid={testId}
       className="inline-flex h-9 items-center justify-center gap-1 rounded-md border border-line px-2 text-xs font-semibold hover:bg-panel"
       type="button"
       onClick={onClick}

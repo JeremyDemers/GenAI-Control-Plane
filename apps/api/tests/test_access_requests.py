@@ -74,6 +74,11 @@ def test_approval_workflow_provisions_mock_assignments(client: TestClient) -> No
         "/approvals/pending", headers={"x-dev-user": "approver@example.local"}
     ).json()
     assert len(manager_steps) == 1
+    approver_requests = client.get(
+        "/access-requests", headers={"x-dev-user": "approver@example.local"}
+    )
+    assert approver_requests.status_code == 200
+    assert approver_requests.json()[0]["id"] == created["id"]
     manager_decision = client.post(
         f"/approvals/{manager_steps[0]['step_id']}",
         headers={"x-dev-user": "approver@example.local"},
