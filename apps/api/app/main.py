@@ -4,7 +4,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import access_requests, approvals, audit, auth, developer, health, providers
+from app.api import (
+    access_requests,
+    approvals,
+    audit,
+    auth,
+    developer,
+    health,
+    lifecycle_jobs,
+    providers,
+)
 from app.core.config import get_settings
 from app.core.database import Base, SessionLocal, engine
 from app.models import entities  # noqa: F401
@@ -47,6 +56,7 @@ app.include_router(approvals.router)
 app.include_router(providers.router)
 app.include_router(audit.router)
 app.include_router(developer.router)
+app.include_router(lifecycle_jobs.router)
 
 
 @app.get("/")

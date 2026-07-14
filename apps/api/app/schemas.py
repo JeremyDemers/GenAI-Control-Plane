@@ -143,5 +143,16 @@ class ArtifactArchiveOut(BaseModel):
     retention_expires_at: datetime
 
 
+class LifecycleJobOut(BaseModel):
+    id: str
+    job_type: str
+    status: str
+    attempt_count: int
+    idempotency_key: str
+    failure_information: dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+
+
 class ErrorEnvelope(BaseModel):
     error: dict[str, str]

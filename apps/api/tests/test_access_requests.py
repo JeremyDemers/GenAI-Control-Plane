@@ -193,6 +193,14 @@ def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -
     assert archives.status_code == 200
     assert archives.json()[0]["storage_provider"] == "local"
 
+    jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"})
+    assert jobs.status_code == 200
+    job_types = {job["job_type"] for job in jobs.json()}
+    assert {"provision_access", "restore_access", "archive_and_deprovision"} <= job_types
+
+    denied_jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "employee@example.local"})
+    assert denied_jobs.status_code == 403
+
     audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
     event_types = {event["event_type"] for event in audit.json()}
     assert {
