@@ -96,6 +96,9 @@ def test_employee_can_submit_request_and_policy_records_cto_path(client: TestCli
     assert {
         notification["event_type"] for notification in approver_notifications.json()
     } >= {"approval_required"}
+    assert {notification["delivery_status"] for notification in employee_notifications.json()} == {
+        "pending"
+    }
 
     notification_id = employee_notifications.json()[0]["id"]
     read_response = client.post(
@@ -110,6 +113,29 @@ def test_employee_can_submit_request_and_policy_records_cto_path(client: TestCli
         headers={"x-dev-user": "approver@example.local"},
     )
     assert denied_read.status_code == 404
+
+
+def test_worker_delivers_pending_notifications(client: TestClient) -> None:
+    client.post(
+        "/access-requests",
+        headers={"x-dev-user": "employee@example.local"},
+        json=request_payload(),
+    )
+    pending = client.get("/notifications", headers={"x-dev-user": "employee@example.local"})
+    assert pending.status_code == 200
+    assert pending.json()[0]["delivery_status"] == "pending"
+    assert pending.json()[0]["delivered_at"] is None
+
+    processed = asyncio.run(drain_once(limit=25, include_notifications=True))
+    assert processed >= 2
+
+    delivered = client.get("/notifications", headers={"x-dev-user": "employee@example.local"})
+    assert delivered.json()[0]["delivery_status"] == "delivered"
+    assert delivered.json()[0]["delivery_attempts"] == 1
+    assert delivered.json()[0]["delivered_at"] is not None
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    assert "notification.delivered" in {event["event_type"] for event in audit.json()}
 
 
 def test_project_owner_can_add_existing_user_to_project(client: TestClient) -> None:

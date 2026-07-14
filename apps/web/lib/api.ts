@@ -265,6 +265,9 @@ export type Notification = {
   event_type: string;
   message: string;
   read_at: string | null;
+  delivery_status: string;
+  delivery_attempts: number;
+  delivered_at: string | null;
   created_at: string;
 };
 

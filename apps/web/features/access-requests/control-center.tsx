@@ -1666,9 +1666,10 @@ export function ControlCenter() {
                     <span className="font-semibold">
                       {notification.event_type.replaceAll("_", " ")}
                     </span>
-                    <span className="text-xs text-slate-500">
-                      {new Date(notification.created_at).toLocaleTimeString()}
-                    </span>
+                    <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-slate-500">
+                      <span>{notification.delivery_status}</span>
+                      <span>{new Date(notification.created_at).toLocaleTimeString()}</span>
+                    </div>
                   </div>
                   <p className="mt-1 text-slate-600">{notification.message}</p>
                 </button>

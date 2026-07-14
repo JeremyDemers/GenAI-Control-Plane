@@ -261,6 +261,9 @@ class Notification(Base, TimestampMixin):
     event_type: Mapped[str] = mapped_column(String(100))
     message: Mapped[str] = mapped_column(Text)
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delivery_status: Mapped[str] = mapped_column(String(40), default="pending")
+    delivery_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ArtifactArchive(Base, TimestampMixin):

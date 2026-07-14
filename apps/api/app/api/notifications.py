@@ -19,6 +19,9 @@ def to_notification_out(notification: Notification) -> NotificationOut:
         event_type=notification.event_type,
         message=notification.message,
         read_at=notification.read_at,
+        delivery_status=notification.delivery_status,
+        delivery_attempts=notification.delivery_attempts,
+        delivered_at=notification.delivered_at,
         created_at=notification.created_at,
     )
 
