@@ -38,6 +38,10 @@ test("interview demo lifecycle", async ({ page }) => {
   await expect(page.getByTestId("status-SUSPENDED")).toBeAttached();
   await page.getByTestId("restore-amazon_bedrock").click();
   await expect(page.getByTestId("status-ACTIVE")).toBeAttached();
+  await page.getByTestId("identity-switcher").selectOption("cto@example.local");
+  await expect(page.getByText("Executive Report")).toBeVisible();
+  await expect(page.getByText("Total spend")).toBeVisible();
+  await page.getByTestId("identity-switcher").selectOption("admin@example.local");
   await page.getByTestId("expire-amazon_bedrock").click();
   await expect(page.getByTestId("status-CLOSED")).toBeAttached();
   await expect(page.getByText("Latest archive")).toBeVisible();

@@ -100,6 +100,29 @@ export type Notification = {
   created_at: string;
 };
 
+export type ExecutiveReport = {
+  total_requests: number;
+  active_projects: number;
+  pending_approvals: number;
+  suspended_projects: number;
+  total_budget: string;
+  total_spend: string;
+  remaining_budget: string;
+  requests_by_status: Record<string, number>;
+  spend_by_provider: {
+    provider: string;
+    spend: string;
+    tokens: number;
+    active_assignments: number;
+  }[];
+  spend_by_cost_center: {
+    cost_center: string;
+    budget: string;
+    spend: string;
+    remaining_budget: string;
+  }[];
+};
+
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function request<T>(path: string, user: DevUser, init?: RequestInit): Promise<T> {
@@ -212,4 +235,8 @@ export function markNotificationRead(user: DevUser, notificationId: string) {
   return request<Notification>(`/notifications/${notificationId}/read`, user, {
     method: "POST"
   });
+}
+
+export function getExecutiveReport(user: DevUser) {
+  return request<ExecutiveReport>("/reports/executive", user);
 }

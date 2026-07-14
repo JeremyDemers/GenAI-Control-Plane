@@ -33,6 +33,12 @@ and closure. Reading another user's notification returns `404`.
 Security auditors can export the latest 1,000 audit events as CSV at `/audit-events/export`.
 The export action writes an `audit.exported` audit event with row count and correlation ID metadata.
 
+## Executive Reporting
+
+CTOs can review executive rollups at `/reports/executive`. The report summarizes request status,
+active and suspended projects, total budget, current spend, remaining budget, provider spend, token
+usage, and cost-center spend.
+
 ## Local Demo Lifecycle
 
 In local mode, the developer panel can simulate budget warning, critical, and enforcement thresholds.

@@ -11,6 +11,7 @@ import {
   Clock3,
   CloudCog,
   FileClock,
+  LineChart,
   RotateCcw,
   ShieldCheck,
   UserRound,
@@ -35,6 +36,7 @@ import {
   decideApproval,
   expireAssignment,
   exportAuditEvents,
+  getExecutiveReport,
   getMe,
   getPolicyEvaluation,
   listArchives,
@@ -142,6 +144,12 @@ export function ControlCenter() {
   const notifications = useQuery({
     queryKey: ["notifications", user],
     queryFn: () => listNotifications(user),
+    retry: false
+  });
+  const executiveReport = useQuery({
+    queryKey: ["executive-report", user],
+    queryFn: () => getExecutiveReport(user),
+    enabled: user === "cto@example.local",
     retry: false
   });
   const selectedRequest = useMemo(
@@ -477,6 +485,66 @@ export function ControlCenter() {
                   <p className="text-sm text-slate-500">No audit events yet.</p>
                 ) : null}
               </div>
+            </Panel>
+          ) : null}
+
+          {user === "cto@example.local" ? (
+            <Panel title="Executive Report" icon={LineChart}>
+              {executiveReport.data ? (
+                <div className="grid gap-4">
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    <Detail label="Total spend" value={`$${executiveReport.data.total_spend}`} />
+                    <Detail
+                      label="Remaining budget"
+                      value={`$${executiveReport.data.remaining_budget}`}
+                    />
+                    <Detail
+                      label="Active projects"
+                      value={executiveReport.data.active_projects.toString()}
+                    />
+                    <Detail
+                      label="Pending approvals"
+                      value={executiveReport.data.pending_approvals.toString()}
+                    />
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <div className="rounded-md border border-line p-3">
+                      <p className="text-sm font-semibold">Provider spend</p>
+                      <div className="mt-2 grid gap-2">
+                        {executiveReport.data.spend_by_provider.map((provider) => (
+                          <div
+                            key={provider.provider}
+                            className="flex items-center justify-between gap-3 text-sm"
+                          >
+                            <span>{provider.provider.replaceAll("_", " ")}</span>
+                            <span className="font-semibold">
+                              ${provider.spend} · {provider.tokens.toLocaleString()} tokens
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="rounded-md border border-line p-3">
+                      <p className="text-sm font-semibold">Cost centers</p>
+                      <div className="mt-2 grid gap-2">
+                        {executiveReport.data.spend_by_cost_center.map((center) => (
+                          <div
+                            key={center.cost_center}
+                            className="flex items-center justify-between gap-3 text-sm"
+                          >
+                            <span>{center.cost_center}</span>
+                            <span className="font-semibold">
+                              ${center.spend} / ${center.budget}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">Executive report will populate after activity.</p>
+              )}
             </Panel>
           ) : null}
         </section>

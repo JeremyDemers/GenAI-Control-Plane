@@ -12,8 +12,9 @@
 10. Use Developer Controls to trigger 70%, 90%, and 100% budget thresholds.
 11. Show automatic suspension at enforcement and the admin budget notifications.
 12. Restore the assignment.
-13. Force expiration and show archive evidence.
-14. Switch to `auditor@example.local`, review the audit trail, and export CSV evidence.
+13. Switch to `cto@example.local` and show the executive spend report.
+14. Switch back to `admin@example.local`, force expiration, and show archive evidence.
+15. Switch to `auditor@example.local`, review the audit trail, and export CSV evidence.
 
 The scenario is also automated:
 

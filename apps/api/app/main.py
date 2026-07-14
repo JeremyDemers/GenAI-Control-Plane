@@ -14,6 +14,7 @@ from app.api import (
     lifecycle_jobs,
     notifications,
     providers,
+    reports,
 )
 from app.core.config import get_settings
 from app.core.database import Base, SessionLocal, engine
@@ -59,6 +60,7 @@ app.include_router(audit.router)
 app.include_router(developer.router)
 app.include_router(lifecycle_jobs.router)
 app.include_router(notifications.router)
+app.include_router(reports.router)
 
 
 @app.get("/")

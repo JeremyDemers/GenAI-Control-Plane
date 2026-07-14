@@ -53,7 +53,7 @@ Local development authentication uses the `x-dev-user` header. The web app inclu
 - Approval workflow with approver and CTO paths.
 - Mock provider adapter contract and provisioning flow.
 - Append-only audit event model from the application perspective.
-- Next.js dashboard with request form, approvals, policy evaluation, notifications, audit export, and spend charts.
+- Next.js dashboard with request form, approvals, policy evaluation, notifications, CTO executive reporting, audit export, and spend charts.
 - Docker Compose for PostgreSQL, Redis, API, worker, and web.
 - GitHub Actions workflow for backend, frontend, Docker, and Terraform validation.
 
@@ -65,7 +65,7 @@ make lint
 make typecheck
 ```
 
-Backend tests cover state transitions, RBAC denial/audit logging, request submission, notifications, audit export, policy evaluation, and mock provisioning through approval. Frontend tests cover request form validation.
+Backend tests cover state transitions, RBAC denial/audit logging, request submission, notifications, executive reporting, audit export, policy evaluation, and mock provisioning through approval. Frontend tests cover request form validation.
 Playwright covers the seeded interview demo lifecycle end to end.
 
 For a clean local SQLite migration check:
@@ -89,4 +89,4 @@ cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade 
 2. Expand live-safe provider configuration and read-only health checks.
 3. Add repository-layer and service-layer coverage around provider adapters.
 4. Replace local development authentication with OIDC/PKCE and enterprise group mapping.
-5. Add executive reporting and cost allocation exports.
+5. Add cost allocation exports and scheduled delivery.

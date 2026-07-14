@@ -163,5 +163,32 @@ class NotificationOut(BaseModel):
     created_at: datetime
 
 
+class ProviderSpendOut(BaseModel):
+    provider: str
+    spend: Decimal
+    tokens: int
+    active_assignments: int
+
+
+class CostCenterSpendOut(BaseModel):
+    cost_center: str
+    budget: Decimal
+    spend: Decimal
+    remaining_budget: Decimal
+
+
+class ExecutiveReportOut(BaseModel):
+    total_requests: int
+    active_projects: int
+    pending_approvals: int
+    suspended_projects: int
+    total_budget: Decimal
+    total_spend: Decimal
+    remaining_budget: Decimal
+    requests_by_status: dict[str, int]
+    spend_by_provider: list[ProviderSpendOut]
+    spend_by_cost_center: list[CostCenterSpendOut]
+
+
 class ErrorEnvelope(BaseModel):
     error: dict[str, str]

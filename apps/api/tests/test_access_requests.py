@@ -296,3 +296,45 @@ def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -
         "/audit-events/export", headers={"x-dev-user": "employee@example.local"}
     )
     assert denied_export.status_code == 403
+
+
+def test_cto_can_view_executive_report_with_spend_rollups(client: TestClient) -> None:
+    provision_demo_request(client)
+    assignments = client.get(
+        "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+    ).json()
+    assignment_id = assignments[0]["id"]
+
+    client.post(
+        "/developer/simulate-usage",
+        headers={"x-dev-user": "admin@example.local"},
+        json={
+            "assignment_id": assignment_id,
+            "tokens": 5000,
+            "request_count": 10,
+            "cost_amount": "25",
+        },
+    )
+
+    report = client.get("/reports/executive", headers={"x-dev-user": "cto@example.local"})
+    assert report.status_code == 200
+    body = report.json()
+    assert body["total_requests"] == 1
+    assert body["active_projects"] == 1
+    assert body["total_budget"] == "100.00"
+    assert body["total_spend"] == "25.00"
+    assert body["remaining_budget"] == "75.00"
+    assert body["requests_by_status"]["ACTIVE"] == 1
+    spending_providers = {
+        provider["provider"]: provider
+        for provider in body["spend_by_provider"]
+        if provider["spend"] != "0"
+    }
+    assert list(spending_providers.values())[0]["spend"] == "25.00"
+    assert list(spending_providers.values())[0]["tokens"] == 5000
+    assert body["spend_by_cost_center"][0]["cost_center"] == "ENG-AI"
+
+    denied_report = client.get(
+        "/reports/executive", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert denied_report.status_code == 403
