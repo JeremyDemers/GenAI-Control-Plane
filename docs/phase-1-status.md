@@ -46,6 +46,7 @@
 - Platform administrators can update artifact retention policy versions, and archive expiration uses the active retention value.
 - Root `.env` values are respected by local API settings and Docker Compose interpolation while remaining ignored by git.
 - Docker build paths use Node 24 for the web image, locked uv dependency sync for the API image, and a uv-backed worker command.
+- Docker Compose now healthchecks API and web services and waits for healthy API/Postgres/Redis dependencies before starting the worker and web service.
 - Playwright now covers the full seeded interview demo lifecycle in Chromium.
 - Admins can list lifecycle jobs in the portal and request retry for queued or failed jobs.
 - CI now validates Alembic migrations against a clean SQLite database and gates high-severity npm advisories.
