@@ -14,6 +14,7 @@ import {
   LineChart,
   RotateCcw,
   ShieldCheck,
+  UserPlus,
   UserRound,
   Zap
 } from "lucide-react";
@@ -32,6 +33,7 @@ import {
 } from "recharts";
 
 import {
+  addProjectMember,
   cancelAccessRequest,
   createAccessRequest,
   createExtensionRequest,
@@ -301,6 +303,16 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
   });
+  const addProjectMemberMutation = useMutation({
+    mutationFn: (projectId: string) => addProjectMember(user, projectId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      void queryClient.invalidateQueries({ queryKey: ["project-members"] });
+      void queryClient.invalidateQueries({ queryKey: ["requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+    }
+  });
 
   const lifecycleMutation = useMutation({
     mutationFn: ({
@@ -394,6 +406,10 @@ export function ControlCenter() {
     providerHealth.data?.filter((provider) => provider.status === "healthy").length ?? 0;
   const totalProviders = providerHealth.data?.length ?? 0;
   const allProvidersHealthy = totalProviders > 0 && healthyProviders === totalProviders;
+  const canManageSelectedProject =
+    me.data?.roles.some((role) => role === "project_owner" || role === "platform_admin") ?? false;
+  const securityAlreadyMember =
+    projectMembers.data?.some((member) => member.email === "security@example.local") ?? false;
 
   return (
     <main className="min-h-screen">
@@ -521,7 +537,23 @@ export function ControlCenter() {
               ))}
               {projectMembers.data && projectMembers.data.length > 0 ? (
                 <div className="rounded-md border border-line bg-panel p-3 text-sm">
-                  <p className="font-semibold">Project members</p>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-semibold">Project members</p>
+                    {canManageSelectedProject && selectedProjectId && !securityAlreadyMember ? (
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center gap-2 rounded-md border border-line bg-white px-2 text-xs font-semibold text-ink shadow-quiet disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => addProjectMemberMutation.mutate(selectedProjectId)}
+                        disabled={addProjectMemberMutation.isPending}
+                      >
+                        <UserPlus className="h-4 w-4" aria-hidden />
+                        Add Sam
+                      </button>
+                    ) : null}
+                  </div>
+                  {addProjectMemberMutation.isSuccess ? (
+                    <p className="mt-2 text-xs text-emerald-700">Project member added.</p>
+                  ) : null}
                   <div className="mt-2 grid gap-2">
                     {projectMembers.data.map((member) => (
                       <div key={member.id} className="flex items-center justify-between gap-3">

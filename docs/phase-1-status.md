@@ -23,7 +23,7 @@
 - Domain endpoints now expose visible provider assignments, usage records, cost records, and per-request budget summaries.
 - Frontend usage and budget evidence shows visible assignments, latest usage, latest cost, spend, remaining budget, and data freshness.
 - Provider health checks and privileged provider configuration validation are exposed in the dashboard.
-- Access request submission creates project membership records, and project owners can review project requests, members, and evidence.
+- Access request submission creates project membership records, and project owners can review project requests, members, evidence, and add existing users to a project with audit and notification evidence.
 - Approvers can request additional information, and requesters can respond to requeue the same approval step.
 - User notification inbox is implemented for request submission, approval handoffs, provisioning, budget thresholds, suspension, restore, and closure.
 - Employees can cancel pending requests and request access extensions; CTOs and platform admins can approve or reject extension requests.

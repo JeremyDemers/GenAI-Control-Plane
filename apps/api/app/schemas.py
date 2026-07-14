@@ -110,6 +110,11 @@ class ProjectOut(BaseModel):
     created_at: datetime
 
 
+class ProjectMemberCreate(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    member_role: str = Field(default="member", pattern="^(member|collaborator|owner)$")
+
+
 class ProjectMemberOut(BaseModel):
     id: str
     project_id: str

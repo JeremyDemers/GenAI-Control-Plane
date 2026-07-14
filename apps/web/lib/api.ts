@@ -256,6 +256,18 @@ export function listProjectMembers(user: DevUser, projectId: string) {
   return request<ProjectMember[]>(`/projects/${projectId}/members`, user);
 }
 
+export function addProjectMember(
+  user: DevUser,
+  projectId: string,
+  email = "security@example.local",
+  memberRole = "collaborator"
+) {
+  return request<ProjectMember>(`/projects/${projectId}/members`, user, {
+    method: "POST",
+    body: JSON.stringify({ email, member_role: memberRole })
+  });
+}
+
 export function createAccessRequest(user: DevUser, payload: AccessRequestFormValues) {
   return request<AccessRequest>("/access-requests", user, {
     method: "POST",

@@ -101,6 +101,64 @@ def test_employee_can_submit_request_and_policy_records_cto_path(client: TestCli
     assert denied_read.status_code == 404
 
 
+def test_project_owner_can_add_existing_user_to_project(client: TestClient) -> None:
+    created = client.post(
+        "/access-requests",
+        headers={"x-dev-user": "employee@example.local"},
+        json=request_payload(),
+    ).json()
+
+    added = client.post(
+        f"/projects/{created['project_id']}/members",
+        headers={"x-dev-user": "owner@example.local", "x-correlation-id": "member-add"},
+        json={"email": "security@example.local", "member_role": "collaborator"},
+    )
+    assert added.status_code == 201
+    assert added.json()["email"] == "security@example.local"
+    assert added.json()["member_role"] == "collaborator"
+
+    duplicate = client.post(
+        f"/projects/{created['project_id']}/members",
+        headers={"x-dev-user": "owner@example.local"},
+        json={"email": "security@example.local", "member_role": "collaborator"},
+    )
+    assert duplicate.status_code == 409
+
+    members = client.get(
+        f"/projects/{created['project_id']}/members",
+        headers={"x-dev-user": "owner@example.local"},
+    )
+    assert {member["email"] for member in members.json()} == {
+        "employee@example.local",
+        "owner@example.local",
+        "security@example.local",
+    }
+
+    security_requests = client.get(
+        "/access-requests", headers={"x-dev-user": "security@example.local"}
+    )
+    assert security_requests.status_code == 200
+    assert security_requests.json()[0]["id"] == created["id"]
+
+    security_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "security@example.local"}
+    )
+    assert {notification["event_type"] for notification in security_notifications.json()} >= {
+        "project_member_added"
+    }
+
+    denied = client.post(
+        f"/projects/{created['project_id']}/members",
+        headers={"x-dev-user": "employee@example.local"},
+        json={"email": "cto@example.local", "member_role": "collaborator"},
+    )
+    assert denied.status_code == 403
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    event_types = {event["event_type"] for event in audit.json()}
+    assert {"project.member_added", "authorization.failure"} <= event_types
+
+
 def test_admin_can_publish_policy_version_used_by_new_requests(client: TestClient) -> None:
     policies = client.get("/policies", headers={"x-dev-user": "admin@example.local"})
     assert policies.status_code == 200
