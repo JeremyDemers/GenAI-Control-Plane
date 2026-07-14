@@ -1,0 +1,121 @@
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.api.access_requests import to_request_out
+from app.auth.dependencies import get_correlation_id, require_permission
+from app.core.database import get_db
+from app.models.entities import AccessRequest, ApprovalDecision, ApprovalStep, User
+from app.models.enums import RequestStatus
+from app.schemas import AccessRequestOut, ApprovalAction
+from app.services.audit import record_audit_event
+from app.services.state_machine import transition
+from app.workers.jobs import provision_request
+
+router = APIRouter(prefix="/approvals", tags=["approvals"])
+
+
+@router.get("/pending")
+def pending_approvals(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("approvals:review")),
+) -> list[dict[str, str]]:
+    role_names = {role.name for role in user.roles}
+    statement = select(ApprovalStep).where(ApprovalStep.status == "pending")
+    role_map = {
+        "approver": "approver",
+        "security_reviewer": "security_reviewer",
+        "cto": "cto",
+    }
+    allowed_roles = {role_map[role] for role in role_names if role in role_map}
+    if allowed_roles:
+        statement = statement.where(ApprovalStep.assigned_role.in_(allowed_roles))
+    steps = db.scalars(statement).all()
+    return [
+        {
+            "step_id": step.id,
+            "request_id": step.request_id,
+            "step_type": step.step_type,
+            "assigned_role": step.assigned_role,
+        }
+        for step in steps
+    ]
+
+
+@router.post("/{step_id}", response_model=AccessRequestOut)
+async def decide(
+    step_id: str,
+    payload: ApprovalAction,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("approvals:review")),
+    correlation_id: str = Depends(get_correlation_id),
+) -> AccessRequestOut:
+    step = db.get(ApprovalStep, step_id)
+    if not step or step.status != "pending":
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "REQUEST_NOT_APPROVABLE", "message": "Approval step is not pending."},
+        )
+    request = db.get(AccessRequest, step.request_id)
+    if not request:
+        raise HTTPException(
+            status_code=404, detail={"code": "NOT_FOUND", "message": "Request not found."}
+        )
+
+    role_names = {role.name for role in user.roles}
+    if step.assigned_role not in role_names:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "FORBIDDEN", "message": "Approval step is assigned to another role."},
+        )
+
+    step.status = payload.decision
+    db.add(
+        ApprovalDecision(
+            approval_step_id=step.id,
+            actor_user_id=user.id,
+            decision=payload.decision,
+            comments=payload.comments,
+        )
+    )
+    if payload.decision == "reject":
+        request.status = transition(request.status, RequestStatus.REJECTED)
+    elif payload.decision == "request_information":
+        request.status = transition(request.status, RequestStatus.SUBMITTED)
+    else:
+        db.flush()
+        next_step = db.scalar(
+            select(ApprovalStep)
+            .where(ApprovalStep.request_id == request.id, ApprovalStep.status == "pending")
+            .order_by(ApprovalStep.sequence)
+        )
+        if next_step:
+            desired = {
+                "manager": RequestStatus.AWAITING_MANAGER_APPROVAL,
+                "security": RequestStatus.AWAITING_SECURITY_REVIEW,
+                "cto": RequestStatus.AWAITING_CTO_APPROVAL,
+            }[next_step.step_type]
+            if desired != request.status:
+                request.status = transition(request.status, desired)
+        else:
+            request.status = transition(request.status, RequestStatus.APPROVED)
+            request.approved_at = datetime.now(UTC)
+            await provision_request(db, request, correlation_id)
+
+    record_audit_event(
+        db,
+        event_type="approval.decision",
+        actor_user_id=user.id,
+        target_type="approval_step",
+        target_id=step.id,
+        request_id=request.id,
+        action=payload.decision,
+        result="success",
+        correlation_id=correlation_id,
+        metadata_json={"comments": payload.comments},
+    )
+    db.commit()
+    db.refresh(request)
+    return to_request_out(request)

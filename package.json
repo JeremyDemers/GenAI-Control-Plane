@@ -1,0 +1,14 @@
+{
+  "name": "genai-control-plane",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace apps/web run dev",
+    "build:web": "npm --workspace apps/web run build",
+    "test:web": "npm --workspace apps/web run test",
+    "lint:web": "npm --workspace apps/web run lint"
+  }
+}

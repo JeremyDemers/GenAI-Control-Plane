@@ -1,0 +1,43 @@
+.PHONY: setup dev test lint typecheck migrate seed reset e2e api web docker-build
+
+setup:
+	cd apps/api && uv sync --all-groups
+	npm install
+
+dev:
+	docker compose up --build
+
+api:
+	cd apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+web:
+	npm --workspace apps/web run dev
+
+test:
+	cd apps/api && uv run pytest
+	npm --workspace apps/web run test
+
+lint:
+	cd apps/api && uv run ruff check .
+	npm --workspace apps/web run lint
+
+typecheck:
+	cd apps/api && uv run mypy app
+	npm --workspace apps/web run typecheck
+
+migrate:
+	cd apps/api && uv run alembic upgrade head
+
+seed:
+	cd apps/api && uv run python -m scripts.seed
+
+reset:
+	docker compose down -v
+	rm -f apps/api/control_plane.db apps/api/tests/test_control_plane.db
+
+e2e:
+	npm --workspace apps/web exec playwright test
+
+docker-build:
+	docker compose build
+

@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend
+        run: cd apps/api && uv sync --all-groups
+      - name: Ruff
+        run: cd apps/api && uv run ruff check .
+      - name: MyPy
+        run: cd apps/api && uv run mypy app
+      - name: Pytest
+        run: cd apps/api && uv run pytest
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install frontend
+        run: npm install
+      - name: Typecheck
+        run: npm --workspace apps/web run typecheck
+      - name: Unit tests
+        run: npm --workspace apps/web run test
+      - name: Build
+        run: npm --workspace apps/web run build
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Docker build
+        run: docker compose build
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Terraform fmt
+        run: terraform -chdir=infrastructure/terraform fmt -check
+      - name: Terraform validate
+        run: terraform -chdir=infrastructure/terraform init -backend=false && terraform -chdir=infrastructure/terraform validate
+
