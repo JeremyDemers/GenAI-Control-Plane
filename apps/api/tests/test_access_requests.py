@@ -92,3 +92,107 @@ def test_approval_workflow_provisions_mock_assignments(client: TestClient) -> No
     assert cto_decision.status_code == 200
     assert cto_decision.json()["id"] == created["id"]
     assert cto_decision.json()["status"] == "ACTIVE"
+
+
+def provision_demo_request(client: TestClient) -> dict[str, object]:
+    created = client.post(
+        "/access-requests",
+        headers={"x-dev-user": "employee@example.local"},
+        json=request_payload(),
+    ).json()
+    manager_step = client.get(
+        "/approvals/pending", headers={"x-dev-user": "approver@example.local"}
+    ).json()[0]
+    client.post(
+        f"/approvals/{manager_step['step_id']}",
+        headers={"x-dev-user": "approver@example.local"},
+        json={"decision": "approve", "comments": "Approved."},
+    )
+    cto_step = client.get("/approvals/pending", headers={"x-dev-user": "cto@example.local"}).json()[
+        0
+    ]
+    client.post(
+        f"/approvals/{cto_step['step_id']}",
+        headers={"x-dev-user": "cto@example.local"},
+        json={"decision": "approve", "comments": "Approved."},
+    )
+    return created
+
+
+def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -> None:
+    provision_demo_request(client)
+    assignments = client.get(
+        "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+    )
+    assert assignments.status_code == 200
+    assignment_id = assignments.json()[0]["id"]
+
+    warning = client.post(
+        "/developer/simulate-usage",
+        headers={"x-dev-user": "admin@example.local"},
+        json={
+            "assignment_id": assignment_id,
+            "tokens": 70000,
+            "request_count": 140,
+            "cost_amount": "70",
+        },
+    )
+    assert warning.status_code == 200
+    assert warning.json()["audit_event"] == "budget.warning"
+
+    critical = client.post(
+        "/developer/simulate-usage",
+        headers={"x-dev-user": "admin@example.local"},
+        json={
+            "assignment_id": assignment_id,
+            "tokens": 20000,
+            "request_count": 40,
+            "cost_amount": "20",
+        },
+    )
+    assert critical.status_code == 200
+    assert critical.json()["audit_event"] == "budget.critical"
+
+    enforcement = client.post(
+        "/developer/simulate-usage",
+        headers={"x-dev-user": "admin@example.local"},
+        json={
+            "assignment_id": assignment_id,
+            "tokens": 10000,
+            "request_count": 20,
+            "cost_amount": "10",
+        },
+    )
+    assert enforcement.status_code == 200
+    assert enforcement.json()["status"] == "suspended"
+    assert enforcement.json()["request_status"] == "SUSPENDED"
+
+    restored = client.post(
+        "/developer/restore",
+        headers={"x-dev-user": "admin@example.local"},
+        json={"assignment_id": assignment_id, "reason": "Restore after demo threshold."},
+    )
+    assert restored.status_code == 200
+    assert restored.json()["request_status"] == "ACTIVE"
+
+    expired = client.post(
+        "/developer/expire",
+        headers={"x-dev-user": "admin@example.local"},
+        json={"assignment_id": assignment_id, "reason": "Close demo project."},
+    )
+    assert expired.status_code == 200
+    assert expired.json()["status"] == "deprovisioned"
+    assert expired.json()["request_status"] == "CLOSED"
+
+    archives = client.get("/developer/archives", headers={"x-dev-user": "admin@example.local"})
+    assert archives.status_code == 200
+    assert archives.json()[0]["storage_provider"] == "local"
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    event_types = {event["event_type"] for event in audit.json()}
+    assert {
+        "budget.warning",
+        "budget.critical",
+        "budget.enforcement",
+        "lifecycle.closed",
+    } <= event_types

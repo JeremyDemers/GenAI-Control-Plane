@@ -5,12 +5,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   AlertTriangle,
+  Archive,
   CheckCircle2,
   Clock3,
   CloudCog,
   FileClock,
+  RotateCcw,
   ShieldCheck,
-  UserRound
+  UserRound,
+  Zap
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -29,10 +32,16 @@ import {
 import {
   createAccessRequest,
   decideApproval,
+  expireAssignment,
   getMe,
   getPolicyEvaluation,
+  listArchives,
+  listAssignments,
+  listAuditEvents,
   listPendingApprovals,
   listRequests,
+  restoreAssignment,
+  simulateUsage,
   type AccessRequest,
   type DevUser
 } from "@/lib/api";
@@ -108,6 +117,24 @@ export function ControlCenter() {
     queryFn: () => listPendingApprovals(user),
     retry: false
   });
+  const assignments = useQuery({
+    queryKey: ["assignments", user],
+    queryFn: () => listAssignments(user),
+    enabled: user === "admin@example.local",
+    retry: false
+  });
+  const archives = useQuery({
+    queryKey: ["archives", user],
+    queryFn: () => listArchives(user),
+    enabled: user === "admin@example.local",
+    retry: false
+  });
+  const auditEvents = useQuery({
+    queryKey: ["audit-events", user],
+    queryFn: () => listAuditEvents(user),
+    enabled: user === "auditor@example.local",
+    retry: false
+  });
   const selectedRequest = useMemo(
     () => requests.data?.find((request) => request.id === selectedRequestId) ?? requests.data?.[0],
     [requests.data, selectedRequestId]
@@ -129,6 +156,7 @@ export function ControlCenter() {
       setSelectedRequestId(created.id);
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
       void queryClient.invalidateQueries({ queryKey: ["approvals"] });
+      void queryClient.invalidateQueries({ queryKey: ["assignments"] });
     }
   });
 
@@ -140,6 +168,32 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
       void queryClient.invalidateQueries({ queryKey: ["approvals"] });
       void queryClient.invalidateQueries({ queryKey: ["policy-evaluation"] });
+      void queryClient.invalidateQueries({ queryKey: ["assignments"] });
+    }
+  });
+
+  const lifecycleMutation = useMutation({
+    mutationFn: ({
+      assignmentId,
+      action
+    }: {
+      assignmentId: string;
+      action: "warning" | "critical" | "enforcement" | "restore" | "expire";
+    }) => {
+      if (action === "restore") {
+        return restoreAssignment(user, assignmentId);
+      }
+      if (action === "expire") {
+        return expireAssignment(user, assignmentId);
+      }
+      return simulateUsage(user, assignmentId, action);
+    },
+    onSuccess: (result) => {
+      setSelectedRequestId(result.request_id);
+      void queryClient.invalidateQueries({ queryKey: ["requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["archives"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
     }
   });
 
@@ -273,6 +327,117 @@ export function ControlCenter() {
               <p className="text-sm text-slate-500">Select a request with a policy evaluation.</p>
             )}
           </Panel>
+
+          {user === "admin@example.local" ? (
+            <Panel title="Developer Controls" icon={Zap}>
+              <div className="grid gap-3">
+                {(assignments.data ?? []).map((assignment) => (
+                  <div key={assignment.id} className="rounded-md border border-line p-3">
+                    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold">{assignment.provider.replaceAll("_", " ")}</p>
+                          <StatusPill status={assignment.status} />
+                        </div>
+                        <p className="mt-1 break-all text-xs text-slate-500">
+                          {assignment.external_resource_id}
+                        </p>
+                        <p className="mt-2 text-sm text-slate-600">
+                          ${assignment.total_cost} · {assignment.total_tokens.toLocaleString()} tokens
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 md:grid-cols-1">
+                        <ActionButton
+                          icon={AlertTriangle}
+                          label="70%"
+                          onClick={() =>
+                            lifecycleMutation.mutate({
+                              assignmentId: assignment.id,
+                              action: "warning"
+                            })
+                          }
+                        />
+                        <ActionButton
+                          icon={AlertTriangle}
+                          label="90%"
+                          onClick={() =>
+                            lifecycleMutation.mutate({
+                              assignmentId: assignment.id,
+                              action: "critical"
+                            })
+                          }
+                        />
+                        <ActionButton
+                          icon={ShieldCheck}
+                          label="100%"
+                          onClick={() =>
+                            lifecycleMutation.mutate({
+                              assignmentId: assignment.id,
+                              action: "enforcement"
+                            })
+                          }
+                        />
+                        <ActionButton
+                          icon={RotateCcw}
+                          label="Restore"
+                          onClick={() =>
+                            lifecycleMutation.mutate({
+                              assignmentId: assignment.id,
+                              action: "restore"
+                            })
+                          }
+                        />
+                        <ActionButton
+                          icon={Archive}
+                          label="Expire"
+                          onClick={() =>
+                            lifecycleMutation.mutate({
+                              assignmentId: assignment.id,
+                              action: "expire"
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {assignments.data?.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    Approve a request through the manager and CTO steps to create assignments.
+                  </p>
+                ) : null}
+                {archives.data && archives.data.length > 0 ? (
+                  <div className="rounded-md border border-line bg-panel p-3 text-sm">
+                    <p className="font-semibold">Latest archive</p>
+                    <p className="mt-1 break-all text-slate-600">{archives.data[0].storage_location}</p>
+                  </div>
+                ) : null}
+              </div>
+            </Panel>
+          ) : null}
+
+          {user === "auditor@example.local" ? (
+            <Panel title="Audit Trail" icon={Archive}>
+              <div className="grid gap-2">
+                {(auditEvents.data ?? []).slice(0, 8).map((event) => (
+                  <div key={event.id} className="rounded-md border border-line p-3 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-semibold">{event.event_type}</p>
+                      <span className="text-xs text-slate-500">
+                        {new Date(event.created_at).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-slate-600">
+                      {event.action} · {event.result}
+                    </p>
+                  </div>
+                ))}
+                {auditEvents.data?.length === 0 ? (
+                  <p className="text-sm text-slate-500">No audit events yet.</p>
+                ) : null}
+              </div>
+            </Panel>
+          ) : null}
         </section>
 
         <aside className="grid content-start gap-5">
@@ -442,6 +607,28 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ActionButton({
+  icon: Icon,
+  label,
+  onClick
+}: {
+  icon: typeof Activity;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className="inline-flex h-9 items-center justify-center gap-1 rounded-md border border-line px-2 text-xs font-semibold hover:bg-panel"
+      type="button"
+      onClick={onClick}
+      title={label}
+    >
+      <Icon className="h-4 w-4" aria-hidden />
+      <span>{label}</span>
+    </button>
+  );
+}
+
 const TextInput = ({
   label,
   ...props
@@ -461,4 +648,3 @@ const TextArea = ({
     <textarea className="min-h-20 rounded-md border border-line px-3 py-2" {...props} />
   </label>
 );
-

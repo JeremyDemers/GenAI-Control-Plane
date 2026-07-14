@@ -20,7 +20,13 @@ Show data freshness timestamps, distinguish estimated and provider-reported cost
 
 Platform administrators can suspend assignments. The action must create audit events and notify project owners.
 
+## Local Demo Lifecycle
+
+In local mode, the developer panel can simulate budget warning, critical, and enforcement thresholds.
+Enforcement suspends the assignment and creates an incident. Restore and forced expiration actions use
+the mock provider adapter, write audit events, archive artifacts locally, deprovision access, and close
+the request.
+
 ## Credential Rotation
 
 Rotate external credentials through the secret manager, validate provider configuration, and record the rotation evidence.
-

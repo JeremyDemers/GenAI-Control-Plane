@@ -31,7 +31,10 @@ services:
       dockerfile: infrastructure/docker/api.Dockerfile
     env_file: .env.example
     environment:
+      APP_ENV: ${APP_ENV:-local}
+      DEV_AUTH_ENABLED: ${DEV_AUTH_ENABLED:-true}
       DATABASE_URL: postgresql+psycopg://control_plane:control_plane@postgres:5432/control_plane
+      PROVIDER_MODE: ${PROVIDER_MODE:-mock}
       REDIS_URL: redis://redis:6379/0
     ports:
       - "${API_PORT:-8000}:8000"
@@ -56,7 +59,7 @@ services:
       context: .
       dockerfile: infrastructure/docker/web.Dockerfile
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     ports:
       - "${WEB_PORT:-3000}:3000"
     depends_on:

@@ -9,6 +9,16 @@
 - Docker Compose for PostgreSQL, Redis, API, worker, and web.
 - Baseline backend and frontend automated tests.
 
+## Phase 2/3 Slice Completed
+
+- Initial Alembic migration generated and verified with `alembic upgrade head`.
+- Local developer lifecycle controls now simulate 70%, 90%, and 100% budget thresholds.
+- Budget enforcement suspends assignments, creates incidents, and emits audit events.
+- Administrator restore, forced expiration, artifact archival, deprovisioning, and request closure are implemented in mock mode.
+- Frontend developer controls expose assignment cost/token totals, restore, expiration, and archive evidence.
+- Auditor view shows recent audit events for the demo lifecycle.
+- Root `.env` values are respected by local API settings and Docker Compose interpolation while remaining ignored by git.
+
 ## Verified
 
 - `cd apps/api && uv run pytest`
@@ -20,10 +30,10 @@
 - `npm --workspace apps/web run build`
 - Manual local smoke test with API on `8010` and web on `3001` because `8000` and `3000` were already occupied on this workstation.
 - `make compose-config`
+- `cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade head`
 
 ## Remaining Work
 
-- Generate Alembic migration revisions from the current model.
 - Move provisioning, usage, budget, and lifecycle processing into durable asynchronous workers.
 - Add Playwright coverage for the full interview demo scenario.
 - Expand live-safe provider adapters for AWS, Azure, Google Cloud, Microsoft Graph, and GitHub.

@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     )
     provider_mode: str = Field(default="mock", validation_alias="PROVIDER_MODE")
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=(".env", "../../.env"), extra="ignore")
 
 
 @lru_cache

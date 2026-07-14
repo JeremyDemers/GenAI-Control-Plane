@@ -102,5 +102,46 @@ class ProviderHealthOut(BaseModel):
     details: dict[str, Any]
 
 
+class ProviderAssignmentOut(BaseModel):
+    id: str
+    request_id: str
+    provider: str
+    status: str
+    external_resource_id: str
+    expires_at: datetime | None
+    total_cost: Decimal
+    total_tokens: int
+    freshness_at: datetime | None
+
+
+class SimulatedUsageIn(BaseModel):
+    assignment_id: str
+    tokens: int = Field(ge=1, le=100000000)
+    request_count: int = Field(ge=1, le=1000000)
+    cost_amount: Decimal = Field(gt=0, le=100000)
+
+
+class LifecycleActionIn(BaseModel):
+    assignment_id: str
+    reason: str = Field(default="Local development demo action.", max_length=500)
+
+
+class LifecycleActionOut(BaseModel):
+    assignment_id: str
+    request_id: str
+    status: str
+    request_status: RequestStatus
+    audit_event: str
+
+
+class ArtifactArchiveOut(BaseModel):
+    id: str
+    assignment_id: str | None
+    storage_provider: str
+    storage_location: str
+    checksum: str
+    retention_expires_at: datetime
+
+
 class ErrorEnvelope(BaseModel):
     error: dict[str, str]

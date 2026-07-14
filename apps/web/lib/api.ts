@@ -49,6 +49,48 @@ export type PendingApproval = {
   assigned_role: string;
 };
 
+export type ProviderAssignment = {
+  id: string;
+  request_id: string;
+  provider: string;
+  status: string;
+  external_resource_id: string;
+  expires_at: string | null;
+  total_cost: string;
+  total_tokens: number;
+  freshness_at: string | null;
+};
+
+export type LifecycleAction = {
+  assignment_id: string;
+  request_id: string;
+  status: string;
+  request_status: string;
+  audit_event: string;
+};
+
+export type AuditEvent = {
+  id: string;
+  event_type: string;
+  actor_user_id: string | null;
+  target_type: string;
+  target_id: string | null;
+  action: string;
+  result: string;
+  reason: string;
+  correlation_id: string;
+  created_at: string;
+};
+
+export type ArtifactArchive = {
+  id: string;
+  assignment_id: string | null;
+  storage_provider: string;
+  storage_location: string;
+  checksum: string;
+  retention_expires_at: string;
+};
+
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function request<T>(path: string, user: DevUser, init?: RequestInit): Promise<T> {
@@ -96,3 +138,47 @@ export function decideApproval(user: DevUser, stepId: string, decision: "approve
   });
 }
 
+export function listAssignments(user: DevUser) {
+  return request<ProviderAssignment[]>("/developer/assignments", user);
+}
+
+export function simulateUsage(
+  user: DevUser,
+  assignmentId: string,
+  preset: "warning" | "critical" | "enforcement"
+) {
+  const payloadByPreset = {
+    warning: { tokens: 70000, request_count: 140, cost_amount: "70" },
+    critical: { tokens: 20000, request_count: 40, cost_amount: "20" },
+    enforcement: { tokens: 10000, request_count: 20, cost_amount: "10" }
+  };
+  return request<LifecycleAction>("/developer/simulate-usage", user, {
+    method: "POST",
+    body: JSON.stringify({ assignment_id: assignmentId, ...payloadByPreset[preset] })
+  });
+}
+
+export function restoreAssignment(user: DevUser, assignmentId: string) {
+  return request<LifecycleAction>("/developer/restore", user, {
+    method: "POST",
+    body: JSON.stringify({ assignment_id: assignmentId, reason: "Administrator restored demo access." })
+  });
+}
+
+export function expireAssignment(user: DevUser, assignmentId: string) {
+  return request<LifecycleAction>("/developer/expire", user, {
+    method: "POST",
+    body: JSON.stringify({
+      assignment_id: assignmentId,
+      reason: "Developer panel forced expiration for demo."
+    })
+  });
+}
+
+export function listAuditEvents(user: DevUser) {
+  return request<AuditEvent[]>("/audit-events", user);
+}
+
+export function listArchives(user: DevUser) {
+  return request<ArtifactArchive[]>("/developer/archives", user);
+}
