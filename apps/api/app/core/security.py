@@ -25,6 +25,7 @@ ROLE_PERMISSIONS: dict[RoleName, set[str]] = {
     RoleName.PROJECT_OWNER: {
         "projects:read_owned",
         "projects:members",
+        "reassignments:create",
         "requests:create",
         "requests:read_project",
         "assignments:read_project",
@@ -60,6 +61,8 @@ ROLE_PERMISSIONS: dict[RoleName, set[str]] = {
         "incidents:read",
         "policy_evaluations:read",
         "policies:manage",
+        "reassignments:approve",
+        "reassignments:read_all",
     },
     RoleName.SECURITY_AUDITOR: {
         "audit:read_all",
@@ -80,6 +83,8 @@ ROLE_PERMISSIONS: dict[RoleName, set[str]] = {
         "incidents:read",
         "reports:executive",
         "projects:suspend",
+        "reassignments:approve",
+        "reassignments:read_all",
         "requests:read_all",
         "providers:read",
         "assignments:read_all",

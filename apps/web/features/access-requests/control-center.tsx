@@ -33,10 +33,13 @@ import {
 } from "recharts";
 
 import {
+  acceptReassignment,
   addProjectMember,
   cancelAccessRequest,
   createAccessRequest,
   createExtensionRequest,
+  createReassignment,
+  decideReassignment,
   decideExtension,
   decideApproval,
   expireAssignment,
@@ -60,6 +63,7 @@ import {
   listProviderHealth,
   listProjectMembers,
   listProjects,
+  listReassignments,
   listRequests,
   listUsageRecords,
   markNotificationRead,
@@ -80,7 +84,9 @@ import {
 const users: DevUser[] = [
   "employee@example.local",
   "owner@example.local",
+  "owner2@example.local",
   "approver@example.local",
+  "security@example.local",
   "cto@example.local",
   "admin@example.local",
   "auditor@example.local"
@@ -231,6 +237,11 @@ export function ControlCenter() {
     queryFn: () => listExtensions(user),
     retry: false
   });
+  const reassignments = useQuery({
+    queryKey: ["reassignments", user],
+    queryFn: () => listReassignments(user),
+    retry: false
+  });
   const selectedRequest = useMemo(
     () => requests.data?.find((request) => request.id === selectedRequestId) ?? requests.data?.[0],
     [requests.data, selectedRequestId]
@@ -317,6 +328,39 @@ export function ControlCenter() {
   const addProjectMemberMutation = useMutation({
     mutationFn: (projectId: string) => addProjectMember(user, projectId),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      void queryClient.invalidateQueries({ queryKey: ["project-members"] });
+      void queryClient.invalidateQueries({ queryKey: ["requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+    }
+  });
+  const createReassignmentMutation = useMutation({
+    mutationFn: (projectId: string) => createReassignment(user, projectId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["reassignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+    }
+  });
+  const acceptReassignmentMutation = useMutation({
+    mutationFn: (reassignmentId: string) => acceptReassignment(user, reassignmentId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["reassignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+    }
+  });
+  const reassignmentDecisionMutation = useMutation({
+    mutationFn: ({
+      reassignmentId,
+      decision
+    }: {
+      reassignmentId: string;
+      decision: "approve" | "reject";
+    }) => decideReassignment(user, reassignmentId, decision),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["reassignments"] });
       void queryClient.invalidateQueries({ queryKey: ["projects"] });
       void queryClient.invalidateQueries({ queryKey: ["project-members"] });
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
@@ -421,6 +465,11 @@ export function ControlCenter() {
     me.data?.roles.some((role) => role === "project_owner" || role === "platform_admin") ?? false;
   const securityAlreadyMember =
     projectMembers.data?.some((member) => member.email === "security@example.local") ?? false;
+  const pendingSelectedReassignment = reassignments.data?.find(
+    (reassignment) =>
+      reassignment.project_id === selectedProjectId &&
+      ["pending_acceptance", "pending_approval"].includes(reassignment.status)
+  );
 
   return (
     <main className="min-h-screen">
@@ -561,9 +610,25 @@ export function ControlCenter() {
                         Add Sam
                       </button>
                     ) : null}
+                    {user === "owner@example.local" &&
+                    selectedProjectId &&
+                    !pendingSelectedReassignment ? (
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center gap-2 rounded-md border border-line bg-white px-2 text-xs font-semibold text-ink shadow-quiet disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => createReassignmentMutation.mutate(selectedProjectId)}
+                        disabled={createReassignmentMutation.isPending}
+                      >
+                        <UserRound className="h-4 w-4" aria-hidden />
+                        Reassign
+                      </button>
+                    ) : null}
                   </div>
                   {addProjectMemberMutation.isSuccess ? (
                     <p className="mt-2 text-xs text-emerald-700">Project member added.</p>
+                  ) : null}
+                  {createReassignmentMutation.isSuccess ? (
+                    <p className="mt-2 text-xs text-emerald-700">Reassignment requested.</p>
                   ) : null}
                   <div className="mt-2 grid gap-2">
                     {projectMembers.data.map((member) => (
@@ -579,6 +644,68 @@ export function ControlCenter() {
               ) : null}
               {projects.data?.length === 0 ? (
                 <p className="text-sm text-slate-500">No projects visible for this identity.</p>
+              ) : null}
+            </div>
+          </Panel>
+
+          <Panel title="Reassignments" icon={UserRound}>
+            <div className="grid gap-2">
+              {(reassignments.data ?? []).slice(0, 5).map((reassignment) => (
+                <div key={reassignment.id} className="rounded-md border border-line p-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{reassignment.project_name}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {reassignment.current_owner_email} → {reassignment.proposed_owner_email}
+                      </p>
+                    </div>
+                    <StatusPill status={reassignment.status} />
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {user === "owner2@example.local" &&
+                    reassignment.status === "pending_acceptance" ? (
+                      <button
+                        className="rounded-md border border-line px-3 py-2 text-xs font-semibold"
+                        onClick={() => acceptReassignmentMutation.mutate(reassignment.id)}
+                      >
+                        Accept
+                      </button>
+                    ) : null}
+                    {(user === "admin@example.local" || user === "cto@example.local") &&
+                    reassignment.status === "pending_approval" ? (
+                      <>
+                        <button
+                          className="rounded-md bg-mint px-3 py-2 text-xs font-semibold text-white"
+                          onClick={() =>
+                            reassignmentDecisionMutation.mutate({
+                              reassignmentId: reassignment.id,
+                              decision: "approve"
+                            })
+                          }
+                        >
+                          Approve
+                        </button>
+                        <button
+                          className="rounded-md border border-coral px-3 py-2 text-xs font-semibold text-coral"
+                          onClick={() =>
+                            reassignmentDecisionMutation.mutate({
+                              reassignmentId: reassignment.id,
+                              decision: "reject"
+                            })
+                          }
+                        >
+                          Reject
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+              {reassignments.data?.length === 0 ? (
+                <p className="text-sm text-slate-500">No reassignment activity for this identity.</p>
+              ) : null}
+              {reassignments.isError ? (
+                <p className="text-sm text-slate-500">Reassignment activity unavailable.</p>
               ) : null}
             </div>
           </Panel>

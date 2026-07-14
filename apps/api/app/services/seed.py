@@ -8,6 +8,7 @@ from app.services.policies import ensure_standard_policy
 DEMO_USERS: dict[str, tuple[str, RoleName]] = {
     "employee@example.local": ("Erin Employee", RoleName.EMPLOYEE),
     "owner@example.local": ("Omar Owner", RoleName.PROJECT_OWNER),
+    "owner2@example.local": ("Olivia Owner", RoleName.PROJECT_OWNER),
     "approver@example.local": ("Avery Approver", RoleName.APPROVER),
     "security@example.local": ("Sam Security", RoleName.SECURITY_REVIEWER),
     "admin@example.local": ("Priya Platform", RoleName.PLATFORM_ADMIN),

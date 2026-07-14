@@ -159,6 +159,107 @@ def test_project_owner_can_add_existing_user_to_project(client: TestClient) -> N
     assert {"project.member_added", "authorization.failure"} <= event_types
 
 
+def test_project_owner_reassignment_requires_acceptance_and_approval(
+    client: TestClient,
+) -> None:
+    created = client.post(
+        "/access-requests",
+        headers={"x-dev-user": "employee@example.local"},
+        json=request_payload(),
+    ).json()
+
+    denied = client.post(
+        "/reassignments",
+        headers={"x-dev-user": "employee@example.local"},
+        json={
+            "project_id": created["project_id"],
+            "proposed_owner_email": "owner2@example.local",
+            "justification": "Move ownership to the backup project owner for continuity.",
+        },
+    )
+    assert denied.status_code == 403
+
+    requested = client.post(
+        "/reassignments",
+        headers={"x-dev-user": "owner@example.local", "x-correlation-id": "reassign"},
+        json={
+            "project_id": created["project_id"],
+            "proposed_owner_email": "owner2@example.local",
+            "justification": "Move ownership to the backup project owner for continuity.",
+        },
+    )
+    assert requested.status_code == 201
+    assert requested.json()["status"] == "pending_acceptance"
+    reassignment_id = requested.json()["id"]
+
+    owner2_reassignments = client.get(
+        "/reassignments", headers={"x-dev-user": "owner2@example.local"}
+    )
+    assert owner2_reassignments.status_code == 200
+    assert owner2_reassignments.json()[0]["id"] == reassignment_id
+
+    accepted = client.post(
+        f"/reassignments/{reassignment_id}/accept",
+        headers={"x-dev-user": "owner2@example.local"},
+    )
+    assert accepted.status_code == 200
+    assert accepted.json()["status"] == "pending_approval"
+
+    admin_reassignments = client.get(
+        "/reassignments", headers={"x-dev-user": "admin@example.local"}
+    )
+    assert admin_reassignments.status_code == 200
+    assert admin_reassignments.json()[0]["id"] == reassignment_id
+
+    approved = client.post(
+        f"/reassignments/{reassignment_id}/decision",
+        headers={"x-dev-user": "admin@example.local"},
+        json={"decision": "approve", "comments": "Approved after owner acceptance."},
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+
+    members = client.get(
+        f"/projects/{created['project_id']}/members",
+        headers={"x-dev-user": "admin@example.local"},
+    ).json()
+    member_roles = {member["email"]: member["member_role"] for member in members}
+    assert member_roles["owner@example.local"] == "collaborator"
+    assert member_roles["owner2@example.local"] == "owner"
+
+    owner2_projects = client.get("/projects", headers={"x-dev-user": "owner2@example.local"})
+    assert owner2_projects.status_code == 200
+    assert owner2_projects.json()[0]["owner_user_id"] == approved.json()["proposed_owner_id"]
+
+    owner_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "owner@example.local"}
+    ).json()
+    owner2_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "owner2@example.local"}
+    ).json()
+    admin_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "admin@example.local"}
+    ).json()
+    assert {notification["event_type"] for notification in owner_notifications} >= {
+        "project_reassigned"
+    }
+    assert {notification["event_type"] for notification in owner2_notifications} >= {
+        "reassignment_requested",
+        "project_reassigned",
+    }
+    assert {notification["event_type"] for notification in admin_notifications} >= {
+        "reassignment_approval_required"
+    }
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    event_types = {event["event_type"] for event in audit.json()}
+    assert {
+        "project.reassignment_requested",
+        "project.reassignment_accepted",
+        "project.reassigned",
+    } <= event_types
+
+
 def test_admin_can_publish_policy_version_used_by_new_requests(client: TestClient) -> None:
     policies = client.get("/policies", headers={"x-dev-user": "admin@example.local"})
     assert policies.status_code == 200

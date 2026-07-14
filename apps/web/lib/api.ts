@@ -3,6 +3,7 @@ import type { AccessRequestFormValues } from "@/lib/request-schema";
 export type DevUser =
   | "employee@example.local"
   | "owner@example.local"
+  | "owner2@example.local"
   | "approver@example.local"
   | "security@example.local"
   | "admin@example.local"
@@ -238,6 +239,20 @@ export type ExtensionRequest = {
   updated_at: string;
 };
 
+export type ReassignmentRequest = {
+  id: string;
+  project_id: string;
+  project_name: string;
+  current_owner_id: string;
+  current_owner_email: string;
+  proposed_owner_id: string;
+  proposed_owner_email: string;
+  status: string;
+  justification: string;
+  created_at: string;
+  updated_at: string;
+};
+
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function request<T>(path: string, user: DevUser, init?: RequestInit): Promise<T> {
@@ -280,6 +295,41 @@ export function addProjectMember(
   return request<ProjectMember>(`/projects/${projectId}/members`, user, {
     method: "POST",
     body: JSON.stringify({ email, member_role: memberRole })
+  });
+}
+
+export function listReassignments(user: DevUser) {
+  return request<ReassignmentRequest[]>("/reassignments", user);
+}
+
+export function createReassignment(user: DevUser, projectId: string) {
+  return request<ReassignmentRequest>("/reassignments", user, {
+    method: "POST",
+    body: JSON.stringify({
+      project_id: projectId,
+      proposed_owner_email: "owner2@example.local",
+      justification: "Move ownership to the backup project owner for continuity."
+    })
+  });
+}
+
+export function acceptReassignment(user: DevUser, reassignmentId: string) {
+  return request<ReassignmentRequest>(`/reassignments/${reassignmentId}/accept`, user, {
+    method: "POST"
+  });
+}
+
+export function decideReassignment(
+  user: DevUser,
+  reassignmentId: string,
+  decision: "approve" | "reject"
+) {
+  return request<ReassignmentRequest>(`/reassignments/${reassignmentId}/decision`, user, {
+    method: "POST",
+    body: JSON.stringify({
+      decision,
+      comments: "Reviewed in local demo."
+    })
   });
 }
 

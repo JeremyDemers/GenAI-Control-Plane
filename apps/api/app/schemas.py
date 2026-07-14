@@ -125,6 +125,31 @@ class ProjectMemberOut(BaseModel):
     created_at: datetime
 
 
+class ReassignmentCreate(BaseModel):
+    project_id: str
+    proposed_owner_email: str = Field(min_length=3, max_length=320)
+    justification: str = Field(min_length=20, max_length=2000)
+
+
+class ReassignmentDecisionIn(BaseModel):
+    decision: str = Field(pattern="^(approve|reject)$")
+    comments: str = Field(default="", max_length=2000)
+
+
+class ReassignmentOut(BaseModel):
+    id: str
+    project_id: str
+    project_name: str
+    current_owner_id: str
+    current_owner_email: str
+    proposed_owner_id: str
+    proposed_owner_email: str
+    status: str
+    justification: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class ExtensionRequestCreate(BaseModel):
     request_id: str
     requested_end_at: datetime

@@ -18,6 +18,7 @@ from app.api import (
     policies,
     projects,
     providers,
+    reassignments,
     reports,
     usage,
 )
@@ -70,6 +71,7 @@ app.include_router(extensions.router)
 app.include_router(incidents.router)
 app.include_router(policies.router)
 app.include_router(projects.router)
+app.include_router(reassignments.router)
 app.include_router(usage.assignments_router)
 app.include_router(usage.usage_router)
 app.include_router(usage.costs_router)
