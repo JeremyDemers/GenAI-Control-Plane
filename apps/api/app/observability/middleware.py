@@ -5,7 +5,10 @@ from dataclasses import dataclass, field
 from uuid import uuid4
 
 from fastapi import Request, Response
+from fastapi.responses import JSONResponse
 from pythonjsonlogger.json import JsonFormatter
+
+from app.core.config import get_settings
 
 
 def trace_id_from_traceparent(traceparent: str | None) -> str | None:
@@ -56,6 +59,32 @@ class RequestMetrics:
 request_metrics = RequestMetrics()
 
 
+@dataclass
+class RateLimiter:
+    limit: int
+    window_seconds: int = 60
+    buckets: dict[str, tuple[int, int]] = field(default_factory=dict)
+
+    def check(self, key: str, now: int | None = None) -> tuple[bool, int, int]:
+        current_time = now or int(time.time())
+        window_start = current_time - (current_time % self.window_seconds)
+        stored_window, count = self.buckets.get(key, (window_start, 0))
+        if stored_window != window_start:
+            stored_window = window_start
+            count = 0
+        count += 1
+        self.buckets[key] = (stored_window, count)
+        remaining = max(self.limit - count, 0)
+        reset_at = stored_window + self.window_seconds
+        return count <= self.limit, remaining, reset_at
+
+    def reset(self) -> None:
+        self.buckets.clear()
+
+
+rate_limiter = RateLimiter(limit=get_settings().rate_limit_requests_per_minute)
+
+
 def configure_logging() -> None:
     handler = logging.StreamHandler()
     handler.setFormatter(JsonFormatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
@@ -70,10 +99,27 @@ async def correlation_middleware(
     request.state.correlation_id = correlation_id
     request.state.trace_id = trace_id
     start = time.perf_counter()
-    response = await call_next(request)
+    rate_limit_key = f"{request.client.host if request.client else 'unknown'}:{request.url.path}"
+    allowed, remaining, reset_at = rate_limiter.check(rate_limit_key)
+    if allowed:
+        response = await call_next(request)
+    else:
+        response = JSONResponse(
+            status_code=429,
+            content={
+                "detail": {
+                    "code": "RATE_LIMITED",
+                    "message": "Too many requests.",
+                    "correlation_id": correlation_id,
+                }
+            },
+        )
     duration_ms = round((time.perf_counter() - start) * 1000, 2)
     response.headers["x-correlation-id"] = correlation_id
     response.headers["x-trace-id"] = trace_id
+    response.headers["x-ratelimit-limit"] = str(rate_limiter.limit)
+    response.headers["x-ratelimit-remaining"] = str(remaining)
+    response.headers["x-ratelimit-reset"] = str(reset_at)
     request_metrics.record(
         path=request.url.path,
         status_code=response.status_code,

@@ -25,6 +25,12 @@ The API emits structured JSON access logs with correlation and trace IDs. Incomi
 headers are propagated to `x-trace-id` response headers, and middleware-generated correlation IDs are
 shared with authorization and workflow audit events.
 
+## Abuse Controls
+
+Local/demo API rate limiting is enforced in middleware and returns `429` with correlation, trace, and
+rate-limit headers. Production deployments should move the same policy to a shared Redis or gateway
+limiter for multi-instance consistency.
+
 ## Secrets
 
 Real provider credentials and webhook signing secrets must be stored outside source control,

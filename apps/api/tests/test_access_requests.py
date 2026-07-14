@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.api.webhooks import webhook_signature
 from app.core.config import get_settings
+from app.observability.middleware import rate_limiter
 from app.providers.base import ProviderOperationError
 
 
@@ -1103,6 +1104,28 @@ def test_observability_propagates_trace_and_correlation_ids(client: TestClient) 
         event for event in audit.json() if event["event_type"] == "authorization.failure"
     ]
     assert failures[0]["correlation_id"] == "observability-correlation"
+
+
+def test_rate_limit_returns_correlation_and_retry_headers(client: TestClient) -> None:
+    original_limit = rate_limiter.limit
+    try:
+        rate_limiter.limit = 1
+        rate_limiter.reset()
+        first = client.get("/health/live", headers={"x-correlation-id": "rate-limit-one"})
+        assert first.status_code == 200
+        assert first.headers["x-ratelimit-limit"] == "1"
+        assert first.headers["x-ratelimit-remaining"] == "0"
+
+        limited = client.get("/health/live", headers={"x-correlation-id": "rate-limit-two"})
+        assert limited.status_code == 429
+        assert limited.headers["x-correlation-id"] == "rate-limit-two"
+        assert limited.headers["x-trace-id"]
+        assert limited.headers["x-ratelimit-reset"]
+        assert limited.json()["detail"]["code"] == "RATE_LIMITED"
+        assert limited.json()["detail"]["correlation_id"] == "rate-limit-two"
+    finally:
+        rate_limiter.limit = original_limit
+        rate_limiter.reset()
 
 
 def test_provider_webhook_requires_valid_signature(client: TestClient) -> None:

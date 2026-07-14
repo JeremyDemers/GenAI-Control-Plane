@@ -26,6 +26,10 @@ class Settings(BaseSettings):
         default="local-provider-webhook-secret",
         validation_alias="PROVIDER_WEBHOOK_SECRET",
     )
+    rate_limit_requests_per_minute: int = Field(
+        default=600,
+        validation_alias="RATE_LIMIT_REQUESTS_PER_MINUTE",
+    )
 
     model_config = SettingsConfigDict(env_file=(".env", "../../.env"), extra="ignore")
 

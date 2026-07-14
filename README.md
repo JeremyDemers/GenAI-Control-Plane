@@ -53,6 +53,7 @@ Local development authentication uses the `x-dev-user` header. The web app inclu
 - Approval workflow with approver and CTO paths.
 - Mock provider adapter contract and provisioning flow.
 - Signed provider webhook endpoint with replay-window validation.
+- Process-local API rate limiting with response headers for local/demo protection.
 - Append-only audit event model from the application perspective.
 - Next.js dashboard with request form, project membership and scoped audit visibility, member addition, ownership reassignment, project suspension, request cancellation, extension workflow, approvals with additional-information handling, CTO override, approval history, role-change, operational health, lifecycle job retry, and provisioning evidence visibility, policy evaluation, policy version/retention management, provider health/configuration/credential visibility, credential rotation evidence, usage and budget evidence, incident handling, notifications, CTO executive reporting, audit/cost allocation export and scheduled delivery, and spend charts.
 - Docker Compose for PostgreSQL, Redis, API, worker, and web.
@@ -68,7 +69,7 @@ make migration-check
 make security-audit
 ```
 
-Backend tests cover state transitions, RBAC denial/audit logging, request submission, trace/correlation propagation, project ownership and scoped audit visibility, project member management/reassignment/suspension, approval information requests, CTO override, approval history, role-change and provisioning evidence visibility, provider retryable failure handling, provider credential inventory/rotation, cancellation, extension requests, incidents, notifications, executive reporting, usage/cost/budget evidence, audit/cost allocation export, policy versioning/retention/evaluation, and mock provisioning through approval. Frontend tests cover request form validation.
+Backend tests cover state transitions, RBAC denial/audit logging, request submission, trace/correlation propagation, rate limiting, project ownership and scoped audit visibility, project member management/reassignment/suspension, approval information requests, CTO override, approval history, role-change and provisioning evidence visibility, provider retryable failure handling, provider credential inventory/rotation, cancellation, extension requests, incidents, notifications, executive reporting, usage/cost/budget evidence, audit/cost allocation export, policy versioning/retention/evaluation, and mock provisioning through approval. Frontend tests cover request form validation.
 Playwright covers the seeded interview demo lifecycle end to end.
 
 For a clean local SQLite migration check:
