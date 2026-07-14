@@ -847,6 +847,51 @@ def test_cto_can_view_executive_report_with_spend_rollups(client: TestClient) ->
     assert denied_report.status_code == 403
 
 
+def test_cost_allocation_export_rolls_up_assignment_spend_and_is_audited(
+    client: TestClient,
+) -> None:
+    provision_demo_request(client)
+    assignments = client.get(
+        "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+    ).json()
+    assignment_id = assignments[0]["id"]
+
+    client.post(
+        "/developer/simulate-usage",
+        headers={"x-dev-user": "admin@example.local"},
+        json={
+            "assignment_id": assignment_id,
+            "tokens": 5000,
+            "request_count": 10,
+            "cost_amount": "25",
+        },
+    )
+
+    export = client.get(
+        "/reports/cost-allocation/export",
+        headers={"x-dev-user": "cto@example.local", "x-correlation-id": "cost-export"},
+    )
+    assert export.status_code == 200
+    assert export.headers["content-type"].startswith("text/csv")
+    assert "cost_center,project_name,request_id,assignment_id,provider" in export.text
+    assert "ENG-AI" in export.text
+    assert "25.00" in export.text
+    assert "5000" in export.text
+
+    auditor_export = client.get(
+        "/reports/cost-allocation/export", headers={"x-dev-user": "auditor@example.local"}
+    )
+    assert auditor_export.status_code == 200
+
+    denied_export = client.get(
+        "/reports/cost-allocation/export", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert denied_export.status_code == 403
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    assert "report.cost_allocation_exported" in {event["event_type"] for event in audit.json()}
+
+
 def test_employee_can_request_extension_and_cto_can_approve(client: TestClient) -> None:
     created = provision_demo_request(client)
     current_end = datetime.fromisoformat(str(created["requested_end_at"]))

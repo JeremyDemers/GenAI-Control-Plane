@@ -1,17 +1,35 @@
+import csv
 from collections import Counter, defaultdict
 from decimal import Decimal
+from io import StringIO
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import require_permission
+from app.auth.dependencies import get_correlation_id, require_permission
 from app.core.database import get_db
 from app.models.entities import AccessRequest, CostRecord, ProviderAssignment, UsageRecord, User
 from app.models.enums import RequestStatus
 from app.schemas import CostCenterSpendOut, ExecutiveReportOut, ProviderSpendOut
+from app.services.audit import record_audit_event
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+
+COST_ALLOCATION_EXPORT_FIELDS = [
+    "cost_center",
+    "project_name",
+    "request_id",
+    "assignment_id",
+    "provider",
+    "assignment_status",
+    "currency",
+    "requested_budget",
+    "allocated_spend",
+    "tokens",
+    "request_count",
+]
 
 
 @router.get("/executive", response_model=ExecutiveReportOut)
@@ -88,4 +106,70 @@ def executive_report(
             )
             for cost_center in sorted(cost_centers)
         ],
+    )
+
+
+@router.get("/cost-allocation/export")
+def export_cost_allocation(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("reports:cost_export")),
+    correlation_id: str = Depends(get_correlation_id),
+) -> Response:
+    requests = db.scalars(select(AccessRequest)).all()
+    assignments = db.scalars(select(ProviderAssignment)).all()
+    costs = db.scalars(select(CostRecord)).all()
+    usage = db.scalars(select(UsageRecord)).all()
+
+    request_by_id = {request.id: request for request in requests}
+    spend_by_assignment: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    tokens_by_assignment: dict[str, int] = defaultdict(int)
+    calls_by_assignment: dict[str, int] = defaultdict(int)
+
+    for cost in costs:
+        spend_by_assignment[cost.assignment_id] += cost.amount
+    for record in usage:
+        tokens_by_assignment[record.assignment_id] += record.tokens
+        calls_by_assignment[record.assignment_id] += record.request_count
+
+    output = StringIO()
+    writer = csv.DictWriter(output, fieldnames=COST_ALLOCATION_EXPORT_FIELDS)
+    writer.writeheader()
+    row_count = 0
+    for assignment in sorted(assignments, key=lambda item: (item.provider, item.id)):
+        request = request_by_id.get(assignment.request_id)
+        if request is None:
+            continue
+        writer.writerow(
+            {
+                "cost_center": request.cost_center,
+                "project_name": request.project_name,
+                "request_id": request.id,
+                "assignment_id": assignment.id,
+                "provider": assignment.provider,
+                "assignment_status": assignment.status,
+                "currency": request.currency,
+                "requested_budget": request.requested_budget,
+                "allocated_spend": spend_by_assignment[assignment.id],
+                "tokens": tokens_by_assignment[assignment.id],
+                "request_count": calls_by_assignment[assignment.id],
+            }
+        )
+        row_count += 1
+
+    record_audit_event(
+        db,
+        event_type="report.cost_allocation_exported",
+        actor_user_id=user.id,
+        target_type="cost_allocation_report",
+        target_id=None,
+        action="export",
+        result="success",
+        correlation_id=correlation_id,
+        metadata_json={"format": "csv", "row_count": row_count},
+    )
+    db.commit()
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="cost-allocation.csv"'},
     )

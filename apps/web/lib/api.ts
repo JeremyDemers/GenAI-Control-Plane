@@ -493,6 +493,18 @@ export async function exportAuditEvents(user: DevUser) {
   return response.text();
 }
 
+export async function exportCostAllocation(user: DevUser) {
+  const response = await fetch(`${apiBase}/reports/cost-allocation/export`, {
+    headers: {
+      "x-dev-user": user
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return response.text();
+}
+
 export function listArchives(user: DevUser) {
   return request<ArtifactArchive[]>("/developer/archives", user);
 }

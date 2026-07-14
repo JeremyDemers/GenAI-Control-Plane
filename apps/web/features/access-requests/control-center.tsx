@@ -44,6 +44,7 @@ import {
   decideApproval,
   expireAssignment,
   exportAuditEvents,
+  exportCostAllocation,
   getExecutiveReport,
   getMe,
   getPolicyEvaluation,
@@ -427,6 +428,10 @@ export function ControlCenter() {
   });
   const auditExportMutation = useMutation({
     mutationFn: () => exportAuditEvents(user)
+  });
+
+  const costAllocationExportMutation = useMutation({
+    mutationFn: () => exportCostAllocation(user)
   });
   const extensionMutation = useMutation({
     mutationFn: ({ requestId, currentEndAt }: { requestId: string; currentEndAt: string }) =>
@@ -1133,6 +1138,21 @@ export function ControlCenter() {
             <Panel title="Executive Report" icon={LineChart}>
               {executiveReport.data ? (
                 <div className="grid gap-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm text-slate-600">Cost allocation evidence</p>
+                    <button
+                      className="h-10 rounded-md border border-line px-3 text-sm font-semibold"
+                      onClick={() => costAllocationExportMutation.mutate()}
+                    >
+                      Export CSV
+                    </button>
+                  </div>
+                  {costAllocationExportMutation.data ? (
+                    <p className="rounded-md bg-panel p-2 text-xs text-slate-600">
+                      Allocation export ready ·{" "}
+                      {costAllocationExportMutation.data.trim().split("\n").length - 1} rows
+                    </p>
+                  ) : null}
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                     <Detail label="Total spend" value={`$${executiveReport.data.total_spend}`} />
                     <Detail
