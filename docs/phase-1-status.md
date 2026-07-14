@@ -45,6 +45,7 @@
 - Platform administrators can publish new active standard-policy versions, and subsequent requests retain the policy version used during evaluation.
 - Platform administrators can update artifact retention policy versions, and archive expiration uses the active retention value.
 - Root `.env` values are respected by local API settings and Docker Compose interpolation while remaining ignored by git.
+- Docker build paths use Node 24 for the web image, locked uv dependency sync for the API image, and a uv-backed worker command.
 - Playwright now covers the full seeded interview demo lifecycle in Chromium.
 - Admins can list lifecycle jobs in the portal and request retry for queued or failed jobs.
 - CI now validates Alembic migrations against a clean SQLite database and gates high-severity npm advisories.
@@ -63,6 +64,8 @@
 - `make security-audit`
 - Manual local smoke test with API on `8010` and web on `3001` because `8000` and `3000` were already occupied on this workstation.
 - `make compose-config`
+- `podman build -f infrastructure/docker/api.Dockerfile -t genai-control-plane-api:test .`
+- `podman build -f infrastructure/docker/web.Dockerfile -t genai-control-plane-web:test .`
 - `rm -f apps/api/control_plane.db && cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade head`
 
 ## Remaining Work

@@ -58,6 +58,7 @@ Local development authentication uses the `x-dev-user` header. The web app inclu
 - Append-only audit event model from the application perspective.
 - Next.js dashboard with request form, project membership and scoped audit visibility, member addition, ownership reassignment, project suspension, request cancellation, extension workflow, approvals with additional-information handling, CTO override, approval history, role-change, operational health, lifecycle job retry, and provisioning evidence visibility, policy evaluation, policy version/retention management, provider health/configuration/credential visibility, credential rotation evidence, usage and budget evidence, incident handling, notifications, CTO executive reporting, audit/cost allocation export and scheduled delivery, and spend charts.
 - Docker Compose for PostgreSQL, Redis, API, worker, and web.
+- Production-style Dockerfiles with Node 24 web builds, uv-locked API installs, and a uv-backed worker command.
 - GitHub Actions workflow for backend, frontend, migration, high-severity dependency audit, Docker, and Terraform validation.
 
 ## Testing

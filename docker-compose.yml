@@ -48,7 +48,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/api.Dockerfile
-    command: ["python", "-m", "app.workers.scheduler"]
+    command: ["uv", "run", "python", "-m", "app.workers.scheduler"]
     env_file: .env.example
     depends_on:
       api:
