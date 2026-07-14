@@ -22,6 +22,14 @@ class Settings(BaseSettings):
         validation_alias="CORS_ORIGINS",
     )
     provider_mode: str = Field(default="mock", validation_alias="PROVIDER_MODE")
+    provider_live_operations_enabled: bool = Field(
+        default=False,
+        validation_alias="PROVIDER_LIVE_OPERATIONS_ENABLED",
+    )
+    aws_region: str = Field(default="", validation_alias="AWS_REGION")
+    azure_tenant_id: str = Field(default="", validation_alias="AZURE_TENANT_ID")
+    google_cloud_project: str = Field(default="", validation_alias="GOOGLE_CLOUD_PROJECT")
+    github_org: str = Field(default="", validation_alias="GITHUB_ORG")
     provider_webhook_secret: str = Field(
         default="local-provider-webhook-secret",
         validation_alias="PROVIDER_WEBHOOK_SECRET",

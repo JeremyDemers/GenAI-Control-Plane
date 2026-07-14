@@ -1134,6 +1134,44 @@ def test_provider_health_and_configuration_visibility(client: TestClient) -> Non
     assert rotated_events[0]["correlation_id"] == "credential-rotate"
 
 
+def test_live_provider_mode_reports_safe_configuration_boundaries(client: TestClient) -> None:
+    settings = get_settings()
+    original_values = {
+        "provider_mode": settings.provider_mode,
+        "provider_live_operations_enabled": settings.provider_live_operations_enabled,
+        "aws_region": settings.aws_region,
+        "azure_tenant_id": settings.azure_tenant_id,
+        "google_cloud_project": settings.google_cloud_project,
+        "github_org": settings.github_org,
+    }
+    settings.provider_mode = "live"
+    settings.provider_live_operations_enabled = False
+    settings.aws_region = "us-east-1"
+    settings.azure_tenant_id = ""
+    settings.google_cloud_project = "demo-project"
+    settings.github_org = "demo-org"
+    try:
+        configuration = client.get(
+            "/providers/configuration", headers={"x-dev-user": "admin@example.local"}
+        )
+        assert configuration.status_code == 200
+        rows = {row["provider"]: row for row in configuration.json()}
+        assert rows["amazon_bedrock"]["mode"] == "live"
+        assert rows["amazon_bedrock"]["configured"] is True
+        assert rows["azure_openai"]["configured"] is False
+        assert rows["azure_openai"]["details"]["missing_fields"] == ["azure_tenant_id"]
+        assert rows["github_copilot"]["details"]["operations_enabled"] is False
+
+        health = client.get("/providers/health", headers={"x-dev-user": "employee@example.local"})
+        assert health.status_code == 200
+        health_rows = {row["provider"]: row for row in health.json()}
+        assert health_rows["amazon_bedrock"]["status"] == "healthy"
+        assert health_rows["azure_openai"]["status"] == "degraded"
+    finally:
+        for field, value in original_values.items():
+            setattr(settings, field, value)
+
+
 def test_observability_propagates_trace_and_correlation_ids(client: TestClient) -> None:
     trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
     live = client.get(

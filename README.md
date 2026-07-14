@@ -52,6 +52,7 @@ Local development authentication uses the `x-dev-user` header. The web app inclu
 - Versioned standard policy evaluation.
 - Approval workflow with approver and CTO paths.
 - Mock provider adapter contract with durable queued provisioning jobs and local inline execution.
+- Live provider adapter boundaries with safe readiness checks and disabled-by-default mutating operations.
 - Signed provider webhook endpoint with replay-window validation.
 - Process-local API rate limiting with response headers for local/demo protection.
 - Append-only audit event model from the application perspective.
@@ -69,7 +70,7 @@ make migration-check
 make security-audit
 ```
 
-Backend tests cover state transitions, RBAC denial/audit logging, request submission, trace/correlation propagation, rate limiting, queued lifecycle worker execution, project ownership and scoped audit visibility, project member management/reassignment/suspension, approval information requests, CTO override, approval history, role-change and provisioning evidence visibility, provider retryable failure handling, provider credential inventory/rotation, cancellation, extension requests, incidents, notifications, executive reporting, usage/cost/budget evidence, audit/cost allocation export, policy versioning/retention/evaluation, and mock provisioning through approval. Frontend tests cover request form validation.
+Backend tests cover state transitions, RBAC denial/audit logging, request submission, trace/correlation propagation, rate limiting, queued lifecycle worker execution, project ownership and scoped audit visibility, project member management/reassignment/suspension, approval information requests, CTO override, approval history, role-change and provisioning evidence visibility, provider retryable failure handling, provider configuration modes, provider credential inventory/rotation, cancellation, extension requests, incidents, notifications, executive reporting, usage/cost/budget evidence, audit/cost allocation export, policy versioning/retention/evaluation, and mock provisioning through approval. Frontend tests cover request form validation.
 Playwright covers the seeded interview demo lifecycle end to end.
 
 For a clean local SQLite migration check:
@@ -82,7 +83,7 @@ cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade 
 ## Known Limitations
 
 - OIDC/PKCE is represented as an architecture boundary; local auth uses deterministic development identities.
-- Provider adapters run in mock mode only.
+- Concrete live provider SDK operations are intentionally disabled until `PROVIDER_LIVE_OPERATIONS_ENABLED=true` and provider implementations are installed.
 - The API still creates local tables at startup for demo velocity, with Alembic migrations available for clean database setup.
 - Provisioning jobs are durably queued and can be drained by the worker; local inline execution remains enabled by default for demo velocity.
 - `npm audit --audit-level=high` passes; full `npm audit` currently reports a moderate Next/PostCSS transitive advisory where `next@latest` still bundles the affected range.
