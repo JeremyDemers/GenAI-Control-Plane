@@ -27,18 +27,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
           cache: npm
       - name: Install frontend
         run: npm install
+      - name: Install API for E2E
+        run: cd apps/api && uv sync --all-groups
       - name: Typecheck
         run: npm --workspace apps/web run typecheck
       - name: Unit tests
         run: npm --workspace apps/web run test
       - name: Install Playwright browser
-        run: npm --workspace apps/web exec playwright install --with-deps chromium
+        run: npm --workspace apps/web exec -- playwright install --with-deps chromium
       - name: End-to-end tests
         run: npm --workspace apps/web run test:e2e
       - name: Build
