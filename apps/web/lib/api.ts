@@ -404,6 +404,16 @@ export function decideApproval(
   });
 }
 
+export function overrideApproval(user: DevUser, requestId: string, decision: "approve" | "reject") {
+  return request<AccessRequest>(`/approvals/override/${requestId}`, user, {
+    method: "POST",
+    body: JSON.stringify({
+      decision,
+      justification: "Urgent executive demo requires direct temporary approval."
+    })
+  });
+}
+
 export function respondToInformationRequest(user: DevUser, requestId: string) {
   return request<AccessRequest>(`/access-requests/${requestId}/information-response`, user, {
     method: "POST",

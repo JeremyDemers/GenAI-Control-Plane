@@ -67,6 +67,7 @@ import {
   listRequests,
   listUsageRecords,
   markNotificationRead,
+  overrideApproval,
   publishInternalSecurityReviewPolicy,
   respondToInformationRequest,
   restoreAssignment,
@@ -302,6 +303,25 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
       void queryClient.invalidateQueries({ queryKey: ["budget-summaries"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    }
+  });
+  const overrideMutation = useMutation({
+    mutationFn: ({
+      requestId,
+      decision
+    }: {
+      requestId: string;
+      decision: "approve" | "reject";
+    }) => overrideApproval(user, requestId, decision),
+    onSuccess: (updated) => {
+      setSelectedRequestId(updated.id);
+      void queryClient.invalidateQueries({ queryKey: ["requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["approvals"] });
+      void queryClient.invalidateQueries({ queryKey: ["approval-history"] });
+      void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["budget-summaries"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
     }
   });
   const informationResponseMutation = useMutation({
@@ -783,6 +803,23 @@ export function ControlCenter() {
                             }}
                           >
                             Respond
+                          </button>
+                        ) : null}
+                        {user === "cto@example.local" &&
+                        !["ACTIVE", "CLOSED", "CANCELLED", "EXPIRED", "SUSPENDED"].includes(
+                          request.status
+                        ) ? (
+                          <button
+                            className="rounded-md border border-line px-2 py-1 text-xs font-semibold"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              overrideMutation.mutate({
+                                requestId: request.id,
+                                decision: "approve"
+                              });
+                            }}
+                          >
+                            Override
                           </button>
                         ) : null}
                       </td>

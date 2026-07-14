@@ -385,6 +385,72 @@ def test_approval_workflow_provisions_mock_assignments(client: TestClient) -> No
     assert denied_history.status_code == 403
 
 
+def test_cto_can_override_pending_approval_with_mandatory_justification(
+    client: TestClient,
+) -> None:
+    created = client.post(
+        "/access-requests",
+        headers={"x-dev-user": "employee@example.local"},
+        json=request_payload(),
+    ).json()
+
+    missing_justification = client.post(
+        f"/approvals/override/{created['id']}",
+        headers={"x-dev-user": "cto@example.local"},
+        json={"decision": "approve", "justification": "Too short."},
+    )
+    assert missing_justification.status_code == 422
+
+    denied = client.post(
+        f"/approvals/override/{created['id']}",
+        headers={"x-dev-user": "approver@example.local"},
+        json={
+            "decision": "approve",
+            "justification": "Approvers cannot bypass the approval workflow.",
+        },
+    )
+    assert denied.status_code == 403
+
+    overridden = client.post(
+        f"/approvals/override/{created['id']}",
+        headers={"x-dev-user": "cto@example.local", "x-correlation-id": "cto-override"},
+        json={
+            "decision": "approve",
+            "justification": "Urgent executive demo requires direct temporary approval.",
+        },
+    )
+    assert overridden.status_code == 200
+    assert overridden.json()["status"] == "ACTIVE"
+
+    pending_after_override = client.get(
+        "/approvals/pending", headers={"x-dev-user": "approver@example.local"}
+    )
+    assert pending_after_override.status_code == 200
+    assert pending_after_override.json() == []
+
+    assignments = client.get(
+        "/provider-assignments", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert assignments.status_code == 200
+    assert len(assignments.json()) == 2
+
+    history = client.get("/approvals/history", headers={"x-dev-user": "auditor@example.local"})
+    assert history.status_code == 200
+    override_rows = [row for row in history.json() if row["decision"] == "override_approve"]
+    assert {row["actor_email"] for row in override_rows} == {"cto@example.local"}
+    assert {row["request_id"] for row in override_rows} == {created["id"]}
+
+    notifications = client.get(
+        "/notifications", headers={"x-dev-user": "employee@example.local"}
+    ).json()
+    assert {notification["event_type"] for notification in notifications} >= {
+        "approval_overridden"
+    }
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    assert "approval.override" in {event["event_type"] for event in audit.json()}
+
+
 def test_approver_can_request_information_and_requester_can_respond(
     client: TestClient,
 ) -> None:

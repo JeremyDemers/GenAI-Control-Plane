@@ -177,6 +177,11 @@ class ApprovalAction(BaseModel):
     comments: str = Field(default="", max_length=2000)
 
 
+class CtoOverrideIn(BaseModel):
+    decision: str = Field(pattern="^(approve|reject)$")
+    justification: str = Field(min_length=20, max_length=2000)
+
+
 class ApprovalHistoryOut(BaseModel):
     approval_step_id: str
     request_id: str
