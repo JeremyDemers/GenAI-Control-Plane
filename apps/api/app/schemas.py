@@ -115,6 +115,10 @@ class ProjectMemberCreate(BaseModel):
     member_role: str = Field(default="member", pattern="^(member|collaborator|owner)$")
 
 
+class ProjectSuspendIn(BaseModel):
+    reason: str = Field(min_length=10, max_length=500)
+
+
 class ProjectMemberOut(BaseModel):
     id: str
     project_id: str
@@ -123,6 +127,31 @@ class ProjectMemberOut(BaseModel):
     display_name: str
     member_role: str
     created_at: datetime
+
+
+class ReassignmentCreate(BaseModel):
+    project_id: str
+    proposed_owner_email: str = Field(min_length=3, max_length=320)
+    justification: str = Field(min_length=20, max_length=2000)
+
+
+class ReassignmentDecisionIn(BaseModel):
+    decision: str = Field(pattern="^(approve|reject)$")
+    comments: str = Field(default="", max_length=2000)
+
+
+class ReassignmentOut(BaseModel):
+    id: str
+    project_id: str
+    project_name: str
+    current_owner_id: str
+    current_owner_email: str
+    proposed_owner_id: str
+    proposed_owner_email: str
+    status: str
+    justification: str
+    created_at: datetime
+    updated_at: datetime
 
 
 class ExtensionRequestCreate(BaseModel):
@@ -152,6 +181,11 @@ class ApprovalAction(BaseModel):
     comments: str = Field(default="", max_length=2000)
 
 
+class CtoOverrideIn(BaseModel):
+    decision: str = Field(pattern="^(approve|reject)$")
+    justification: str = Field(min_length=20, max_length=2000)
+
+
 class ApprovalHistoryOut(BaseModel):
     approval_step_id: str
     request_id: str
@@ -177,6 +211,19 @@ class AuditEventOut(BaseModel):
     result: str
     reason: str
     correlation_id: str
+    created_at: datetime
+
+
+class RoleChangeOut(BaseModel):
+    id: str
+    project_id: str | None
+    project_name: str | None
+    target_email: str
+    old_role: str
+    new_role: str
+    actor_email: str | None
+    source_event_type: str
+    reason: str
     created_at: datetime
 
 
@@ -291,6 +338,23 @@ class LifecycleJobOut(BaseModel):
     updated_at: datetime
 
 
+class ProvisioningEvidenceOut(BaseModel):
+    assignment_id: str
+    request_id: str
+    project_id: str | None
+    project_name: str
+    provider: str
+    assignment_status: str
+    external_resource_id: str
+    provision_job_status: str | None
+    archive_job_status: str | None
+    archive_location: str | None
+    archive_checksum: str | None
+    deprovisioned_at: datetime | None
+    evidence_result: str
+    updated_at: datetime
+
+
 class NotificationOut(BaseModel):
     id: str
     user_id: str
@@ -325,6 +389,20 @@ class ExecutiveReportOut(BaseModel):
     requests_by_status: dict[str, int]
     spend_by_provider: list[ProviderSpendOut]
     spend_by_cost_center: list[CostCenterSpendOut]
+
+
+class CostAllocationDeliveryCreate(BaseModel):
+    frequency: str = Field(pattern="^(daily|weekly|monthly)$")
+    recipients: list[str] = Field(min_length=1, max_length=10)
+
+
+class CostAllocationDeliveryOut(BaseModel):
+    id: str
+    status: str
+    frequency: str
+    recipients: list[str]
+    row_count: int
+    created_at: datetime
 
 
 class ErrorEnvelope(BaseModel):

@@ -3,6 +3,7 @@ import type { AccessRequestFormValues } from "@/lib/request-schema";
 export type DevUser =
   | "employee@example.local"
   | "owner@example.local"
+  | "owner2@example.local"
   | "approver@example.local"
   | "security@example.local"
   | "admin@example.local"
@@ -185,6 +186,23 @@ export type ArtifactArchive = {
   retention_expires_at: string;
 };
 
+export type ProvisioningEvidence = {
+  assignment_id: string;
+  request_id: string;
+  project_id: string | null;
+  project_name: string;
+  provider: string;
+  assignment_status: string;
+  external_resource_id: string;
+  provision_job_status: string | null;
+  archive_job_status: string | null;
+  archive_location: string | null;
+  archive_checksum: string | null;
+  deprovisioned_at: string | null;
+  evidence_result: string;
+  updated_at: string;
+};
+
 export type Incident = {
   id: string;
   severity: string;
@@ -238,6 +256,42 @@ export type ExtensionRequest = {
   updated_at: string;
 };
 
+export type ReassignmentRequest = {
+  id: string;
+  project_id: string;
+  project_name: string;
+  current_owner_id: string;
+  current_owner_email: string;
+  proposed_owner_id: string;
+  proposed_owner_email: string;
+  status: string;
+  justification: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type RoleChange = {
+  id: string;
+  project_id: string | null;
+  project_name: string | null;
+  target_email: string;
+  old_role: string;
+  new_role: string;
+  actor_email: string | null;
+  source_event_type: string;
+  reason: string;
+  created_at: string;
+};
+
+export type CostAllocationDelivery = {
+  id: string;
+  status: string;
+  frequency: string;
+  recipients: string[];
+  row_count: number;
+  created_at: string;
+};
+
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function request<T>(path: string, user: DevUser, init?: RequestInit): Promise<T> {
@@ -280,6 +334,52 @@ export function addProjectMember(
   return request<ProjectMember>(`/projects/${projectId}/members`, user, {
     method: "POST",
     body: JSON.stringify({ email, member_role: memberRole })
+  });
+}
+
+export function suspendProject(user: DevUser, projectId: string) {
+  return request<Project>(`/projects/${projectId}/suspend`, user, {
+    method: "POST",
+    body: JSON.stringify({ reason: "Executive risk review paused this project." })
+  });
+}
+
+export function listReassignments(user: DevUser) {
+  return request<ReassignmentRequest[]>("/reassignments", user);
+}
+
+export function listRoleChanges(user: DevUser) {
+  return request<RoleChange[]>("/role-changes", user);
+}
+
+export function createReassignment(user: DevUser, projectId: string) {
+  return request<ReassignmentRequest>("/reassignments", user, {
+    method: "POST",
+    body: JSON.stringify({
+      project_id: projectId,
+      proposed_owner_email: "owner2@example.local",
+      justification: "Move ownership to the backup project owner for continuity."
+    })
+  });
+}
+
+export function acceptReassignment(user: DevUser, reassignmentId: string) {
+  return request<ReassignmentRequest>(`/reassignments/${reassignmentId}/accept`, user, {
+    method: "POST"
+  });
+}
+
+export function decideReassignment(
+  user: DevUser,
+  reassignmentId: string,
+  decision: "approve" | "reject"
+) {
+  return request<ReassignmentRequest>(`/reassignments/${reassignmentId}/decision`, user, {
+    method: "POST",
+    body: JSON.stringify({
+      decision,
+      comments: "Reviewed in local demo."
+    })
   });
 }
 
@@ -350,6 +450,16 @@ export function decideApproval(
         decision === "request_information"
           ? "Please clarify retention and artifact handling before approval."
           : "Reviewed in local demo."
+    })
+  });
+}
+
+export function overrideApproval(user: DevUser, requestId: string, decision: "approve" | "reject") {
+  return request<AccessRequest>(`/approvals/override/${requestId}`, user, {
+    method: "POST",
+    body: JSON.stringify({
+      decision,
+      justification: "Urgent executive demo requires direct temporary approval."
     })
   });
 }
@@ -433,8 +543,24 @@ export async function exportAuditEvents(user: DevUser) {
   return response.text();
 }
 
+export async function exportCostAllocation(user: DevUser) {
+  const response = await fetch(`${apiBase}/reports/cost-allocation/export`, {
+    headers: {
+      "x-dev-user": user
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return response.text();
+}
+
 export function listArchives(user: DevUser) {
   return request<ArtifactArchive[]>("/developer/archives", user);
+}
+
+export function listProvisioningEvidence(user: DevUser) {
+  return request<ProvisioningEvidence[]>("/evidence/provisioning", user);
 }
 
 export function listNotifications(user: DevUser) {
@@ -449,6 +575,17 @@ export function markNotificationRead(user: DevUser, notificationId: string) {
 
 export function getExecutiveReport(user: DevUser) {
   return request<ExecutiveReport>("/reports/executive", user);
+}
+
+export function listCostAllocationDeliveries(user: DevUser) {
+  return request<CostAllocationDelivery[]>("/reports/cost-allocation/deliveries", user);
+}
+
+export function scheduleCostAllocationDelivery(user: DevUser) {
+  return request<CostAllocationDelivery>("/reports/cost-allocation/deliveries", user, {
+    method: "POST",
+    body: JSON.stringify({ frequency: "weekly", recipients: ["finance@example.local"] })
+  });
 }
 
 export function listIncidents(user: DevUser) {

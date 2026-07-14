@@ -33,14 +33,18 @@ import {
 } from "recharts";
 
 import {
+  acceptReassignment,
   addProjectMember,
   cancelAccessRequest,
   createAccessRequest,
   createExtensionRequest,
+  createReassignment,
+  decideReassignment,
   decideExtension,
   decideApproval,
   expireAssignment,
   exportAuditEvents,
+  exportCostAllocation,
   getExecutiveReport,
   getMe,
   getPolicyEvaluation,
@@ -49,25 +53,32 @@ import {
   listAssignments,
   listAuditEvents,
   listBudgetSummaries,
+  listCostAllocationDeliveries,
   listCostRecords,
   listExtensions,
   listIncidents,
   listNotifications,
   listPolicies,
   listPendingApprovals,
+  listProvisioningEvidence,
   listProviderConfiguration,
   listProviderAssignments,
   listProviderHealth,
   listProjectMembers,
   listProjects,
+  listReassignments,
   listRequests,
+  listRoleChanges,
   listUsageRecords,
   markNotificationRead,
+  overrideApproval,
   publishInternalSecurityReviewPolicy,
   respondToInformationRequest,
   restoreAssignment,
   resolveIncident,
+  scheduleCostAllocationDelivery,
   simulateUsage,
+  suspendProject,
   type AccessRequest,
   type DevUser
 } from "@/lib/api";
@@ -80,7 +91,9 @@ import {
 const users: DevUser[] = [
   "employee@example.local",
   "owner@example.local",
+  "owner2@example.local",
   "approver@example.local",
+  "security@example.local",
   "cto@example.local",
   "admin@example.local",
   "auditor@example.local"
@@ -214,10 +227,28 @@ export function ControlCenter() {
     enabled: user === "cto@example.local",
     retry: false
   });
+  const costAllocationDeliveries = useQuery({
+    queryKey: ["cost-allocation-deliveries", user],
+    queryFn: () => listCostAllocationDeliveries(user),
+    enabled:
+      user === "admin@example.local" ||
+      user === "auditor@example.local" ||
+      user === "cto@example.local",
+    retry: false
+  });
   const incidents = useQuery({
     queryKey: ["incidents", user],
     queryFn: () => listIncidents(user),
     enabled: user === "admin@example.local" || user === "auditor@example.local" || user === "cto@example.local",
+    retry: false
+  });
+  const provisioningEvidence = useQuery({
+    queryKey: ["provisioning-evidence", user],
+    queryFn: () => listProvisioningEvidence(user),
+    enabled:
+      user === "admin@example.local" ||
+      user === "auditor@example.local" ||
+      user === "cto@example.local",
     retry: false
   });
   const policies = useQuery({
@@ -229,6 +260,20 @@ export function ControlCenter() {
   const extensions = useQuery({
     queryKey: ["extensions", user],
     queryFn: () => listExtensions(user),
+    retry: false
+  });
+  const reassignments = useQuery({
+    queryKey: ["reassignments", user],
+    queryFn: () => listReassignments(user),
+    retry: false
+  });
+  const roleChanges = useQuery({
+    queryKey: ["role-changes", user],
+    queryFn: () => listRoleChanges(user),
+    enabled:
+      user === "admin@example.local" ||
+      user === "auditor@example.local" ||
+      user === "cto@example.local",
     retry: false
   });
   const selectedRequest = useMemo(
@@ -293,6 +338,25 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
   });
+  const overrideMutation = useMutation({
+    mutationFn: ({
+      requestId,
+      decision
+    }: {
+      requestId: string;
+      decision: "approve" | "reject";
+    }) => overrideApproval(user, requestId, decision),
+    onSuccess: (updated) => {
+      setSelectedRequestId(updated.id);
+      void queryClient.invalidateQueries({ queryKey: ["requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["approvals"] });
+      void queryClient.invalidateQueries({ queryKey: ["approval-history"] });
+      void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["budget-summaries"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+    }
+  });
   const informationResponseMutation = useMutation({
     mutationFn: (requestId: string) => respondToInformationRequest(user, requestId),
     onSuccess: (updated) => {
@@ -317,6 +381,51 @@ export function ControlCenter() {
   const addProjectMemberMutation = useMutation({
     mutationFn: (projectId: string) => addProjectMember(user, projectId),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      void queryClient.invalidateQueries({ queryKey: ["project-members"] });
+      void queryClient.invalidateQueries({ queryKey: ["requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+    }
+  });
+  const suspendProjectMutation = useMutation({
+    mutationFn: (projectId: string) => suspendProject(user, projectId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      void queryClient.invalidateQueries({ queryKey: ["requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["executive-report"] });
+    }
+  });
+  const createReassignmentMutation = useMutation({
+    mutationFn: (projectId: string) => createReassignment(user, projectId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["reassignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+    }
+  });
+  const acceptReassignmentMutation = useMutation({
+    mutationFn: (reassignmentId: string) => acceptReassignment(user, reassignmentId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["reassignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+    }
+  });
+  const reassignmentDecisionMutation = useMutation({
+    mutationFn: ({
+      reassignmentId,
+      decision
+    }: {
+      reassignmentId: string;
+      decision: "approve" | "reject";
+    }) => decideReassignment(user, reassignmentId, decision),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["reassignments"] });
       void queryClient.invalidateQueries({ queryKey: ["projects"] });
       void queryClient.invalidateQueries({ queryKey: ["project-members"] });
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
@@ -363,6 +472,18 @@ export function ControlCenter() {
   });
   const auditExportMutation = useMutation({
     mutationFn: () => exportAuditEvents(user)
+  });
+
+  const costAllocationExportMutation = useMutation({
+    mutationFn: () => exportCostAllocation(user)
+  });
+
+  const costAllocationDeliveryMutation = useMutation({
+    mutationFn: () => scheduleCostAllocationDelivery(user),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["cost-allocation-deliveries"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+    }
   });
   const extensionMutation = useMutation({
     mutationFn: ({ requestId, currentEndAt }: { requestId: string; currentEndAt: string }) =>
@@ -421,6 +542,11 @@ export function ControlCenter() {
     me.data?.roles.some((role) => role === "project_owner" || role === "platform_admin") ?? false;
   const securityAlreadyMember =
     projectMembers.data?.some((member) => member.email === "security@example.local") ?? false;
+  const pendingSelectedReassignment = reassignments.data?.find(
+    (reassignment) =>
+      reassignment.project_id === selectedProjectId &&
+      ["pending_acceptance", "pending_approval"].includes(reassignment.status)
+  );
 
   return (
     <main className="min-h-screen">
@@ -542,7 +668,20 @@ export function ControlCenter() {
                         {project.cost_center} · {project.member_count} members
                       </p>
                     </div>
-                    <StatusPill status={project.status} />
+                    <div className="flex items-center gap-2">
+                      <StatusPill status={project.status} />
+                      {(user === "cto@example.local" || user === "admin@example.local") &&
+                      project.status !== "suspended" ? (
+                        <button
+                          type="button"
+                          className="h-8 rounded-md border border-line bg-white px-2 text-xs font-semibold text-ink shadow-quiet disabled:cursor-not-allowed disabled:opacity-60"
+                          onClick={() => suspendProjectMutation.mutate(project.id)}
+                          disabled={suspendProjectMutation.isPending}
+                        >
+                          Suspend
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -561,9 +700,25 @@ export function ControlCenter() {
                         Add Sam
                       </button>
                     ) : null}
+                    {user === "owner@example.local" &&
+                    selectedProjectId &&
+                    !pendingSelectedReassignment ? (
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center gap-2 rounded-md border border-line bg-white px-2 text-xs font-semibold text-ink shadow-quiet disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => createReassignmentMutation.mutate(selectedProjectId)}
+                        disabled={createReassignmentMutation.isPending}
+                      >
+                        <UserRound className="h-4 w-4" aria-hidden />
+                        Reassign
+                      </button>
+                    ) : null}
                   </div>
                   {addProjectMemberMutation.isSuccess ? (
                     <p className="mt-2 text-xs text-emerald-700">Project member added.</p>
+                  ) : null}
+                  {createReassignmentMutation.isSuccess ? (
+                    <p className="mt-2 text-xs text-emerald-700">Reassignment requested.</p>
                   ) : null}
                   <div className="mt-2 grid gap-2">
                     {projectMembers.data.map((member) => (
@@ -579,6 +734,68 @@ export function ControlCenter() {
               ) : null}
               {projects.data?.length === 0 ? (
                 <p className="text-sm text-slate-500">No projects visible for this identity.</p>
+              ) : null}
+            </div>
+          </Panel>
+
+          <Panel title="Reassignments" icon={UserRound}>
+            <div className="grid gap-2">
+              {(reassignments.data ?? []).slice(0, 5).map((reassignment) => (
+                <div key={reassignment.id} className="rounded-md border border-line p-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{reassignment.project_name}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {reassignment.current_owner_email} → {reassignment.proposed_owner_email}
+                      </p>
+                    </div>
+                    <StatusPill status={reassignment.status} />
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {user === "owner2@example.local" &&
+                    reassignment.status === "pending_acceptance" ? (
+                      <button
+                        className="rounded-md border border-line px-3 py-2 text-xs font-semibold"
+                        onClick={() => acceptReassignmentMutation.mutate(reassignment.id)}
+                      >
+                        Accept
+                      </button>
+                    ) : null}
+                    {(user === "admin@example.local" || user === "cto@example.local") &&
+                    reassignment.status === "pending_approval" ? (
+                      <>
+                        <button
+                          className="rounded-md bg-mint px-3 py-2 text-xs font-semibold text-white"
+                          onClick={() =>
+                            reassignmentDecisionMutation.mutate({
+                              reassignmentId: reassignment.id,
+                              decision: "approve"
+                            })
+                          }
+                        >
+                          Approve
+                        </button>
+                        <button
+                          className="rounded-md border border-coral px-3 py-2 text-xs font-semibold text-coral"
+                          onClick={() =>
+                            reassignmentDecisionMutation.mutate({
+                              reassignmentId: reassignment.id,
+                              decision: "reject"
+                            })
+                          }
+                        >
+                          Reject
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+              {reassignments.data?.length === 0 ? (
+                <p className="text-sm text-slate-500">No reassignment activity for this identity.</p>
+              ) : null}
+              {reassignments.isError ? (
+                <p className="text-sm text-slate-500">Reassignment activity unavailable.</p>
               ) : null}
             </div>
           </Panel>
@@ -656,6 +873,23 @@ export function ControlCenter() {
                             }}
                           >
                             Respond
+                          </button>
+                        ) : null}
+                        {user === "cto@example.local" &&
+                        !["ACTIVE", "CLOSED", "CANCELLED", "EXPIRED", "SUSPENDED"].includes(
+                          request.status
+                        ) ? (
+                          <button
+                            className="rounded-md border border-line px-2 py-1 text-xs font-semibold"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              overrideMutation.mutate({
+                                requestId: request.id,
+                                decision: "approve"
+                              });
+                            }}
+                          >
+                            Override
                           </button>
                         ) : null}
                       </td>
@@ -932,6 +1166,66 @@ export function ControlCenter() {
           ) : null}
 
           {user === "auditor@example.local" ? (
+            <Panel title="Role Changes" icon={UserRound}>
+              <div className="grid gap-2">
+                {(roleChanges.data ?? []).slice(0, 6).map((change) => (
+                  <div key={change.id} className="rounded-md border border-line p-3 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-semibold">{change.target_email}</p>
+                      <span className="text-xs text-slate-500">
+                        {new Date(change.created_at).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-slate-600">
+                      {change.old_role} to {change.new_role} ·{" "}
+                      {change.project_name ?? "organization"}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {change.source_event_type} · {change.actor_email ?? "system"}
+                    </p>
+                  </div>
+                ))}
+                {roleChanges.data?.length === 0 ? (
+                  <p className="text-sm text-slate-500">No role changes yet.</p>
+                ) : null}
+              </div>
+            </Panel>
+          ) : null}
+
+          {user === "admin@example.local" ||
+          user === "auditor@example.local" ||
+          user === "cto@example.local" ? (
+            <Panel title="Provisioning Evidence" icon={FileClock}>
+              <div className="grid gap-2">
+                {(provisioningEvidence.data ?? []).slice(0, 5).map((evidence) => (
+                  <div
+                    key={evidence.assignment_id}
+                    className="rounded-md border border-line p-3 text-sm"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">{evidence.project_name}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {evidence.provider.replaceAll("_", " ")} · provision{" "}
+                          {evidence.provision_job_status ?? "pending"} · archive{" "}
+                          {evidence.archive_job_status ?? "pending"}
+                        </p>
+                      </div>
+                      <StatusPill status={evidence.evidence_result} />
+                    </div>
+                    <p className="mt-2 break-all text-xs text-slate-500">
+                      {evidence.archive_checksum ?? evidence.external_resource_id}
+                    </p>
+                  </div>
+                ))}
+                {provisioningEvidence.data?.length === 0 ? (
+                  <p className="text-sm text-slate-500">No provisioning evidence yet.</p>
+                ) : null}
+              </div>
+            </Panel>
+          ) : null}
+
+          {user === "auditor@example.local" ? (
             <Panel title="Audit Trail" icon={Archive}>
               <div className="grid gap-2">
                 <button
@@ -969,6 +1263,29 @@ export function ControlCenter() {
             <Panel title="Executive Report" icon={LineChart}>
               {executiveReport.data ? (
                 <div className="grid gap-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm text-slate-600">Cost allocation evidence</p>
+                    <div className="flex gap-2">
+                      <button
+                        className="h-10 rounded-md border border-line px-3 text-sm font-semibold"
+                        onClick={() => costAllocationDeliveryMutation.mutate()}
+                      >
+                        Schedule
+                      </button>
+                      <button
+                        className="h-10 rounded-md border border-line px-3 text-sm font-semibold"
+                        onClick={() => costAllocationExportMutation.mutate()}
+                      >
+                        Export CSV
+                      </button>
+                    </div>
+                  </div>
+                  {costAllocationExportMutation.data ? (
+                    <p className="rounded-md bg-panel p-2 text-xs text-slate-600">
+                      Allocation export ready ·{" "}
+                      {costAllocationExportMutation.data.trim().split("\n").length - 1} rows
+                    </p>
+                  ) : null}
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                     <Detail label="Total spend" value={`$${executiveReport.data.total_spend}`} />
                     <Detail
@@ -1018,6 +1335,24 @@ export function ControlCenter() {
                       </div>
                     </div>
                   </div>
+                  {costAllocationDeliveries.data && costAllocationDeliveries.data.length > 0 ? (
+                    <div className="rounded-md border border-line p-3">
+                      <p className="text-sm font-semibold">Scheduled deliveries</p>
+                      <div className="mt-2 grid gap-2">
+                        {costAllocationDeliveries.data.slice(0, 3).map((delivery) => (
+                          <div
+                            key={delivery.id}
+                            className="flex items-center justify-between gap-3 text-sm"
+                          >
+                            <span>{delivery.frequency}</span>
+                            <span className="font-semibold">
+                              {delivery.status} · {delivery.row_count} rows
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <p className="text-sm text-slate-500">Executive report will populate after activity.</p>

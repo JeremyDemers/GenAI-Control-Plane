@@ -9,7 +9,7 @@ from app.auth.dependencies import get_correlation_id, require_permission
 from app.core.database import get_db
 from app.models.entities import AccessRequest, ApprovalDecision, ApprovalStep, User
 from app.models.enums import RequestStatus
-from app.schemas import AccessRequestOut, ApprovalAction, ApprovalHistoryOut
+from app.schemas import AccessRequestOut, ApprovalAction, ApprovalHistoryOut, CtoOverrideIn
 from app.services.audit import record_audit_event
 from app.services.notifications import notify_approval_step, notify_user
 from app.services.state_machine import transition
@@ -78,6 +78,96 @@ def approval_history(
         )
         for step, request, decision, actor in rows
     ]
+
+
+@router.post("/override/{request_id}", response_model=AccessRequestOut)
+async def cto_override(
+    request_id: str,
+    payload: CtoOverrideIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("approvals:cto")),
+    correlation_id: str = Depends(get_correlation_id),
+) -> AccessRequestOut:
+    request = db.get(AccessRequest, request_id)
+    if not request:
+        raise HTTPException(
+            status_code=404, detail={"code": "NOT_FOUND", "message": "Request not found."}
+        )
+    if request.status in {
+        RequestStatus.ACTIVE,
+        RequestStatus.EXPIRING_SOON,
+        RequestStatus.SUSPENDED,
+        RequestStatus.EXPIRED,
+        RequestStatus.ARCHIVING,
+        RequestStatus.CLOSED,
+        RequestStatus.CANCELLED,
+    }:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "REQUEST_NOT_OVERRIDABLE",
+                "message": "Only pending, failed, or rejected approval requests can be overridden.",
+            },
+        )
+
+    steps = db.scalars(
+        select(ApprovalStep)
+        .where(ApprovalStep.request_id == request.id)
+        .order_by(ApprovalStep.sequence.asc())
+    ).all()
+    if not steps:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "REQUEST_NOT_OVERRIDABLE", "message": "No approval steps found."},
+        )
+    override_decision = f"override_{payload.decision}"
+    for step in steps:
+        if step.status not in {"approve", "reject"}:
+            step.status = "overridden"
+        db.add(
+            ApprovalDecision(
+                approval_step_id=step.id,
+                actor_user_id=user.id,
+                decision=override_decision,
+                comments=payload.justification,
+            )
+        )
+
+    if payload.decision == "reject":
+        request.status = RequestStatus.REJECTED
+        notify_user(
+            db,
+            user_id=request.requester_id,
+            event_type="approval_overridden",
+            message=f"{request.project_name} was rejected by CTO override.",
+        )
+    else:
+        request.status = RequestStatus.APPROVED
+        request.approved_at = datetime.now(UTC)
+        await provision_request(db, request, correlation_id)
+        notify_user(
+            db,
+            user_id=request.requester_id,
+            event_type="approval_overridden",
+            message=f"{request.project_name} was approved by CTO override.",
+        )
+
+    record_audit_event(
+        db,
+        event_type="approval.override",
+        actor_user_id=user.id,
+        target_type="access_request",
+        target_id=request.id,
+        request_id=request.id,
+        action=override_decision,
+        result="success",
+        reason=payload.justification,
+        correlation_id=correlation_id,
+        project_id=request.project_id,
+    )
+    db.commit()
+    db.refresh(request)
+    return to_request_out(request)
 
 
 @router.post("/{step_id}", response_model=AccessRequestOut)

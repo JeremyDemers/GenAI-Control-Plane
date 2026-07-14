@@ -10,6 +10,7 @@ from app.api import (
     audit,
     auth,
     developer,
+    evidence,
     extensions,
     health,
     incidents,
@@ -18,7 +19,9 @@ from app.api import (
     policies,
     projects,
     providers,
+    reassignments,
     reports,
+    role_changes,
     usage,
 )
 from app.core.config import get_settings
@@ -63,6 +66,7 @@ app.include_router(approvals.router)
 app.include_router(providers.router)
 app.include_router(audit.router)
 app.include_router(developer.router)
+app.include_router(evidence.router)
 app.include_router(lifecycle_jobs.router)
 app.include_router(notifications.router)
 app.include_router(reports.router)
@@ -70,6 +74,8 @@ app.include_router(extensions.router)
 app.include_router(incidents.router)
 app.include_router(policies.router)
 app.include_router(projects.router)
+app.include_router(reassignments.router)
+app.include_router(role_changes.router)
 app.include_router(usage.assignments_router)
 app.include_router(usage.usage_router)
 app.include_router(usage.costs_router)

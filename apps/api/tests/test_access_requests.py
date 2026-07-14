@@ -159,6 +159,121 @@ def test_project_owner_can_add_existing_user_to_project(client: TestClient) -> N
     assert {"project.member_added", "authorization.failure"} <= event_types
 
 
+def test_project_owner_reassignment_requires_acceptance_and_approval(
+    client: TestClient,
+) -> None:
+    created = client.post(
+        "/access-requests",
+        headers={"x-dev-user": "employee@example.local"},
+        json=request_payload(),
+    ).json()
+
+    denied = client.post(
+        "/reassignments",
+        headers={"x-dev-user": "employee@example.local"},
+        json={
+            "project_id": created["project_id"],
+            "proposed_owner_email": "owner2@example.local",
+            "justification": "Move ownership to the backup project owner for continuity.",
+        },
+    )
+    assert denied.status_code == 403
+
+    requested = client.post(
+        "/reassignments",
+        headers={"x-dev-user": "owner@example.local", "x-correlation-id": "reassign"},
+        json={
+            "project_id": created["project_id"],
+            "proposed_owner_email": "owner2@example.local",
+            "justification": "Move ownership to the backup project owner for continuity.",
+        },
+    )
+    assert requested.status_code == 201
+    assert requested.json()["status"] == "pending_acceptance"
+    reassignment_id = requested.json()["id"]
+
+    owner2_reassignments = client.get(
+        "/reassignments", headers={"x-dev-user": "owner2@example.local"}
+    )
+    assert owner2_reassignments.status_code == 200
+    assert owner2_reassignments.json()[0]["id"] == reassignment_id
+
+    accepted = client.post(
+        f"/reassignments/{reassignment_id}/accept",
+        headers={"x-dev-user": "owner2@example.local"},
+    )
+    assert accepted.status_code == 200
+    assert accepted.json()["status"] == "pending_approval"
+
+    admin_reassignments = client.get(
+        "/reassignments", headers={"x-dev-user": "admin@example.local"}
+    )
+    assert admin_reassignments.status_code == 200
+    assert admin_reassignments.json()[0]["id"] == reassignment_id
+
+    approved = client.post(
+        f"/reassignments/{reassignment_id}/decision",
+        headers={"x-dev-user": "admin@example.local"},
+        json={"decision": "approve", "comments": "Approved after owner acceptance."},
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+
+    members = client.get(
+        f"/projects/{created['project_id']}/members",
+        headers={"x-dev-user": "admin@example.local"},
+    ).json()
+    member_roles = {member["email"]: member["member_role"] for member in members}
+    assert member_roles["owner@example.local"] == "collaborator"
+    assert member_roles["owner2@example.local"] == "owner"
+
+    owner2_projects = client.get("/projects", headers={"x-dev-user": "owner2@example.local"})
+    assert owner2_projects.status_code == 200
+    assert owner2_projects.json()[0]["owner_user_id"] == approved.json()["proposed_owner_id"]
+
+    owner_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "owner@example.local"}
+    ).json()
+    owner2_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "owner2@example.local"}
+    ).json()
+    admin_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "admin@example.local"}
+    ).json()
+    assert {notification["event_type"] for notification in owner_notifications} >= {
+        "project_reassigned"
+    }
+    assert {notification["event_type"] for notification in owner2_notifications} >= {
+        "reassignment_requested",
+        "project_reassigned",
+    }
+    assert {notification["event_type"] for notification in admin_notifications} >= {
+        "reassignment_approval_required"
+    }
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    event_types = {event["event_type"] for event in audit.json()}
+    assert {
+        "project.reassignment_requested",
+        "project.reassignment_accepted",
+        "project.reassigned",
+    } <= event_types
+
+    role_changes = client.get("/role-changes", headers={"x-dev-user": "auditor@example.local"})
+    assert role_changes.status_code == 200
+    role_rows = {
+        (row["target_email"], row["old_role"], row["new_role"])
+        for row in role_changes.json()
+    }
+    assert ("owner@example.local", "owner", "collaborator") in role_rows
+    assert ("owner2@example.local", "none", "owner") in role_rows
+
+    denied_role_changes = client.get(
+        "/role-changes", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert denied_role_changes.status_code == 403
+
+
 def test_admin_can_publish_policy_version_used_by_new_requests(client: TestClient) -> None:
     policies = client.get("/policies", headers={"x-dev-user": "admin@example.local"})
     assert policies.status_code == 200
@@ -282,6 +397,72 @@ def test_approval_workflow_provisions_mock_assignments(client: TestClient) -> No
         "/approvals/history", headers={"x-dev-user": "employee@example.local"}
     )
     assert denied_history.status_code == 403
+
+
+def test_cto_can_override_pending_approval_with_mandatory_justification(
+    client: TestClient,
+) -> None:
+    created = client.post(
+        "/access-requests",
+        headers={"x-dev-user": "employee@example.local"},
+        json=request_payload(),
+    ).json()
+
+    missing_justification = client.post(
+        f"/approvals/override/{created['id']}",
+        headers={"x-dev-user": "cto@example.local"},
+        json={"decision": "approve", "justification": "Too short."},
+    )
+    assert missing_justification.status_code == 422
+
+    denied = client.post(
+        f"/approvals/override/{created['id']}",
+        headers={"x-dev-user": "approver@example.local"},
+        json={
+            "decision": "approve",
+            "justification": "Approvers cannot bypass the approval workflow.",
+        },
+    )
+    assert denied.status_code == 403
+
+    overridden = client.post(
+        f"/approvals/override/{created['id']}",
+        headers={"x-dev-user": "cto@example.local", "x-correlation-id": "cto-override"},
+        json={
+            "decision": "approve",
+            "justification": "Urgent executive demo requires direct temporary approval.",
+        },
+    )
+    assert overridden.status_code == 200
+    assert overridden.json()["status"] == "ACTIVE"
+
+    pending_after_override = client.get(
+        "/approvals/pending", headers={"x-dev-user": "approver@example.local"}
+    )
+    assert pending_after_override.status_code == 200
+    assert pending_after_override.json() == []
+
+    assignments = client.get(
+        "/provider-assignments", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert assignments.status_code == 200
+    assert len(assignments.json()) == 2
+
+    history = client.get("/approvals/history", headers={"x-dev-user": "auditor@example.local"})
+    assert history.status_code == 200
+    override_rows = [row for row in history.json() if row["decision"] == "override_approve"]
+    assert {row["actor_email"] for row in override_rows} == {"cto@example.local"}
+    assert {row["request_id"] for row in override_rows} == {created["id"]}
+
+    notifications = client.get(
+        "/notifications", headers={"x-dev-user": "employee@example.local"}
+    ).json()
+    assert {notification["event_type"] for notification in notifications} >= {
+        "approval_overridden"
+    }
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    assert "approval.override" in {event["event_type"] for event in audit.json()}
 
 
 def test_approver_can_request_information_and_requester_can_respond(
@@ -529,6 +710,23 @@ def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -
     job_types = {job["job_type"] for job in jobs.json()}
     assert {"provision_access", "restore_access", "archive_and_deprovision"} <= job_types
 
+    evidence = client.get(
+        "/evidence/provisioning", headers={"x-dev-user": "auditor@example.local"}
+    )
+    assert evidence.status_code == 200
+    evidence_row = next(
+        row for row in evidence.json() if row["assignment_id"] == assignment_id
+    )
+    assert evidence_row["provision_job_status"] == "completed"
+    assert evidence_row["archive_job_status"] == "completed"
+    assert evidence_row["archive_checksum"] == archives.json()[0]["checksum"]
+    assert evidence_row["evidence_result"] == "closed"
+
+    denied_evidence = client.get(
+        "/evidence/provisioning", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert denied_evidence.status_code == 403
+
     denied_jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "employee@example.local"})
     assert denied_jobs.status_code == 403
 
@@ -618,6 +816,45 @@ def test_usage_cost_budget_and_assignment_domain_endpoints(client: TestClient) -
     assert len(auditor_assignments.json()) == 2
 
 
+def test_cto_can_suspend_project_with_audit_and_notifications(client: TestClient) -> None:
+    created = provision_demo_request(client)
+
+    denied = client.post(
+        f"/projects/{created['project_id']}/suspend",
+        headers={"x-dev-user": "employee@example.local"},
+        json={"reason": "Employees cannot suspend projects."},
+    )
+    assert denied.status_code == 403
+
+    suspended = client.post(
+        f"/projects/{created['project_id']}/suspend",
+        headers={"x-dev-user": "cto@example.local", "x-correlation-id": "project-suspend"},
+        json={"reason": "Executive risk review paused this project."},
+    )
+    assert suspended.status_code == 200
+    assert suspended.json()["status"] == "suspended"
+
+    requests = client.get(
+        "/access-requests", headers={"x-dev-user": "employee@example.local"}
+    ).json()
+    assert requests[0]["status"] == "SUSPENDED"
+
+    assignments = client.get(
+        "/provider-assignments", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert {assignment["status"] for assignment in assignments.json()} == {"suspended"}
+
+    employee_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "employee@example.local"}
+    ).json()
+    assert "project_suspended" in {
+        notification["event_type"] for notification in employee_notifications
+    }
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    assert "project.suspended" in {event["event_type"] for event in audit.json()}
+
+
 def test_provider_health_and_configuration_visibility(client: TestClient) -> None:
     health = client.get("/providers/health", headers={"x-dev-user": "employee@example.local"})
     assert health.status_code == 200
@@ -678,6 +915,85 @@ def test_cto_can_view_executive_report_with_spend_rollups(client: TestClient) ->
         "/reports/executive", headers={"x-dev-user": "employee@example.local"}
     )
     assert denied_report.status_code == 403
+
+
+def test_cost_allocation_export_rolls_up_assignment_spend_and_is_audited(
+    client: TestClient,
+) -> None:
+    provision_demo_request(client)
+    assignments = client.get(
+        "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+    ).json()
+    assignment_id = assignments[0]["id"]
+
+    client.post(
+        "/developer/simulate-usage",
+        headers={"x-dev-user": "admin@example.local"},
+        json={
+            "assignment_id": assignment_id,
+            "tokens": 5000,
+            "request_count": 10,
+            "cost_amount": "25",
+        },
+    )
+
+    export = client.get(
+        "/reports/cost-allocation/export",
+        headers={"x-dev-user": "cto@example.local", "x-correlation-id": "cost-export"},
+    )
+    assert export.status_code == 200
+    assert export.headers["content-type"].startswith("text/csv")
+    assert "cost_center,project_name,request_id,assignment_id,provider" in export.text
+    assert "ENG-AI" in export.text
+    assert "25.00" in export.text
+    assert "5000" in export.text
+
+    auditor_export = client.get(
+        "/reports/cost-allocation/export", headers={"x-dev-user": "auditor@example.local"}
+    )
+    assert auditor_export.status_code == 200
+
+    denied_export = client.get(
+        "/reports/cost-allocation/export", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert denied_export.status_code == 403
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    assert "report.cost_allocation_exported" in {event["event_type"] for event in audit.json()}
+
+
+def test_cto_can_schedule_cost_allocation_delivery(client: TestClient) -> None:
+    provision_demo_request(client)
+
+    delivery = client.post(
+        "/reports/cost-allocation/deliveries",
+        headers={"x-dev-user": "cto@example.local", "x-correlation-id": "schedule-report"},
+        json={"frequency": "weekly", "recipients": ["finance@example.local"]},
+    )
+    assert delivery.status_code == 201
+    assert delivery.json()["status"] == "completed"
+    assert delivery.json()["frequency"] == "weekly"
+    assert delivery.json()["recipients"] == ["finance@example.local"]
+    assert delivery.json()["row_count"] == 2
+
+    deliveries = client.get(
+        "/reports/cost-allocation/deliveries",
+        headers={"x-dev-user": "auditor@example.local"},
+    )
+    assert deliveries.status_code == 200
+    assert deliveries.json()[0]["id"] == delivery.json()["id"]
+
+    denied = client.post(
+        "/reports/cost-allocation/deliveries",
+        headers={"x-dev-user": "auditor@example.local"},
+        json={"frequency": "weekly", "recipients": ["finance@example.local"]},
+    )
+    assert denied.status_code == 403
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    assert "report.cost_allocation_delivery_scheduled" in {
+        event["event_type"] for event in audit.json()
+    }
 
 
 def test_employee_can_request_extension_and_cto_can_approve(client: TestClient) -> None:
