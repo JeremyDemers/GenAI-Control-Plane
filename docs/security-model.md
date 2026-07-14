@@ -9,7 +9,10 @@
 
 ## Identity
 
-Production identity is OIDC-compatible and intended for Microsoft Entra ID. Local identity is deterministic and limited to seeded demo users.
+Production identity is OIDC-compatible and intended for Microsoft Entra ID. With
+`DEV_AUTH_ENABLED=false`, the API rejects local development headers and validates signed bearer
+tokens against configured issuer, audience, allowed algorithms, and a JWKS URL/static JWKS. Local
+identity is deterministic and limited to seeded demo users while `DEV_AUTH_ENABLED=true`.
 
 ## Authorization
 

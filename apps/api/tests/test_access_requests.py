@@ -4,7 +4,9 @@ import time
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 
 from app.api.webhooks import webhook_signature
@@ -12,6 +14,10 @@ from app.core.config import get_settings
 from app.observability.middleware import rate_limiter
 from app.providers.base import ProviderOperationError
 from app.workers.scheduler import drain_once
+
+OIDC_TEST_AUDIENCE = "api://genai-control-plane-test"
+OIDC_TEST_ISSUER = "https://login.example.test/tenant/v2.0"
+OIDC_TEST_SECRET = "local-oidc-test-secret-with-32-bytes-minimum"
 
 
 def request_payload() -> dict[str, object]:
@@ -40,6 +46,147 @@ def request_payload() -> dict[str, object]:
         "estimated_monthly_volume": 200000,
         "additional_notes": "Seeded for the portfolio demo.",
     }
+
+
+def oidc_auth_header(
+    email: str,
+    *,
+    audience: str = OIDC_TEST_AUDIENCE,
+    issuer: str = OIDC_TEST_ISSUER,
+) -> dict[str, str]:
+    now = int(time.time())
+    token = jwt.encode(
+        {
+            "iss": issuer,
+            "aud": audience,
+            "email": email,
+            "iat": now,
+            "exp": now + 300,
+        },
+        OIDC_TEST_SECRET,
+        algorithm="HS256",
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
+def oidc_rs256_auth_header(
+    email: str,
+    private_key: rsa.RSAPrivateKey,
+    *,
+    key_id: str,
+) -> dict[str, str]:
+    now = int(time.time())
+    token = jwt.encode(
+        {
+            "iss": OIDC_TEST_ISSUER,
+            "aud": OIDC_TEST_AUDIENCE,
+            "email": email,
+            "iat": now,
+            "exp": now + 300,
+        },
+        private_key,
+        algorithm="RS256",
+        headers={"kid": key_id},
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
+def configure_oidc_auth_for_test() -> dict[str, object]:
+    settings = get_settings()
+    original = {
+        "dev_auth_enabled": settings.dev_auth_enabled,
+        "oidc_issuer": settings.oidc_issuer,
+        "oidc_audience": settings.oidc_audience,
+        "oidc_hs256_secret": settings.oidc_hs256_secret,
+        "oidc_jwks_url": settings.oidc_jwks_url,
+        "oidc_jwks_json": settings.oidc_jwks_json,
+        "oidc_allowed_algorithms": list(settings.oidc_allowed_algorithms),
+    }
+    settings.dev_auth_enabled = False
+    settings.oidc_issuer = OIDC_TEST_ISSUER
+    settings.oidc_audience = OIDC_TEST_AUDIENCE
+    settings.oidc_hs256_secret = OIDC_TEST_SECRET
+    settings.oidc_jwks_url = ""
+    settings.oidc_jwks_json = ""
+    settings.oidc_allowed_algorithms = ["HS256"]
+    return original
+
+
+def restore_auth_settings(original: dict[str, object]) -> None:
+    settings = get_settings()
+    settings.dev_auth_enabled = bool(original["dev_auth_enabled"])
+    settings.oidc_issuer = str(original["oidc_issuer"])
+    settings.oidc_audience = str(original["oidc_audience"])
+    settings.oidc_hs256_secret = str(original["oidc_hs256_secret"])
+    settings.oidc_jwks_url = str(original["oidc_jwks_url"])
+    settings.oidc_jwks_json = str(original["oidc_jwks_json"])
+    settings.oidc_allowed_algorithms = list(original["oidc_allowed_algorithms"])
+
+
+def test_oidc_bearer_token_authenticates_seeded_user(client: TestClient) -> None:
+    original = configure_oidc_auth_for_test()
+    try:
+        response = client.get("/auth/me", headers=oidc_auth_header("employee@example.local"))
+    finally:
+        restore_auth_settings(original)
+
+    assert response.status_code == 200
+    assert response.json()["email"] == "employee@example.local"
+    assert "employee" in response.json()["roles"]
+
+
+def test_oidc_static_jwks_authenticates_rs256_token(client: TestClient) -> None:
+    key_id = "test-rs256-key"
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_jwk = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(private_key.public_key()))
+    public_jwk["kid"] = key_id
+
+    original = configure_oidc_auth_for_test()
+    settings = get_settings()
+    settings.oidc_hs256_secret = ""
+    settings.oidc_jwks_json = json.dumps({"keys": [public_jwk]})
+    settings.oidc_allowed_algorithms = ["RS256"]
+    try:
+        response = client.get(
+            "/auth/me",
+            headers=oidc_rs256_auth_header(
+                "employee@example.local",
+                private_key,
+                key_id=key_id,
+            ),
+        )
+    finally:
+        restore_auth_settings(original)
+
+    assert response.status_code == 200
+    assert response.json()["email"] == "employee@example.local"
+
+
+def test_dev_identity_header_is_rejected_when_dev_auth_is_disabled(
+    client: TestClient,
+) -> None:
+    original = configure_oidc_auth_for_test()
+    try:
+        response = client.get("/auth/me", headers={"x-dev-user": "employee@example.local"})
+    finally:
+        restore_auth_settings(original)
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["code"] == "UNAUTHENTICATED"
+
+
+def test_oidc_bearer_token_rejects_wrong_audience(client: TestClient) -> None:
+    original = configure_oidc_auth_for_test()
+    try:
+        response = client.get(
+            "/auth/me",
+            headers=oidc_auth_header("employee@example.local", audience="api://wrong"),
+        )
+    finally:
+        restore_auth_settings(original)
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["code"] == "UNAUTHENTICATED"
 
 
 def test_employee_can_submit_request_and_policy_records_cto_path(client: TestClient) -> None:

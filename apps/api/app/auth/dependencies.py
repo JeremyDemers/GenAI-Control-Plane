@@ -5,6 +5,14 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth.oidc import (
+    OIDCAuthenticationError,
+    OIDCConfigurationError,
+    bearer_token_from_authorization,
+    decode_oidc_claims,
+    principal_email_from_claims,
+)
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import has_permission
 from app.models.entities import User
@@ -25,13 +33,38 @@ def current_user(
     request: Request,
     db: Session = Depends(get_db),
     x_dev_user: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
 ) -> User:
-    email = x_dev_user or "employee@example.local"
+    settings = get_settings()
+    if settings.dev_auth_enabled:
+        email = x_dev_user or "employee@example.local"
+    else:
+        try:
+            token = bearer_token_from_authorization(authorization)
+            claims = decode_oidc_claims(token, settings)
+            email = principal_email_from_claims(claims, settings)
+        except OIDCConfigurationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "code": "AUTH_CONFIGURATION_ERROR",
+                    "message": "OIDC token validation is not configured.",
+                },
+            ) from exc
+        except OIDCAuthenticationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "code": "UNAUTHENTICATED",
+                    "message": "Valid bearer authentication is required.",
+                },
+            ) from exc
+
     user = db.scalar(select(User).where(User.email == email))
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "UNAUTHENTICATED", "message": "Unknown development identity."},
+            detail={"code": "UNAUTHENTICATED", "message": "Unknown identity."},
         )
     request.state.user = user
     return user

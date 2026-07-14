@@ -40,12 +40,14 @@ commands, which avoids a local Podman storage database mismatch seen on this wor
 - `auditor@example.local`
 - `cto@example.local`
 
-Local development authentication uses the `x-dev-user` header. The web app includes an identity switcher for the seeded users.
+Local development authentication uses the `x-dev-user` header while `DEV_AUTH_ENABLED=true`. When
+`DEV_AUTH_ENABLED=false`, the API requires a signed OIDC-compatible bearer token with matching
+issuer and audience claims. The web app includes an identity switcher for the seeded users.
 
 ## Implemented Features
 
 - FastAPI application with health, observability, and OpenAPI docs.
-- Development authentication and server-side RBAC.
+- Development authentication, OIDC-compatible API bearer-token validation, and server-side RBAC.
 - Seeded enterprise roles and users.
 - Access request API with backend validation.
 - Explicit request state machine.
@@ -83,7 +85,7 @@ cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade 
 
 ## Known Limitations
 
-- OIDC/PKCE is represented as an architecture boundary; local auth uses deterministic development identities.
+- OIDC-compatible API bearer-token validation is implemented; the frontend PKCE login client and enterprise group mapping remain future work.
 - Concrete live provider SDK operations are intentionally disabled until `PROVIDER_LIVE_OPERATIONS_ENABLED=true` and provider implementations are installed.
 - The API still creates local tables at startup for demo velocity, with Alembic migrations available for clean database setup.
 - Provisioning, usage/budget processing, restore, archive/deprovision, cost allocation delivery, and notification delivery are durably tracked and can be drained by the worker; local inline execution remains enabled by default for demo velocity.
@@ -93,5 +95,5 @@ cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade 
 
 1. Expand live provider adapters for AWS, Azure, Google Cloud, Microsoft Graph, and GitHub behind safe feature flags.
 2. Add repository-layer and service-layer coverage around provider adapters.
-3. Replace local development authentication with OIDC/PKCE and enterprise group mapping.
+3. Add frontend OIDC/PKCE login and enterprise group-to-role mapping.
 4. Move scheduled report delivery from local worker evidence to external email infrastructure.
