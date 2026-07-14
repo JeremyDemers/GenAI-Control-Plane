@@ -99,6 +99,14 @@ export type PolicyVersion = {
   updated_at: string;
 };
 
+export type RetentionPolicy = {
+  policy_version_id: string;
+  version: number;
+  artifact_retention_days: number;
+  active: boolean;
+  updated_at: string;
+};
+
 export type ProviderHealth = {
   provider: string;
   status: string;
@@ -402,6 +410,20 @@ export function getPolicyEvaluation(user: DevUser, requestId: string) {
 
 export function listPolicies(user: DevUser) {
   return request<PolicyVersion[]>("/policies", user);
+}
+
+export function getRetentionPolicy(user: DevUser) {
+  return request<RetentionPolicy>("/policies/retention", user);
+}
+
+export function updateRetentionPolicy(user: DevUser) {
+  return request<RetentionPolicy>("/policies/retention", user, {
+    method: "POST",
+    body: JSON.stringify({
+      artifact_retention_days: 30,
+      reason: "Reduce demo artifact retention for regulated cleanup evidence."
+    })
+  });
 }
 
 export function publishInternalSecurityReviewPolicy(user: DevUser, activePolicy: PolicyVersion) {

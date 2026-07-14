@@ -323,6 +323,57 @@ def test_admin_can_publish_policy_version_used_by_new_requests(client: TestClien
     assert any(event["event_type"] == "policy.version_published" for event in audit.json())
 
 
+def test_admin_can_update_artifact_retention_policy_used_by_archives(
+    client: TestClient,
+) -> None:
+    retention = client.get("/policies/retention", headers={"x-dev-user": "auditor@example.local"})
+    assert retention.status_code == 200
+    assert retention.json()["artifact_retention_days"] == 365
+
+    denied_update = client.post(
+        "/policies/retention",
+        headers={"x-dev-user": "auditor@example.local"},
+        json={
+            "artifact_retention_days": 30,
+            "reason": "Auditors cannot update retention policy.",
+        },
+    )
+    assert denied_update.status_code == 403
+
+    updated = client.post(
+        "/policies/retention",
+        headers={"x-dev-user": "admin@example.local", "x-correlation-id": "retention"},
+        json={
+            "artifact_retention_days": 30,
+            "reason": "Reduce demo artifact retention for regulated cleanup evidence.",
+        },
+    )
+    assert updated.status_code == 201
+    assert updated.json()["artifact_retention_days"] == 30
+    assert updated.json()["version"] == retention.json()["version"] + 1
+
+    provision_demo_request(client)
+    assignments = client.get(
+        "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+    ).json()
+    expired = client.post(
+        "/developer/expire",
+        headers={"x-dev-user": "admin@example.local"},
+        json={"assignment_id": assignments[0]["id"], "reason": "Verify retention policy."},
+    )
+    assert expired.status_code == 200
+
+    archives = client.get("/developer/archives", headers={"x-dev-user": "admin@example.local"})
+    retention_expires_at = datetime.fromisoformat(archives.json()[0]["retention_expires_at"])
+    if retention_expires_at.tzinfo is None:
+        retention_expires_at = retention_expires_at.replace(tzinfo=UTC)
+    days_until_retention_expires = (retention_expires_at - datetime.now(UTC)).days
+    assert 28 <= days_until_retention_expires <= 30
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    assert "policy.retention_updated" in {event["event_type"] for event in audit.json()}
+
+
 def test_auditor_cannot_submit_request_and_failure_is_audited(client: TestClient) -> None:
     response = client.post(
         "/access-requests",

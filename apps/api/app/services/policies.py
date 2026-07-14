@@ -12,6 +12,7 @@ STANDARD_POLICY = {
     "version": 1,
     "maximum_duration_days": 30,
     "maximum_budget_usd": 1000,
+    "artifact_retention_days": 365,
     "approval_rules": {
         "require_manager_approval": True,
         "require_security_review_for": ["confidential", "regulated"],

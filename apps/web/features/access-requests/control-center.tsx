@@ -48,6 +48,7 @@ import {
   getExecutiveReport,
   getMe,
   getPolicyEvaluation,
+  getRetentionPolicy,
   listArchives,
   listApprovalHistory,
   listAssignments,
@@ -79,6 +80,7 @@ import {
   scheduleCostAllocationDelivery,
   simulateUsage,
   suspendProject,
+  updateRetentionPolicy,
   type AccessRequest,
   type DevUser
 } from "@/lib/api";
@@ -254,6 +256,12 @@ export function ControlCenter() {
   const policies = useQuery({
     queryKey: ["policies", user],
     queryFn: () => listPolicies(user),
+    enabled: user === "admin@example.local" || user === "auditor@example.local",
+    retry: false
+  });
+  const retentionPolicy = useQuery({
+    queryKey: ["retention-policy", user],
+    queryFn: () => getRetentionPolicy(user),
     enabled: user === "admin@example.local" || user === "auditor@example.local",
     retry: false
   });
@@ -521,6 +529,14 @@ export function ControlCenter() {
       return publishInternalSecurityReviewPolicy(user, activePolicy);
     },
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["policies"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+    }
+  });
+  const retentionPolicyMutation = useMutation({
+    mutationFn: () => updateRetentionPolicy(user),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["retention-policy"] });
       void queryClient.invalidateQueries({ queryKey: ["policies"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
     }
@@ -1093,6 +1109,32 @@ export function ControlCenter() {
                 {policyPublishMutation.data ? (
                   <p className="rounded-md bg-panel p-2 text-xs text-slate-600">
                     Published policy version {policyPublishMutation.data.version}.
+                  </p>
+                ) : null}
+                {retentionPolicy.data ? (
+                  <div className="rounded-md border border-line p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">Artifact retention</p>
+                        <p className="mt-1 text-slate-600">
+                          {retentionPolicy.data.artifact_retention_days} days · policy version{" "}
+                          {retentionPolicy.data.version}
+                        </p>
+                      </div>
+                      {user === "admin@example.local" ? (
+                        <button
+                          className="rounded-md border border-line px-3 py-2 text-xs font-semibold"
+                          onClick={() => retentionPolicyMutation.mutate()}
+                        >
+                          Set 30 Days
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+                {retentionPolicyMutation.data ? (
+                  <p className="rounded-md bg-panel p-2 text-xs text-slate-600">
+                    Retention updated to {retentionPolicyMutation.data.artifact_retention_days} days.
                   </p>
                 ) : null}
               </div>

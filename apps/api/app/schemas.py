@@ -79,6 +79,19 @@ class PolicyVersionCreate(BaseModel):
     description: str = Field(default="", max_length=500)
 
 
+class RetentionPolicyUpdate(BaseModel):
+    artifact_retention_days: int = Field(ge=1, le=3650)
+    reason: str = Field(min_length=10, max_length=500)
+
+
+class RetentionPolicyOut(BaseModel):
+    policy_version_id: str
+    version: int
+    artifact_retention_days: int
+    active: bool
+    updated_at: datetime
+
+
 class AccessRequestOut(BaseModel):
     id: str
     project_id: str | None
