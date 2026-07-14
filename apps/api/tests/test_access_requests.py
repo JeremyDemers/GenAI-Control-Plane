@@ -259,6 +259,20 @@ def test_project_owner_reassignment_requires_acceptance_and_approval(
         "project.reassigned",
     } <= event_types
 
+    role_changes = client.get("/role-changes", headers={"x-dev-user": "auditor@example.local"})
+    assert role_changes.status_code == 200
+    role_rows = {
+        (row["target_email"], row["old_role"], row["new_role"])
+        for row in role_changes.json()
+    }
+    assert ("owner@example.local", "owner", "collaborator") in role_rows
+    assert ("owner2@example.local", "none", "owner") in role_rows
+
+    denied_role_changes = client.get(
+        "/role-changes", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert denied_role_changes.status_code == 403
+
 
 def test_admin_can_publish_policy_version_used_by_new_requests(client: TestClient) -> None:
     policies = client.get("/policies", headers={"x-dev-user": "admin@example.local"})

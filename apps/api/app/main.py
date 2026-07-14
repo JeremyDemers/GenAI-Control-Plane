@@ -20,6 +20,7 @@ from app.api import (
     providers,
     reassignments,
     reports,
+    role_changes,
     usage,
 )
 from app.core.config import get_settings
@@ -72,6 +73,7 @@ app.include_router(incidents.router)
 app.include_router(policies.router)
 app.include_router(projects.router)
 app.include_router(reassignments.router)
+app.include_router(role_changes.router)
 app.include_router(usage.assignments_router)
 app.include_router(usage.usage_router)
 app.include_router(usage.costs_router)

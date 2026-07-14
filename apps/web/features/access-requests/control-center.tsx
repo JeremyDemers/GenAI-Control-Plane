@@ -66,6 +66,7 @@ import {
   listProjects,
   listReassignments,
   listRequests,
+  listRoleChanges,
   listUsageRecords,
   markNotificationRead,
   overrideApproval,
@@ -242,6 +243,15 @@ export function ControlCenter() {
   const reassignments = useQuery({
     queryKey: ["reassignments", user],
     queryFn: () => listReassignments(user),
+    retry: false
+  });
+  const roleChanges = useQuery({
+    queryKey: ["role-changes", user],
+    queryFn: () => listRoleChanges(user),
+    enabled:
+      user === "admin@example.local" ||
+      user === "auditor@example.local" ||
+      user === "cto@example.local",
     retry: false
   });
   const selectedRequest = useMemo(
@@ -1095,6 +1105,33 @@ export function ControlCenter() {
                 ))}
                 {approvalHistory.data?.length === 0 ? (
                   <p className="text-sm text-slate-500">No approval history yet.</p>
+                ) : null}
+              </div>
+            </Panel>
+          ) : null}
+
+          {user === "auditor@example.local" ? (
+            <Panel title="Role Changes" icon={UserRound}>
+              <div className="grid gap-2">
+                {(roleChanges.data ?? []).slice(0, 6).map((change) => (
+                  <div key={change.id} className="rounded-md border border-line p-3 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-semibold">{change.target_email}</p>
+                      <span className="text-xs text-slate-500">
+                        {new Date(change.created_at).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-slate-600">
+                      {change.old_role} to {change.new_role} ·{" "}
+                      {change.project_name ?? "organization"}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {change.source_event_type} · {change.actor_email ?? "system"}
+                    </p>
+                  </div>
+                ))}
+                {roleChanges.data?.length === 0 ? (
+                  <p className="text-sm text-slate-500">No role changes yet.</p>
                 ) : null}
               </div>
             </Panel>

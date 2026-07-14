@@ -253,6 +253,19 @@ export type ReassignmentRequest = {
   updated_at: string;
 };
 
+export type RoleChange = {
+  id: string;
+  project_id: string | null;
+  project_name: string | null;
+  target_email: string;
+  old_role: string;
+  new_role: string;
+  actor_email: string | null;
+  source_event_type: string;
+  reason: string;
+  created_at: string;
+};
+
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function request<T>(path: string, user: DevUser, init?: RequestInit): Promise<T> {
@@ -300,6 +313,10 @@ export function addProjectMember(
 
 export function listReassignments(user: DevUser) {
   return request<ReassignmentRequest[]>("/reassignments", user);
+}
+
+export function listRoleChanges(user: DevUser) {
+  return request<RoleChange[]>("/role-changes", user);
 }
 
 export function createReassignment(user: DevUser, projectId: string) {

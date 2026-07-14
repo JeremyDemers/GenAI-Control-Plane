@@ -26,6 +26,7 @@
 - Provider health checks and privileged provider configuration validation are exposed in the dashboard.
 - Access request submission creates project membership records, and project owners can review project requests, members, evidence, and add existing users to a project with audit and notification evidence.
 - Project ownership reassignment now supports owner request, proposed-owner acceptance, admin/CTO approval, member-role transfer, notifications, and audit evidence.
+- Security auditors can view role-change evidence derived from audited project membership and reassignment events.
 - Approvers can request additional information, and requesters can respond to requeue the same approval step.
 - CTO override approval requires a justification, records approval history, emits audit evidence, and provisions approved requests.
 - Approval history is exposed for admin, auditor, and CTO review with request, step, decision, actor, and pending-step context.

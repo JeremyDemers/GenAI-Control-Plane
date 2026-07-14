@@ -64,6 +64,7 @@ ROLE_PERMISSIONS: dict[RoleName, set[str]] = {
         "policies:manage",
         "reassignments:approve",
         "reassignments:read_all",
+        "roles:read_changes",
     },
     RoleName.SECURITY_AUDITOR: {
         "audit:read_all",
@@ -77,6 +78,7 @@ ROLE_PERMISSIONS: dict[RoleName, set[str]] = {
         "costs:read_all",
         "budgets:read_all",
         "reports:cost_export",
+        "roles:read_changes",
     },
     RoleName.CTO: {
         "approvals:review",
@@ -94,6 +96,7 @@ ROLE_PERMISSIONS: dict[RoleName, set[str]] = {
         "costs:read_all",
         "budgets:read_all",
         "reports:cost_export",
+        "roles:read_changes",
     },
 }
 

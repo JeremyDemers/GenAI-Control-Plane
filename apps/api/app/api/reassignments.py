@@ -272,6 +272,15 @@ def decide_reassignment(
     else:
         reassignment.status = "approved"
         project.owner_user_id = proposed_owner.id
+        proposed_owner_member = db.scalar(
+            select(ProjectMember).where(
+                ProjectMember.project_id == project.id,
+                ProjectMember.user_id == proposed_owner.id,
+            )
+        )
+        proposed_owner_old_role = (
+            proposed_owner_member.member_role if proposed_owner_member else "none"
+        )
         ensure_project_member(
             db, project_id=project.id, user_id=proposed_owner.id, member_role="owner"
         )
@@ -281,6 +290,7 @@ def decide_reassignment(
                 ProjectMember.user_id == current_owner.id,
             )
         )
+        current_owner_old_role = old_owner_member.member_role if old_owner_member else "owner"
         if old_owner_member:
             old_owner_member.member_role = "collaborator"
         event_type = "project.reassigned"
@@ -314,7 +324,11 @@ def decide_reassignment(
         project_id=project.id,
         metadata_json={
             "current_owner_email": current_owner.email,
+            "current_owner_old_role": current_owner_old_role,
+            "current_owner_new_role": "collaborator",
             "proposed_owner_email": proposed_owner.email,
+            "proposed_owner_old_role": proposed_owner_old_role,
+            "proposed_owner_new_role": "owner",
         },
     )
     db.commit()

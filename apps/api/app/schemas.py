@@ -210,6 +210,19 @@ class AuditEventOut(BaseModel):
     created_at: datetime
 
 
+class RoleChangeOut(BaseModel):
+    id: str
+    project_id: str | None
+    project_name: str | None
+    target_email: str
+    old_role: str
+    new_role: str
+    actor_email: str | None
+    source_event_type: str
+    reason: str
+    created_at: datetime
+
+
 class ProviderHealthOut(BaseModel):
     provider: str
     status: str
