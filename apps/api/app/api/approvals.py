@@ -13,7 +13,7 @@ from app.schemas import AccessRequestOut, ApprovalAction, ApprovalHistoryOut, Ct
 from app.services.audit import record_audit_event
 from app.services.notifications import notify_approval_step, notify_user
 from app.services.state_machine import transition
-from app.workers.jobs import provision_request
+from app.workers.jobs import enqueue_and_maybe_run_provisioning
 
 router = APIRouter(prefix="/approvals", tags=["approvals"])
 
@@ -144,15 +144,15 @@ async def cto_override(
     else:
         request.status = RequestStatus.APPROVED
         request.approved_at = datetime.now(UTC)
-        await provision_request(db, request, correlation_id)
-        if request.status == RequestStatus.PROVISIONING_FAILED:
+        await enqueue_and_maybe_run_provisioning(db, request, correlation_id)
+        if request.status == RequestStatus.PROVISIONING:
             notify_user(
                 db,
                 user_id=request.requester_id,
-                event_type="provisioning_failed",
-                message=f"{request.project_name} was approved, but provisioning failed.",
+                event_type="provisioning_queued",
+                message=f"{request.project_name} was approved and queued for provisioning.",
             )
-        else:
+        elif request.status != RequestStatus.PROVISIONING_FAILED:
             notify_user(
                 db,
                 user_id=request.requester_id,
@@ -255,15 +255,15 @@ async def decide(
         else:
             request.status = transition(request.status, RequestStatus.APPROVED)
             request.approved_at = datetime.now(UTC)
-            await provision_request(db, request, correlation_id)
-            if request.status == RequestStatus.PROVISIONING_FAILED:
+            await enqueue_and_maybe_run_provisioning(db, request, correlation_id)
+            if request.status == RequestStatus.PROVISIONING:
                 notify_user(
                     db,
                     user_id=request.requester_id,
-                    event_type="provisioning_failed",
-                    message=f"{request.project_name} was approved, but provisioning failed.",
+                    event_type="provisioning_queued",
+                    message=f"{request.project_name} was approved and queued for provisioning.",
                 )
-            else:
+            elif request.status != RequestStatus.PROVISIONING_FAILED:
                 notify_user(
                     db,
                     user_id=request.requester_id,

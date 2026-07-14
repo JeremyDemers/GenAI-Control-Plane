@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 from datetime import UTC, datetime, timedelta
@@ -9,6 +10,7 @@ from app.api.webhooks import webhook_signature
 from app.core.config import get_settings
 from app.observability.middleware import rate_limiter
 from app.providers.base import ProviderOperationError
+from app.workers.scheduler import drain_once
 
 
 def request_payload() -> dict[str, object]:
@@ -472,6 +474,67 @@ def test_approval_workflow_provisions_mock_assignments(client: TestClient) -> No
     assert denied_history.status_code == 403
 
 
+def test_worker_drains_queued_provisioning_jobs(client: TestClient) -> None:
+    settings = get_settings()
+    original_inline_execution = settings.lifecycle_inline_execution
+    settings.lifecycle_inline_execution = False
+    try:
+        created = client.post(
+            "/access-requests",
+            headers={"x-dev-user": "employee@example.local"},
+            json=request_payload(),
+        ).json()
+        manager_step = client.get(
+            "/approvals/pending", headers={"x-dev-user": "approver@example.local"}
+        ).json()[0]
+        client.post(
+            f"/approvals/{manager_step['step_id']}",
+            headers={"x-dev-user": "approver@example.local"},
+            json={"decision": "approve", "comments": "Approved."},
+        )
+        cto_step = client.get(
+            "/approvals/pending", headers={"x-dev-user": "cto@example.local"}
+        ).json()[0]
+
+        queued = client.post(
+            f"/approvals/{cto_step['step_id']}",
+            headers={"x-dev-user": "cto@example.local", "x-correlation-id": "queued-worker"},
+            json={"decision": "approve", "comments": "Approved."},
+        )
+        assert queued.status_code == 200
+        assert queued.json()["status"] == "PROVISIONING"
+
+        jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"})
+        assert jobs.status_code == 200
+        queued_jobs = jobs.json()
+        assert {job["status"] for job in queued_jobs} == {"queued"}
+        assert {job["attempt_count"] for job in queued_jobs} == {0}
+        assert {job["payload"]["request_id"] for job in queued_jobs} == {created["id"]}
+        assert {job["payload"]["correlation_id"] for job in queued_jobs} == {"queued-worker"}
+
+        processed = asyncio.run(drain_once(limit=10))
+        assert processed == 2
+
+        requests = client.get(
+            "/access-requests", headers={"x-dev-user": "employee@example.local"}
+        ).json()
+        assert requests[0]["status"] == "ACTIVE"
+        completed_jobs = client.get(
+            "/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"}
+        ).json()
+        assert {job["status"] for job in completed_jobs} == {"completed"}
+        assert {job["attempt_count"] for job in completed_jobs} == {1}
+
+        notifications = client.get(
+            "/notifications", headers={"x-dev-user": "employee@example.local"}
+        ).json()
+        assert "provisioning_queued" in {
+            notification["event_type"] for notification in notifications
+        }
+    finally:
+        settings.lifecycle_inline_execution = original_inline_execution
+
+
 def test_cto_can_override_pending_approval_with_mandatory_justification(
     client: TestClient,
 ) -> None:
@@ -704,7 +767,7 @@ def test_retryable_provider_failure_creates_safe_lifecycle_job(
 
     jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"})
     assert jobs.status_code == 200
-    failed_job = jobs.json()[0]
+    failed_job = next(job for job in jobs.json() if job["status"] == "failed")
     assert failed_job["status"] == "failed"
     assert failed_job["attempt_count"] == 1
     assert failed_job["failure_information"]["retryable"] is True

@@ -26,6 +26,10 @@ class Settings(BaseSettings):
         default="local-provider-webhook-secret",
         validation_alias="PROVIDER_WEBHOOK_SECRET",
     )
+    lifecycle_inline_execution: bool = Field(
+        default=True,
+        validation_alias="LIFECYCLE_INLINE_EXECUTION",
+    )
     rate_limit_requests_per_minute: int = Field(
         default=600,
         validation_alias="RATE_LIMIT_REQUESTS_PER_MINUTE",

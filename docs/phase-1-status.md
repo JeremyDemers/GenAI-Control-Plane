@@ -14,6 +14,7 @@
 - Initial Alembic migration generated and verified with `alembic upgrade head`.
 - Observability now propagates trace IDs, aligns correlation IDs across response headers and audit events, and exposes request/queue telemetry through `/health/observability`.
 - API middleware applies local rate limiting with rate-limit headers and correlated `429` responses.
+- Provisioning now writes durable queued lifecycle jobs with payloads; local API execution drains them inline by default, and the worker process can drain queued jobs independently.
 - Provider webhook callbacks require timestamped HMAC signatures and produce audit evidence on accepted deliveries.
 - Local developer lifecycle controls now simulate 70%, 90%, and 100% budget thresholds.
 - Budget enforcement suspends assignments, creates incidents, and emits audit events.
@@ -65,6 +66,6 @@
 
 ## Remaining Work
 
-- Move provisioning, usage, budget, lifecycle processing, and notifications from inline execution to durable asynchronous workers.
+- Move usage, budget, lifecycle restore/archive processing, and notifications from inline execution to durable asynchronous workers.
 - Expand live provider adapters for AWS, Azure, Google Cloud, Microsoft Graph, and GitHub behind safe feature flags.
 - Track the remaining moderate npm audit advisory for Next's transitive PostCSS dependency; the current `next@latest` still bundles the affected range, and `npm audit fix --force` recommends downgrading to an unusable legacy Next release.

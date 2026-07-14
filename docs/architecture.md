@@ -9,7 +9,7 @@ AI Access Control Center separates the application control plane from provider-s
 - `apps/web`: Next.js React portal.
 - `apps/api`: FastAPI API, policy engine, RBAC enforcement, audit logging, and provider orchestration.
 - `postgres`: relational control-plane store.
-- `redis`: future broker/cache for durable jobs.
+- `redis`: broker/cache boundary for durable jobs; current local provisioning jobs are durably queued in the database and drained by the worker or by local inline execution.
 - `worker`: provisioning and lifecycle worker boundary.
 - `scheduler`: lifecycle scheduler boundary.
 
@@ -19,7 +19,7 @@ AI Access Control Center separates the application control plane from provider-s
 2. API validates the payload and evaluates the active policy version.
 3. API writes the request, policy evaluation, approval steps, and audit event in one transaction.
 4. Approvers act on assigned steps according to server-side RBAC.
-5. Once final approval is complete, provisioning runs through provider adapters.
+5. Once final approval is complete, provisioning jobs are queued and drained by the worker or by local inline execution.
 6. Provider assignments, resources, costs, usage, incidents, archives, and audit events remain in the control-plane database.
 
 ## Provider Adapter Pattern
@@ -32,5 +32,4 @@ Production is designed for OIDC authorization-code flow with PKCE, short-lived a
 
 ## Failure Handling
 
-State transitions are explicit. Provider operations use idempotency keys. Lifecycle jobs store attempt count and failure details. Privileged authorization failures produce audit events.
-
+State transitions are explicit. Provider operations use idempotency keys. Lifecycle jobs store payload, attempt count, and failure details. Privileged authorization failures produce audit events.
