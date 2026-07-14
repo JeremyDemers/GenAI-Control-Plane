@@ -361,6 +361,7 @@ class LifecycleJobOut(BaseModel):
     status: str
     attempt_count: int
     idempotency_key: str
+    payload: dict[str, Any]
     failure_information: dict[str, Any]
     created_at: datetime
     updated_at: datetime

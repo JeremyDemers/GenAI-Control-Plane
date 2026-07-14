@@ -1,9 +1,16 @@
+import asyncio
+import json
+import time
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.api.webhooks import webhook_signature
+from app.core.config import get_settings
+from app.observability.middleware import rate_limiter
 from app.providers.base import ProviderOperationError
+from app.workers.scheduler import drain_once
 
 
 def request_payload() -> dict[str, object]:
@@ -467,6 +474,67 @@ def test_approval_workflow_provisions_mock_assignments(client: TestClient) -> No
     assert denied_history.status_code == 403
 
 
+def test_worker_drains_queued_provisioning_jobs(client: TestClient) -> None:
+    settings = get_settings()
+    original_inline_execution = settings.lifecycle_inline_execution
+    settings.lifecycle_inline_execution = False
+    try:
+        created = client.post(
+            "/access-requests",
+            headers={"x-dev-user": "employee@example.local"},
+            json=request_payload(),
+        ).json()
+        manager_step = client.get(
+            "/approvals/pending", headers={"x-dev-user": "approver@example.local"}
+        ).json()[0]
+        client.post(
+            f"/approvals/{manager_step['step_id']}",
+            headers={"x-dev-user": "approver@example.local"},
+            json={"decision": "approve", "comments": "Approved."},
+        )
+        cto_step = client.get(
+            "/approvals/pending", headers={"x-dev-user": "cto@example.local"}
+        ).json()[0]
+
+        queued = client.post(
+            f"/approvals/{cto_step['step_id']}",
+            headers={"x-dev-user": "cto@example.local", "x-correlation-id": "queued-worker"},
+            json={"decision": "approve", "comments": "Approved."},
+        )
+        assert queued.status_code == 200
+        assert queued.json()["status"] == "PROVISIONING"
+
+        jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"})
+        assert jobs.status_code == 200
+        queued_jobs = jobs.json()
+        assert {job["status"] for job in queued_jobs} == {"queued"}
+        assert {job["attempt_count"] for job in queued_jobs} == {0}
+        assert {job["payload"]["request_id"] for job in queued_jobs} == {created["id"]}
+        assert {job["payload"]["correlation_id"] for job in queued_jobs} == {"queued-worker"}
+
+        processed = asyncio.run(drain_once(limit=10))
+        assert processed == 2
+
+        requests = client.get(
+            "/access-requests", headers={"x-dev-user": "employee@example.local"}
+        ).json()
+        assert requests[0]["status"] == "ACTIVE"
+        completed_jobs = client.get(
+            "/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"}
+        ).json()
+        assert {job["status"] for job in completed_jobs} == {"completed"}
+        assert {job["attempt_count"] for job in completed_jobs} == {1}
+
+        notifications = client.get(
+            "/notifications", headers={"x-dev-user": "employee@example.local"}
+        ).json()
+        assert "provisioning_queued" in {
+            notification["event_type"] for notification in notifications
+        }
+    finally:
+        settings.lifecycle_inline_execution = original_inline_execution
+
+
 def test_cto_can_override_pending_approval_with_mandatory_justification(
     client: TestClient,
 ) -> None:
@@ -699,7 +767,7 @@ def test_retryable_provider_failure_creates_safe_lifecycle_job(
 
     jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"})
     assert jobs.status_code == 200
-    failed_job = jobs.json()[0]
+    failed_job = next(job for job in jobs.json() if job["status"] == "failed")
     assert failed_job["status"] == "failed"
     assert failed_job["attempt_count"] == 1
     assert failed_job["failure_information"]["retryable"] is True
@@ -906,6 +974,83 @@ def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -
     assert denied_export.status_code == 403
 
 
+def test_worker_drains_queued_restore_and_archive_jobs(client: TestClient) -> None:
+    settings = get_settings()
+    original_inline_execution = settings.lifecycle_inline_execution
+    provision_demo_request(client)
+    try:
+        settings.lifecycle_inline_execution = False
+        assignments = client.get(
+            "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+        ).json()
+        assignment_id = assignments[0]["id"]
+
+        client.post(
+            "/developer/simulate-usage",
+            headers={"x-dev-user": "admin@example.local"},
+            json={
+                "assignment_id": assignment_id,
+                "tokens": 100000,
+                "request_count": 200,
+                "cost_amount": "100",
+            },
+        )
+
+        restore = client.post(
+            "/developer/restore",
+            headers={"x-dev-user": "admin@example.local", "x-correlation-id": "queued-restore"},
+            json={"assignment_id": assignment_id, "reason": "Queue restore for worker."},
+        )
+        assert restore.status_code == 200
+        assert restore.json()["audit_event"] == "lifecycle_job.queued"
+        assert restore.json()["status"] == "suspended"
+
+        jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"}).json()
+        restore_job = next(job for job in jobs if job["job_type"] == "restore_access")
+        assert restore_job["status"] == "queued"
+        assert restore_job["payload"]["correlation_id"] == "queued-restore"
+
+        assert asyncio.run(drain_once(limit=10)) == 1
+        restored_assignments = client.get(
+            "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+        ).json()
+        assert restored_assignments[0]["status"] == "active"
+
+        expire = client.post(
+            "/developer/expire",
+            headers={"x-dev-user": "admin@example.local", "x-correlation-id": "queued-archive"},
+            json={"assignment_id": assignment_id, "reason": "Queue archive for worker."},
+        )
+        assert expire.status_code == 200
+        assert expire.json()["audit_event"] == "lifecycle_job.queued"
+        assert expire.json()["status"] == "active"
+
+        jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"}).json()
+        archive_job = next(job for job in jobs if job["job_type"] == "archive_and_deprovision")
+        assert archive_job["status"] == "queued"
+        assert archive_job["payload"]["correlation_id"] == "queued-archive"
+
+        assert asyncio.run(drain_once(limit=10)) == 1
+        closed_assignments = client.get(
+            "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+        ).json()
+        assert closed_assignments[0]["status"] == "deprovisioned"
+        archives = client.get("/developer/archives", headers={"x-dev-user": "admin@example.local"})
+        assert archives.status_code == 200
+        assert archives.json()[0]["storage_provider"] == "local"
+
+        completed_jobs = client.get(
+            "/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"}
+        ).json()
+        assert {
+            job["job_type"]: job["status"]
+            for job in completed_jobs
+            if job["job_type"] in {"restore_access", "archive_and_deprovision"}
+        } == {"restore_access": "completed", "archive_and_deprovision": "completed"}
+    finally:
+        settings.lifecycle_inline_execution = original_inline_execution
+
+
 def test_usage_cost_budget_and_assignment_domain_endpoints(client: TestClient) -> None:
     provision_demo_request(client)
     assignments = client.get(
@@ -1066,6 +1211,153 @@ def test_provider_health_and_configuration_visibility(client: TestClient) -> Non
     assert rotated_events[0]["correlation_id"] == "credential-rotate"
 
 
+def test_live_provider_mode_reports_safe_configuration_boundaries(client: TestClient) -> None:
+    settings = get_settings()
+    original_values = {
+        "provider_mode": settings.provider_mode,
+        "provider_live_operations_enabled": settings.provider_live_operations_enabled,
+        "aws_region": settings.aws_region,
+        "azure_tenant_id": settings.azure_tenant_id,
+        "google_cloud_project": settings.google_cloud_project,
+        "github_org": settings.github_org,
+    }
+    settings.provider_mode = "live"
+    settings.provider_live_operations_enabled = False
+    settings.aws_region = "us-east-1"
+    settings.azure_tenant_id = ""
+    settings.google_cloud_project = "demo-project"
+    settings.github_org = "demo-org"
+    try:
+        configuration = client.get(
+            "/providers/configuration", headers={"x-dev-user": "admin@example.local"}
+        )
+        assert configuration.status_code == 200
+        rows = {row["provider"]: row for row in configuration.json()}
+        assert rows["amazon_bedrock"]["mode"] == "live"
+        assert rows["amazon_bedrock"]["configured"] is True
+        assert rows["azure_openai"]["configured"] is False
+        assert rows["azure_openai"]["details"]["missing_fields"] == ["azure_tenant_id"]
+        assert rows["github_copilot"]["details"]["operations_enabled"] is False
+
+        health = client.get("/providers/health", headers={"x-dev-user": "employee@example.local"})
+        assert health.status_code == 200
+        health_rows = {row["provider"]: row for row in health.json()}
+        assert health_rows["amazon_bedrock"]["status"] == "healthy"
+        assert health_rows["azure_openai"]["status"] == "degraded"
+    finally:
+        for field, value in original_values.items():
+            setattr(settings, field, value)
+
+
+def test_observability_propagates_trace_and_correlation_ids(client: TestClient) -> None:
+    trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
+    live = client.get(
+        "/health/live",
+        headers={"traceparent": f"00-{trace_id}-00f067aa0ba902b7-01"},
+    )
+    assert live.status_code == 200
+    assert live.headers["x-trace-id"] == trace_id
+    assert live.headers["x-correlation-id"]
+
+    denied = client.get(
+        "/providers/configuration",
+        headers={
+            "x-dev-user": "employee@example.local",
+            "x-correlation-id": "observability-correlation",
+        },
+    )
+    assert denied.status_code == 403
+
+    observability = client.get("/health/observability")
+    assert observability.status_code == 200
+    body = observability.json()
+    assert body["status"] == "observable"
+    assert body["requests"]["requests_total"] >= 2
+    assert body["requests"]["status_counts"]["2xx"] >= 1
+    assert body["requests"]["status_counts"]["4xx"] >= 1
+    assert body["lifecycle_jobs"]["queued_or_failed"] >= 0
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    failures = [
+        event for event in audit.json() if event["event_type"] == "authorization.failure"
+    ]
+    assert failures[0]["correlation_id"] == "observability-correlation"
+
+
+def test_rate_limit_returns_correlation_and_retry_headers(client: TestClient) -> None:
+    original_limit = rate_limiter.limit
+    try:
+        rate_limiter.limit = 1
+        rate_limiter.reset()
+        first = client.get("/health/live", headers={"x-correlation-id": "rate-limit-one"})
+        assert first.status_code == 200
+        assert first.headers["x-ratelimit-limit"] == "1"
+        assert first.headers["x-ratelimit-remaining"] == "0"
+
+        limited = client.get("/health/live", headers={"x-correlation-id": "rate-limit-two"})
+        assert limited.status_code == 429
+        assert limited.headers["x-correlation-id"] == "rate-limit-two"
+        assert limited.headers["x-trace-id"]
+        assert limited.headers["x-ratelimit-reset"]
+        assert limited.json()["detail"]["code"] == "RATE_LIMITED"
+        assert limited.json()["detail"]["correlation_id"] == "rate-limit-two"
+    finally:
+        rate_limiter.limit = original_limit
+        rate_limiter.reset()
+
+
+def test_provider_webhook_requires_valid_signature(client: TestClient) -> None:
+    payload = {
+        "provider": "amazon_bedrock",
+        "event_type": "budget.threshold",
+        "delivery_id": "delivery-1",
+    }
+    body = json.dumps(payload, separators=(",", ":")).encode()
+    timestamp = str(int(time.time()))
+
+    missing_signature = client.post(
+        "/webhooks/provider-events",
+        content=body,
+        headers={"content-type": "application/json"},
+    )
+    assert missing_signature.status_code == 401
+
+    invalid_signature = client.post(
+        "/webhooks/provider-events",
+        content=body,
+        headers={
+            "content-type": "application/json",
+            "x-provider-timestamp": timestamp,
+            "x-provider-signature": "sha256=invalid",
+        },
+    )
+    assert invalid_signature.status_code == 401
+
+    valid_signature = client.post(
+        "/webhooks/provider-events",
+        content=body,
+        headers={
+            "content-type": "application/json",
+            "x-correlation-id": "provider-webhook",
+            "x-provider-timestamp": timestamp,
+            "x-provider-signature": webhook_signature(
+                timestamp,
+                body,
+                get_settings().provider_webhook_secret,
+            ),
+        },
+    )
+    assert valid_signature.status_code == 200
+    assert valid_signature.json() == {"status": "accepted", "provider": "amazon_bedrock"}
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    webhook_events = [
+        event for event in audit.json() if event["event_type"] == "provider.webhook_received"
+    ]
+    assert webhook_events[0]["correlation_id"] == "provider-webhook"
+    assert webhook_events[0]["provider"] == "amazon_bedrock"
+
+
 def test_cto_can_view_executive_report_with_spend_rollups(client: TestClient) -> None:
     provision_demo_request(client)
     assignments = client.get(
@@ -1185,6 +1477,43 @@ def test_cto_can_schedule_cost_allocation_delivery(client: TestClient) -> None:
     assert "report.cost_allocation_delivery_scheduled" in {
         event["event_type"] for event in audit.json()
     }
+
+
+def test_worker_drains_queued_cost_allocation_delivery(client: TestClient) -> None:
+    settings = get_settings()
+    original_inline_execution = settings.lifecycle_inline_execution
+    provision_demo_request(client)
+    try:
+        settings.lifecycle_inline_execution = False
+        delivery = client.post(
+            "/reports/cost-allocation/deliveries",
+            headers={"x-dev-user": "cto@example.local", "x-correlation-id": "queued-delivery"},
+            json={"frequency": "weekly", "recipients": ["finance@example.local"]},
+        )
+        assert delivery.status_code == 201
+        assert delivery.json()["status"] == "queued"
+        assert delivery.json()["row_count"] == 0
+
+        jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"}).json()
+        report_job = next(job for job in jobs if job["job_type"] == "cost_allocation_delivery")
+        assert report_job["payload"]["correlation_id"] == "queued-delivery"
+
+        assert asyncio.run(drain_once(limit=10)) == 1
+        deliveries = client.get(
+            "/reports/cost-allocation/deliveries",
+            headers={"x-dev-user": "auditor@example.local"},
+        )
+        assert deliveries.status_code == 200
+        assert deliveries.json()[0]["status"] == "completed"
+        assert deliveries.json()[0]["row_count"] == 2
+
+        audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+        assert {
+            "report.cost_allocation_delivery_scheduled",
+            "report.cost_allocation_delivery_completed",
+        } <= {event["event_type"] for event in audit.json()}
+    finally:
+        settings.lifecycle_inline_execution = original_inline_execution
 
 
 def test_employee_can_request_extension_and_cto_can_approve(client: TestClient) -> None:

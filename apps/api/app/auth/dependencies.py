@@ -11,8 +11,14 @@ from app.models.entities import User
 from app.services.audit import record_audit_event
 
 
-def get_correlation_id(x_correlation_id: str | None = Header(default=None)) -> str:
-    return x_correlation_id or str(uuid4())
+def get_correlation_id(
+    request: Request, x_correlation_id: str | None = Header(default=None)
+) -> str:
+    return str(
+        getattr(request.state, "correlation_id", None)
+        or x_correlation_id
+        or str(uuid4())
+    )
 
 
 def current_user(

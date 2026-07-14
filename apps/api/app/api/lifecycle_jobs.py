@@ -18,6 +18,7 @@ def job_out(job: LifecycleJob) -> LifecycleJobOut:
         status=job.status,
         attempt_count=job.attempt_count,
         idempotency_key=job.idempotency_key,
+        payload=job.payload,
         failure_information=job.failure_information,
         created_at=job.created_at,
         updated_at=job.updated_at,

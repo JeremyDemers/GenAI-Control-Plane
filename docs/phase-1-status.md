@@ -12,6 +12,12 @@
 ## Phase 2/3 Slice Completed
 
 - Initial Alembic migration generated and verified with `alembic upgrade head`.
+- Observability now propagates trace IDs, aligns correlation IDs across response headers and audit events, and exposes request/queue telemetry through `/health/observability`.
+- API middleware applies local rate limiting with rate-limit headers and correlated `429` responses.
+- Provisioning now writes durable queued lifecycle jobs with payloads; local API execution drains them inline by default, and the worker process can drain queued jobs independently.
+- Restore and archive/deprovision actions now use durable lifecycle jobs with worker drain support while keeping local inline execution enabled by default.
+- Provider webhook callbacks require timestamped HMAC signatures and produce audit evidence on accepted deliveries.
+- `PROVIDER_MODE=live` now selects safe live adapter boundaries with provider-specific readiness checks while mutating operations remain disabled by default.
 - Local developer lifecycle controls now simulate 70%, 90%, and 100% budget thresholds.
 - Budget enforcement suspends assignments, creates incidents, and emits audit events.
 - Platform administrators and auditors can view incidents; administrators can resolve them with audit evidence.
@@ -22,6 +28,7 @@
 - Security auditors can export recent audit events as CSV through `/audit-events/export`.
 - CTOs, platform admins, and auditors can export assignment-level cost allocation CSVs through `/reports/cost-allocation/export`.
 - CTOs and platform admins can schedule auditable cost allocation delivery jobs, visible to auditors.
+- Cost allocation delivery jobs now queue and complete through the lifecycle worker while preserving local inline execution for demos.
 - CTO executive report summarizes request volume, active/suspended projects, remaining budget, provider spend, and cost-center spend.
 - Domain endpoints now expose visible provider assignments, usage records, cost records, and per-request budget summaries.
 - Frontend usage and budget evidence shows visible assignments, latest usage, latest cost, spend, remaining budget, and data freshness.
@@ -40,8 +47,11 @@
 - Platform administrators can publish new active standard-policy versions, and subsequent requests retain the policy version used during evaluation.
 - Platform administrators can update artifact retention policy versions, and archive expiration uses the active retention value.
 - Root `.env` values are respected by local API settings and Docker Compose interpolation while remaining ignored by git.
+- Docker build paths use Node 24 for the web image, locked uv dependency sync for the API image, and a uv-backed worker command.
+- Docker Compose now healthchecks API and web services and waits for healthy API/Postgres/Redis dependencies before starting the worker and web service.
 - Playwright now covers the full seeded interview demo lifecycle in Chromium.
 - Admins can list lifecycle jobs in the portal and request retry for queued or failed jobs.
+- CI now validates Alembic migrations against a clean SQLite database and gates high-severity npm advisories.
 
 ## Verified
 
@@ -53,12 +63,16 @@
 - `npm --workspace apps/web run lint`
 - `npm --workspace apps/web run test:e2e`
 - `npm --workspace apps/web run build`
+- `make migration-check`
+- `make security-audit`
 - Manual local smoke test with API on `8010` and web on `3001` because `8000` and `3000` were already occupied on this workstation.
 - `make compose-config`
+- `podman build -f infrastructure/docker/api.Dockerfile -t genai-control-plane-api:test .`
+- `podman build -f infrastructure/docker/web.Dockerfile -t genai-control-plane-web:test .`
 - `rm -f apps/api/control_plane.db && cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade head`
 
 ## Remaining Work
 
-- Move provisioning, usage, budget, lifecycle processing, and notifications from inline execution to durable asynchronous workers.
-- Expand live provider adapters for AWS, Azure, Google Cloud, Microsoft Graph, and GitHub behind safe feature flags.
+- Move usage, budget processing, and notification delivery from inline execution to durable asynchronous workers.
+- Install concrete AWS, Azure, Google Cloud, Microsoft Graph, and GitHub SDK operations behind the live adapter feature flag.
 - Track the remaining moderate npm audit advisory for Next's transitive PostCSS dependency; the current `next@latest` still bundles the affected range, and `npm audit fix --force` recommends downgrading to an unusable legacy Next release.

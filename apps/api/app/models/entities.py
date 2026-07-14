@@ -284,6 +284,7 @@ class LifecycleJob(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(40), default="queued")
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
     idempotency_key: Mapped[str] = mapped_column(String(240), unique=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     failure_information: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
 

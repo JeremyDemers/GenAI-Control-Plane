@@ -38,6 +38,19 @@ services:
       REDIS_URL: redis://redis:6379/0
     ports:
       - "${API_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "uv",
+          "run",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,11 +61,21 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/api.Dockerfile
-    command: ["python", "-m", "app.workers.scheduler"]
+    command: ["uv", "run", "python", "-m", "app.workers.scheduler"]
     env_file: .env.example
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      DEV_AUTH_ENABLED: ${DEV_AUTH_ENABLED:-true}
+      DATABASE_URL: postgresql+psycopg://control_plane:control_plane@postgres:5432/control_plane
+      PROVIDER_MODE: ${PROVIDER_MODE:-mock}
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   web:
     build:
@@ -62,8 +85,20 @@ services:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     ports:
       - "${WEB_PORT:-3000}:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
 volumes:
   postgres-data:

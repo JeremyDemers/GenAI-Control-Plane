@@ -47,6 +47,7 @@ import {
   exportCostAllocation,
   getExecutiveReport,
   getMe,
+  getOperationalHealth,
   getPolicyEvaluation,
   getRetentionPolicy,
   listArchives,
@@ -127,6 +128,24 @@ function nextIso(days: number) {
   date.setDate(date.getDate() + days);
   date.setMilliseconds(0);
   return date.toISOString();
+}
+
+function payloadValue(payload: Record<string, unknown>, key: string) {
+  const value = payload[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function failureSummary(failure: Record<string, unknown>) {
+  const message = failure.message;
+  if (typeof message === "string" && message.length > 0) {
+    return message;
+  }
+  const details = failure.details;
+  if (details && typeof details === "object" && "code" in details) {
+    const code = (details as Record<string, unknown>).code;
+    return typeof code === "string" ? code : null;
+  }
+  return null;
 }
 
 const defaultValues: AccessRequestFormValues = {
@@ -262,6 +281,15 @@ export function ControlCenter() {
     queryKey: ["incidents", user],
     queryFn: () => listIncidents(user),
     enabled: user === "admin@example.local" || user === "auditor@example.local" || user === "cto@example.local",
+    retry: false
+  });
+  const operationalHealth = useQuery({
+    queryKey: ["operational-health", user],
+    queryFn: () => getOperationalHealth(user),
+    enabled:
+      user === "admin@example.local" ||
+      user === "auditor@example.local" ||
+      user === "cto@example.local",
     retry: false
   });
   const provisioningEvidence = useQuery({
@@ -1190,6 +1218,19 @@ export function ControlCenter() {
                           <p className="break-all text-xs text-slate-500">
                             {job.idempotency_key}
                           </p>
+                          <div className="grid gap-1 text-xs text-slate-500 sm:grid-cols-2">
+                            <span>
+                              Provider: {payloadValue(job.payload, "provider") ?? "n/a"}
+                            </span>
+                            <span>
+                              Correlation: {payloadValue(job.payload, "correlation_id") ?? "n/a"}
+                            </span>
+                          </div>
+                          {failureSummary(job.failure_information) ? (
+                            <p className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">
+                              {failureSummary(job.failure_information)}
+                            </p>
+                          ) : null}
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className="text-xs text-slate-500">
                               Attempt {job.attempt_count}
@@ -1366,6 +1407,31 @@ export function ControlCenter() {
                   <p className="text-sm text-slate-500">No role changes yet.</p>
                 ) : null}
               </div>
+            </Panel>
+          ) : null}
+
+          {user === "admin@example.local" ||
+          user === "auditor@example.local" ||
+          user === "cto@example.local" ? (
+            <Panel title="Operational Health" icon={Activity}>
+              {operationalHealth.data ? (
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  <Detail
+                    label="Requests"
+                    value={operationalHealth.data.requests.requests_total.toString()}
+                  />
+                  <Detail
+                    label="Avg latency"
+                    value={`${operationalHealth.data.requests.average_duration_ms}ms`}
+                  />
+                  <Detail
+                    label="Queued/failed"
+                    value={operationalHealth.data.lifecycle_jobs.queued_or_failed.toString()}
+                  />
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">Operational telemetry unavailable.</p>
+              )}
             </Panel>
           ) : null}
 

@@ -15,10 +15,9 @@ from app.schemas import (
 )
 from app.services.lifecycle import (
     assignment_totals,
-    expire_and_archive_assignment,
     record_usage_and_cost,
-    restore_assignment,
 )
+from app.workers.jobs import enqueue_and_maybe_run_lifecycle_action
 
 router = APIRouter(prefix="/developer", tags=["developer controls"])
 
@@ -110,14 +109,16 @@ async def restore(
             status_code=404,
             detail={"code": "NOT_FOUND", "message": "Provider assignment not found."},
         )
-    event_type = await restore_assignment(
+    job = await enqueue_and_maybe_run_lifecycle_action(
         db,
         assignment=assignment,
         actor_user_id=user.id,
+        job_type="restore_access",
         reason=payload.reason,
         correlation_id=correlation_id,
     )
     db.commit()
+    db.refresh(assignment)
     access_request = db.get(AccessRequest, assignment.request_id)
     if not access_request:
         raise HTTPException(
@@ -128,7 +129,7 @@ async def restore(
         request_id=assignment.request_id,
         status=assignment.status,
         request_status=access_request.status,
-        audit_event=event_type,
+        audit_event="provider.restored" if job.status == "completed" else "lifecycle_job.queued",
     )
 
 
@@ -146,14 +147,16 @@ async def expire(
             status_code=404,
             detail={"code": "NOT_FOUND", "message": "Provider assignment not found."},
         )
-    event_type, _ = await expire_and_archive_assignment(
+    job = await enqueue_and_maybe_run_lifecycle_action(
         db,
         assignment=assignment,
         actor_user_id=user.id,
+        job_type="archive_and_deprovision",
         reason=payload.reason,
         correlation_id=correlation_id,
     )
     db.commit()
+    db.refresh(assignment)
     access_request = db.get(AccessRequest, assignment.request_id)
     if not access_request:
         raise HTTPException(
@@ -164,7 +167,7 @@ async def expire(
         request_id=assignment.request_id,
         status=assignment.status,
         request_status=access_request.status,
-        audit_event=event_type,
+        audit_event="lifecycle.closed" if job.status == "completed" else "lifecycle_job.queued",
     )
 
 

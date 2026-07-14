@@ -44,18 +44,22 @@ Local development authentication uses the `x-dev-user` header. The web app inclu
 
 ## Implemented Features
 
-- FastAPI application with health endpoints and OpenAPI docs.
+- FastAPI application with health, observability, and OpenAPI docs.
 - Development authentication and server-side RBAC.
 - Seeded enterprise roles and users.
 - Access request API with backend validation.
 - Explicit request state machine.
 - Versioned standard policy evaluation.
 - Approval workflow with approver and CTO paths.
-- Mock provider adapter contract and provisioning flow.
+- Mock provider adapter contract with durable queued provisioning jobs and local inline execution.
+- Live provider adapter boundaries with safe readiness checks and disabled-by-default mutating operations.
+- Signed provider webhook endpoint with replay-window validation.
+- Process-local API rate limiting with response headers for local/demo protection.
 - Append-only audit event model from the application perspective.
-- Next.js dashboard with request form, project membership and scoped audit visibility, member addition, ownership reassignment, project suspension, request cancellation, extension workflow, approvals with additional-information handling, CTO override, approval history, role-change, lifecycle job retry, and provisioning evidence visibility, policy evaluation, policy version/retention management, provider health/configuration/credential visibility, credential rotation evidence, usage and budget evidence, incident handling, notifications, CTO executive reporting, audit/cost allocation export and scheduled delivery, and spend charts.
+- Next.js dashboard with request form, project membership and scoped audit visibility, member addition, ownership reassignment, project suspension, request cancellation, extension workflow, approvals with additional-information handling, CTO override, approval history, role-change, operational health, lifecycle job retry, and provisioning evidence visibility, policy evaluation, policy version/retention management, provider health/configuration/credential visibility, credential rotation evidence, usage and budget evidence, incident handling, notifications, CTO executive reporting, audit/cost allocation export and queued scheduled delivery, and spend charts.
 - Docker Compose for PostgreSQL, Redis, API, worker, and web.
-- GitHub Actions workflow for backend, frontend, Docker, and Terraform validation.
+- Production-style Dockerfiles with Node 24 web builds, uv-locked API installs, and a uv-backed worker command.
+- GitHub Actions workflow for backend, frontend, migration, high-severity dependency audit, Docker, and Terraform validation.
 
 ## Testing
 
@@ -63,9 +67,11 @@ Local development authentication uses the `x-dev-user` header. The web app inclu
 make test
 make lint
 make typecheck
+make migration-check
+make security-audit
 ```
 
-Backend tests cover state transitions, RBAC denial/audit logging, request submission, project ownership and scoped audit visibility, project member management/reassignment/suspension, approval information requests, CTO override, approval history, role-change and provisioning evidence visibility, provider retryable failure handling, provider credential inventory/rotation, cancellation, extension requests, incidents, notifications, executive reporting, usage/cost/budget evidence, audit/cost allocation export, policy versioning/retention/evaluation, and mock provisioning through approval. Frontend tests cover request form validation.
+Backend tests cover state transitions, RBAC denial/audit logging, request submission, trace/correlation propagation, rate limiting, queued lifecycle worker execution, project ownership and scoped audit visibility, project member management/reassignment/suspension, approval information requests, CTO override, approval history, role-change and provisioning evidence visibility, provider retryable failure handling, provider configuration modes, provider credential inventory/rotation, cancellation, extension requests, incidents, notifications, executive reporting, usage/cost/budget evidence, audit/cost allocation export, policy versioning/retention/evaluation, and mock provisioning through approval. Frontend tests cover request form validation.
 Playwright covers the seeded interview demo lifecycle end to end.
 
 For a clean local SQLite migration check:
@@ -78,14 +84,14 @@ cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade 
 ## Known Limitations
 
 - OIDC/PKCE is represented as an architecture boundary; local auth uses deterministic development identities.
-- Provider adapters run in mock mode only.
+- Concrete live provider SDK operations are intentionally disabled until `PROVIDER_LIVE_OPERATIONS_ENABLED=true` and provider implementations are installed.
 - The API still creates local tables at startup for demo velocity, with Alembic migrations available for clean database setup.
-- Worker and scheduler are scaffolded; jobs execute inline for the first approval/provisioning slice.
-- `npm audit` currently reports a moderate Next/PostCSS transitive advisory where `next@latest` still bundles the affected range.
+- Provisioning, restore, archive/deprovision, and cost allocation delivery jobs are durably queued and can be drained by the worker; local inline execution remains enabled by default for demo velocity.
+- `npm audit --audit-level=high` passes; full `npm audit` currently reports a moderate Next/PostCSS transitive advisory where `next@latest` still bundles the affected range.
 
 ## Roadmap
 
-1. Move provisioning, usage, budget, lifecycle actions, and notifications to durable async jobs.
+1. Move usage, budget processing, and notification delivery to durable async jobs.
 2. Expand live provider adapters for AWS, Azure, Google Cloud, Microsoft Graph, and GitHub behind safe feature flags.
 3. Add repository-layer and service-layer coverage around provider adapters.
 4. Replace local development authentication with OIDC/PKCE and enterprise group mapping.
