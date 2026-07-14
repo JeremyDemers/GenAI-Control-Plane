@@ -799,6 +799,45 @@ def test_usage_cost_budget_and_assignment_domain_endpoints(client: TestClient) -
     assert len(auditor_assignments.json()) == 2
 
 
+def test_cto_can_suspend_project_with_audit_and_notifications(client: TestClient) -> None:
+    created = provision_demo_request(client)
+
+    denied = client.post(
+        f"/projects/{created['project_id']}/suspend",
+        headers={"x-dev-user": "employee@example.local"},
+        json={"reason": "Employees cannot suspend projects."},
+    )
+    assert denied.status_code == 403
+
+    suspended = client.post(
+        f"/projects/{created['project_id']}/suspend",
+        headers={"x-dev-user": "cto@example.local", "x-correlation-id": "project-suspend"},
+        json={"reason": "Executive risk review paused this project."},
+    )
+    assert suspended.status_code == 200
+    assert suspended.json()["status"] == "suspended"
+
+    requests = client.get(
+        "/access-requests", headers={"x-dev-user": "employee@example.local"}
+    ).json()
+    assert requests[0]["status"] == "SUSPENDED"
+
+    assignments = client.get(
+        "/provider-assignments", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert {assignment["status"] for assignment in assignments.json()} == {"suspended"}
+
+    employee_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "employee@example.local"}
+    ).json()
+    assert "project_suspended" in {
+        notification["event_type"] for notification in employee_notifications
+    }
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    assert "project.suspended" in {event["event_type"] for event in audit.json()}
+
+
 def test_provider_health_and_configuration_visibility(client: TestClient) -> None:
     health = client.get("/providers/health", headers={"x-dev-user": "employee@example.local"})
     assert health.status_code == 200

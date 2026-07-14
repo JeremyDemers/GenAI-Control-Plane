@@ -75,6 +75,7 @@ import {
   restoreAssignment,
   resolveIncident,
   simulateUsage,
+  suspendProject,
   type AccessRequest,
   type DevUser
 } from "@/lib/api";
@@ -366,6 +367,18 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
     }
   });
+  const suspendProjectMutation = useMutation({
+    mutationFn: (projectId: string) => suspendProject(user, projectId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      void queryClient.invalidateQueries({ queryKey: ["requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["assignments"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["executive-report"] });
+    }
+  });
   const createReassignmentMutation = useMutation({
     mutationFn: (projectId: string) => createReassignment(user, projectId),
     onSuccess: () => {
@@ -626,7 +639,20 @@ export function ControlCenter() {
                         {project.cost_center} · {project.member_count} members
                       </p>
                     </div>
-                    <StatusPill status={project.status} />
+                    <div className="flex items-center gap-2">
+                      <StatusPill status={project.status} />
+                      {(user === "cto@example.local" || user === "admin@example.local") &&
+                      project.status !== "suspended" ? (
+                        <button
+                          type="button"
+                          className="h-8 rounded-md border border-line bg-white px-2 text-xs font-semibold text-ink shadow-quiet disabled:cursor-not-allowed disabled:opacity-60"
+                          onClick={() => suspendProjectMutation.mutate(project.id)}
+                          disabled={suspendProjectMutation.isPending}
+                        >
+                          Suspend
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               ))}

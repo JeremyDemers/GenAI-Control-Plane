@@ -311,6 +311,13 @@ export function addProjectMember(
   });
 }
 
+export function suspendProject(user: DevUser, projectId: string) {
+  return request<Project>(`/projects/${projectId}/suspend`, user, {
+    method: "POST",
+    body: JSON.stringify({ reason: "Executive risk review paused this project." })
+  });
+}
+
 export function listReassignments(user: DevUser) {
   return request<ReassignmentRequest[]>("/reassignments", user);
 }

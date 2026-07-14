@@ -5,8 +5,9 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import current_user, get_correlation_id
 from app.core.database import get_db
 from app.core.security import has_permission
-from app.models.entities import Project, ProjectMember, User
-from app.schemas import ProjectMemberCreate, ProjectMemberOut, ProjectOut
+from app.models.entities import AccessRequest, Project, ProjectMember, ProviderAssignment, User
+from app.models.enums import RequestStatus
+from app.schemas import ProjectMemberCreate, ProjectMemberOut, ProjectOut, ProjectSuspendIn
 from app.services.audit import record_audit_event
 from app.services.notifications import notify_user
 from app.services.visibility import can_read_all
@@ -83,6 +84,76 @@ def list_projects(
         project_ids = select(ProjectMember.project_id).where(ProjectMember.user_id == user.id)
         statement = statement.where(Project.id.in_(project_ids))
     return [project_out(db, project) for project in db.scalars(statement).all()]
+
+
+@router.post("/{project_id}/suspend", response_model=ProjectOut)
+def suspend_project(
+    project_id: str,
+    payload: ProjectSuspendIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+    correlation_id: str = Depends(get_correlation_id),
+) -> ProjectOut:
+    role_names = {role.name for role in user.roles}
+    if not has_permission(role_names, "projects:suspend"):
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "FORBIDDEN", "message": "Project suspension is privileged."},
+        )
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "NOT_FOUND", "message": "Project not found."},
+        )
+    if project.status == "suspended":
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "CONFLICT", "message": "Project is already suspended."},
+        )
+
+    project.status = "suspended"
+    requests = db.scalars(
+        select(AccessRequest).where(AccessRequest.project_id == project.id)
+    ).all()
+    for access_request in requests:
+        if access_request.status == RequestStatus.ACTIVE:
+            access_request.status = RequestStatus.SUSPENDED
+        assignments = db.scalars(
+            select(ProviderAssignment).where(
+                ProviderAssignment.request_id == access_request.id,
+                ProviderAssignment.status == "active",
+            )
+        ).all()
+        for assignment in assignments:
+            assignment.status = "suspended"
+
+    member_user_ids = db.scalars(
+        select(ProjectMember.user_id).where(ProjectMember.project_id == project.id)
+    ).all()
+    for member_user_id in set(member_user_ids):
+        notify_user(
+            db,
+            user_id=member_user_id,
+            event_type="project_suspended",
+            message=f"{project.name} was suspended: {payload.reason}",
+        )
+    record_audit_event(
+        db,
+        event_type="project.suspended",
+        actor_user_id=user.id,
+        target_type="project",
+        target_id=project.id,
+        action="suspend_project",
+        result="success",
+        reason=payload.reason,
+        correlation_id=correlation_id,
+        project_id=project.id,
+        metadata_json={"affected_requests": len(requests)},
+    )
+    db.commit()
+    db.refresh(project)
+    return project_out(db, project)
 
 
 @router.post(

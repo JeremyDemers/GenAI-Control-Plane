@@ -115,6 +115,10 @@ class ProjectMemberCreate(BaseModel):
     member_role: str = Field(default="member", pattern="^(member|collaborator|owner)$")
 
 
+class ProjectSuspendIn(BaseModel):
+    reason: str = Field(min_length=10, max_length=500)
+
+
 class ProjectMemberOut(BaseModel):
     id: str
     project_id: str
