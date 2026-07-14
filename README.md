@@ -86,12 +86,12 @@ cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade 
 - OIDC/PKCE is represented as an architecture boundary; local auth uses deterministic development identities.
 - Concrete live provider SDK operations are intentionally disabled until `PROVIDER_LIVE_OPERATIONS_ENABLED=true` and provider implementations are installed.
 - The API still creates local tables at startup for demo velocity, with Alembic migrations available for clean database setup.
-- Provisioning jobs are durably queued and can be drained by the worker; local inline execution remains enabled by default for demo velocity.
+- Provisioning, restore, and archive/deprovision jobs are durably queued and can be drained by the worker; local inline execution remains enabled by default for demo velocity.
 - `npm audit --audit-level=high` passes; full `npm audit` currently reports a moderate Next/PostCSS transitive advisory where `next@latest` still bundles the affected range.
 
 ## Roadmap
 
-1. Move usage, budget, lifecycle restore/archive actions, and notifications to durable async jobs.
+1. Move usage, budget processing, and notifications to durable async jobs.
 2. Expand live provider adapters for AWS, Azure, Google Cloud, Microsoft Graph, and GitHub behind safe feature flags.
 3. Add repository-layer and service-layer coverage around provider adapters.
 4. Replace local development authentication with OIDC/PKCE and enterprise group mapping.

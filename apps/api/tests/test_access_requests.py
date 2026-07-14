@@ -974,6 +974,83 @@ def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -
     assert denied_export.status_code == 403
 
 
+def test_worker_drains_queued_restore_and_archive_jobs(client: TestClient) -> None:
+    settings = get_settings()
+    original_inline_execution = settings.lifecycle_inline_execution
+    provision_demo_request(client)
+    try:
+        settings.lifecycle_inline_execution = False
+        assignments = client.get(
+            "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+        ).json()
+        assignment_id = assignments[0]["id"]
+
+        client.post(
+            "/developer/simulate-usage",
+            headers={"x-dev-user": "admin@example.local"},
+            json={
+                "assignment_id": assignment_id,
+                "tokens": 100000,
+                "request_count": 200,
+                "cost_amount": "100",
+            },
+        )
+
+        restore = client.post(
+            "/developer/restore",
+            headers={"x-dev-user": "admin@example.local", "x-correlation-id": "queued-restore"},
+            json={"assignment_id": assignment_id, "reason": "Queue restore for worker."},
+        )
+        assert restore.status_code == 200
+        assert restore.json()["audit_event"] == "lifecycle_job.queued"
+        assert restore.json()["status"] == "suspended"
+
+        jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"}).json()
+        restore_job = next(job for job in jobs if job["job_type"] == "restore_access")
+        assert restore_job["status"] == "queued"
+        assert restore_job["payload"]["correlation_id"] == "queued-restore"
+
+        assert asyncio.run(drain_once(limit=10)) == 1
+        restored_assignments = client.get(
+            "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+        ).json()
+        assert restored_assignments[0]["status"] == "active"
+
+        expire = client.post(
+            "/developer/expire",
+            headers={"x-dev-user": "admin@example.local", "x-correlation-id": "queued-archive"},
+            json={"assignment_id": assignment_id, "reason": "Queue archive for worker."},
+        )
+        assert expire.status_code == 200
+        assert expire.json()["audit_event"] == "lifecycle_job.queued"
+        assert expire.json()["status"] == "active"
+
+        jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"}).json()
+        archive_job = next(job for job in jobs if job["job_type"] == "archive_and_deprovision")
+        assert archive_job["status"] == "queued"
+        assert archive_job["payload"]["correlation_id"] == "queued-archive"
+
+        assert asyncio.run(drain_once(limit=10)) == 1
+        closed_assignments = client.get(
+            "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+        ).json()
+        assert closed_assignments[0]["status"] == "deprovisioned"
+        archives = client.get("/developer/archives", headers={"x-dev-user": "admin@example.local"})
+        assert archives.status_code == 200
+        assert archives.json()[0]["storage_provider"] == "local"
+
+        completed_jobs = client.get(
+            "/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"}
+        ).json()
+        assert {
+            job["job_type"]: job["status"]
+            for job in completed_jobs
+            if job["job_type"] in {"restore_access", "archive_and_deprovision"}
+        } == {"restore_access": "completed", "archive_and_deprovision": "completed"}
+    finally:
+        settings.lifecycle_inline_execution = original_inline_execution
+
+
 def test_usage_cost_budget_and_assignment_domain_endpoints(client: TestClient) -> None:
     provision_demo_request(client)
     assignments = client.get(

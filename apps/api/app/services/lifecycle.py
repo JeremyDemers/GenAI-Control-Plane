@@ -150,17 +150,27 @@ async def restore_assignment(
     actor_user_id: str,
     reason: str,
     correlation_id: str,
+    job: LifecycleJob | None = None,
 ) -> str:
     request = db.get(AccessRequest, assignment.request_id)
     if not request:
         raise ValueError("Assignment has no access request")
-    job = LifecycleJob(
-        job_type="restore_access",
-        status="running",
-        attempt_count=1,
-        idempotency_key=f"restore:{assignment.id}",
-    )
-    db.add(job)
+    if job is None:
+        job = LifecycleJob(
+            job_type="restore_access",
+            status="running",
+            attempt_count=1,
+            idempotency_key=f"restore:{assignment.id}",
+            payload={
+                "assignment_id": assignment.id,
+                "actor_user_id": actor_user_id,
+                "reason": reason,
+                "correlation_id": correlation_id,
+            },
+        )
+        db.add(job)
+    else:
+        job.status = "running"
     adapter = get_provider_adapter(assignment.provider)
     await adapter.restore_access(assignment.id, job.idempotency_key)
     assignment.status = "active"
@@ -196,6 +206,7 @@ async def expire_and_archive_assignment(
     actor_user_id: str,
     reason: str,
     correlation_id: str,
+    job: LifecycleJob | None = None,
 ) -> tuple[str, ArtifactArchive]:
     request = db.get(AccessRequest, assignment.request_id)
     if not request:
@@ -213,13 +224,22 @@ async def expire_and_archive_assignment(
     request.status = transition(request.status, RequestStatus.ARCHIVING)
     policy_version = ensure_standard_policy(db)
     artifact_retention_days = int(policy_version.document.get("artifact_retention_days", 365))
-    job = LifecycleJob(
-        job_type="archive_and_deprovision",
-        status="running",
-        attempt_count=1,
-        idempotency_key=f"archive:{assignment.id}",
-    )
-    db.add(job)
+    if job is None:
+        job = LifecycleJob(
+            job_type="archive_and_deprovision",
+            status="running",
+            attempt_count=1,
+            idempotency_key=f"archive:{assignment.id}",
+            payload={
+                "assignment_id": assignment.id,
+                "actor_user_id": actor_user_id,
+                "reason": reason,
+                "correlation_id": correlation_id,
+            },
+        )
+        db.add(job)
+    else:
+        job.status = "running"
     db.flush()
     archive_result = await adapter.archive_artifacts(assignment.id, job.idempotency_key)
     archive = ArtifactArchive(

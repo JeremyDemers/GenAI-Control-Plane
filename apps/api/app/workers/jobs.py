@@ -9,7 +9,8 @@ from app.models.enums import RequestStatus
 from app.providers.base import ProviderOperationError
 from app.providers.registry import get_provider_adapter
 from app.services.audit import record_audit_event
-from app.services.notifications import notify_user
+from app.services.lifecycle import expire_and_archive_assignment, restore_assignment
+from app.services.notifications import notify_roles, notify_user
 from app.services.state_machine import transition
 
 SAFE_PROVIDER_ERROR_KEYS = {"code", "message", "operation", "provider_status", "retry_after"}
@@ -21,6 +22,41 @@ def safe_provider_error_details(details: dict[str, object]) -> dict[str, object]
 
 def _provision_key(request_id: str, provider: str) -> str:
     return f"provision:{request_id}:{provider}"
+
+
+def _restore_key(assignment_id: str) -> str:
+    return f"restore:{assignment_id}"
+
+
+def _archive_key(assignment_id: str) -> str:
+    return f"archive:{assignment_id}"
+
+
+def _start_job(job: LifecycleJob) -> None:
+    job.status = "running"
+    if job.attempt_count == 0:
+        job.attempt_count = 1
+    job.failure_information = {}
+
+
+def _fail_job(
+    db: Session,
+    *,
+    job: LifecycleJob,
+    message: str,
+    operation: str,
+    retryable: bool,
+    details: dict[str, object] | None = None,
+) -> None:
+    job.status = "failed"
+    job.failure_information = {
+        "retryable": retryable,
+        "message": message,
+        "details": safe_provider_error_details(
+            details or {"code": "lifecycle_job_failed", "operation": operation}
+        ),
+    }
+    db.flush()
 
 
 def enqueue_provisioning_jobs(
@@ -68,6 +104,71 @@ def enqueue_provisioning_jobs(
     return jobs
 
 
+def enqueue_lifecycle_action_job(
+    db: Session,
+    *,
+    assignment: ProviderAssignment,
+    job_type: str,
+    actor_user_id: str,
+    reason: str,
+    correlation_id: str,
+) -> LifecycleJob:
+    key_by_type = {
+        "restore_access": _restore_key,
+        "archive_and_deprovision": _archive_key,
+    }
+    idempotency_key = key_by_type[job_type](assignment.id)
+    existing_job = db.scalar(
+        select(LifecycleJob).where(LifecycleJob.idempotency_key == idempotency_key)
+    )
+    if existing_job:
+        if existing_job.status == "failed":
+            existing_job.status = "queued"
+            existing_job.payload = {
+                "assignment_id": assignment.id,
+                "request_id": assignment.request_id,
+                "provider": assignment.provider,
+                "actor_user_id": actor_user_id,
+                "reason": reason,
+                "correlation_id": correlation_id,
+            }
+            existing_job.failure_information = {}
+        return existing_job
+
+    job = LifecycleJob(
+        job_type=job_type,
+        status="queued",
+        attempt_count=0,
+        idempotency_key=idempotency_key,
+        payload={
+            "assignment_id": assignment.id,
+            "request_id": assignment.request_id,
+            "provider": assignment.provider,
+            "actor_user_id": actor_user_id,
+            "reason": reason,
+            "correlation_id": correlation_id,
+        },
+    )
+    db.add(job)
+    db.flush()
+    record_audit_event(
+        db,
+        event_type="lifecycle_job.queued",
+        actor_user_id=actor_user_id,
+        target_type="lifecycle_job",
+        target_id=job.id,
+        request_id=assignment.request_id,
+        project_id=assignment.project_id,
+        provider=assignment.provider,
+        action=f"enqueue_{job_type}",
+        result="queued",
+        reason=reason,
+        correlation_id=correlation_id,
+    )
+    db.flush()
+    return job
+
+
 def _provision_jobs_for_request(db: Session, request: AccessRequest) -> list[LifecycleJob]:
     keys = [_provision_key(request.id, provider) for provider in request.provider_names]
     statement = select(LifecycleJob).where(LifecycleJob.idempotency_key.in_(keys))
@@ -91,23 +192,21 @@ def _complete_request_if_ready(db: Session, request: AccessRequest) -> None:
 
 
 async def run_provisioning_job(db: Session, job: LifecycleJob) -> ProviderAssignment | None:
-    job.status = "running"
-    if job.attempt_count == 0:
-        job.attempt_count = 1
-    job.failure_information = {}
+    _start_job(job)
     payload = job.payload or {}
     request_id = str(payload.get("request_id", ""))
     provider = str(payload.get("provider", ""))
     correlation_id = str(payload.get("correlation_id", "worker"))
     request = db.get(AccessRequest, request_id)
     if not request or not provider:
-        job.status = "failed"
-        job.failure_information = {
-            "retryable": False,
-            "message": "Provisioning job is missing request or provider context.",
-            "details": {"code": "invalid_job_payload", "operation": "provision_access"},
-        }
-        db.flush()
+        _fail_job(
+            db,
+            job=job,
+            message="Provisioning job is missing request or provider context.",
+            operation="provision_access",
+            retryable=False,
+            details={"code": "invalid_job_payload", "operation": "provision_access"},
+        )
         return None
 
     existing_assignment = db.scalar(
@@ -190,12 +289,22 @@ async def run_provisioning_job(db: Session, job: LifecycleJob) -> ProviderAssign
 async def run_queued_lifecycle_jobs(db: Session, limit: int = 10) -> int:
     jobs = db.scalars(
         select(LifecycleJob)
-        .where(LifecycleJob.status == "queued", LifecycleJob.job_type == "provision_access")
+        .where(
+            LifecycleJob.status == "queued",
+            LifecycleJob.job_type.in_(
+                {"provision_access", "restore_access", "archive_and_deprovision"}
+            ),
+        )
         .order_by(LifecycleJob.created_at.asc())
         .limit(limit)
     ).all()
     for job in jobs:
-        await run_provisioning_job(db, job)
+        if job.job_type == "provision_access":
+            await run_provisioning_job(db, job)
+        elif job.job_type == "restore_access":
+            await run_restore_job(db, job)
+        elif job.job_type == "archive_and_deprovision":
+            await run_archive_and_deprovision_job(db, job)
     return len(jobs)
 
 
@@ -206,3 +315,116 @@ async def enqueue_and_maybe_run_provisioning(
     if get_settings().lifecycle_inline_execution:
         await run_queued_lifecycle_jobs(db, limit=max(len(jobs), 1))
     return jobs
+
+
+async def run_restore_job(db: Session, job: LifecycleJob) -> str | None:
+    _start_job(job)
+    payload = job.payload or {}
+    assignment_id = str(payload.get("assignment_id", ""))
+    actor_user_id = str(payload.get("actor_user_id", ""))
+    reason = str(payload.get("reason", "Worker restore action."))
+    correlation_id = str(payload.get("correlation_id", "worker"))
+    assignment = db.get(ProviderAssignment, assignment_id)
+    if not assignment or not actor_user_id:
+        _fail_job(
+            db,
+            job=job,
+            message="Restore job is missing assignment or actor context.",
+            operation="restore_access",
+            retryable=False,
+            details={"code": "invalid_job_payload", "operation": "restore_access"},
+        )
+        return None
+    try:
+        return await restore_assignment(
+            db,
+            assignment=assignment,
+            actor_user_id=actor_user_id,
+            reason=reason,
+            correlation_id=correlation_id,
+            job=job,
+        )
+    except ProviderOperationError as exc:
+        _fail_job(
+            db,
+            job=job,
+            message=str(exc),
+            operation="restore_access",
+            retryable=exc.retryable,
+            details=exc.details,
+        )
+        notify_roles(
+            db,
+            role_names={"platform_admin"},
+            event_type="lifecycle_job_failed",
+            message=f"Restore failed for {assignment.provider} assignment.",
+        )
+        return None
+
+
+async def run_archive_and_deprovision_job(db: Session, job: LifecycleJob) -> str | None:
+    _start_job(job)
+    payload = job.payload or {}
+    assignment_id = str(payload.get("assignment_id", ""))
+    actor_user_id = str(payload.get("actor_user_id", ""))
+    reason = str(payload.get("reason", "Worker archive action."))
+    correlation_id = str(payload.get("correlation_id", "worker"))
+    assignment = db.get(ProviderAssignment, assignment_id)
+    if not assignment or not actor_user_id:
+        _fail_job(
+            db,
+            job=job,
+            message="Archive job is missing assignment or actor context.",
+            operation="archive_and_deprovision",
+            retryable=False,
+            details={"code": "invalid_job_payload", "operation": "archive_and_deprovision"},
+        )
+        return None
+    try:
+        event_type, _ = await expire_and_archive_assignment(
+            db,
+            assignment=assignment,
+            actor_user_id=actor_user_id,
+            reason=reason,
+            correlation_id=correlation_id,
+            job=job,
+        )
+        return event_type
+    except ProviderOperationError as exc:
+        _fail_job(
+            db,
+            job=job,
+            message=str(exc),
+            operation="archive_and_deprovision",
+            retryable=exc.retryable,
+            details=exc.details,
+        )
+        notify_roles(
+            db,
+            role_names={"platform_admin"},
+            event_type="lifecycle_job_failed",
+            message=f"Archive and deprovision failed for {assignment.provider} assignment.",
+        )
+        return None
+
+
+async def enqueue_and_maybe_run_lifecycle_action(
+    db: Session,
+    *,
+    assignment: ProviderAssignment,
+    job_type: str,
+    actor_user_id: str,
+    reason: str,
+    correlation_id: str,
+) -> LifecycleJob:
+    job = enqueue_lifecycle_action_job(
+        db,
+        assignment=assignment,
+        job_type=job_type,
+        actor_user_id=actor_user_id,
+        reason=reason,
+        correlation_id=correlation_id,
+    )
+    if get_settings().lifecycle_inline_execution and job.status == "queued":
+        await run_queued_lifecycle_jobs(db, limit=1)
+    return job
