@@ -44,6 +44,7 @@
 - Root `.env` values are respected by local API settings and Docker Compose interpolation while remaining ignored by git.
 - Playwright now covers the full seeded interview demo lifecycle in Chromium.
 - Admins can list lifecycle jobs in the portal and request retry for queued or failed jobs.
+- CI now validates Alembic migrations against a clean SQLite database and gates high-severity npm advisories.
 
 ## Verified
 
@@ -55,6 +56,8 @@
 - `npm --workspace apps/web run lint`
 - `npm --workspace apps/web run test:e2e`
 - `npm --workspace apps/web run build`
+- `make migration-check`
+- `make security-audit`
 - Manual local smoke test with API on `8010` and web on `3001` because `8000` and `3000` were already occupied on this workstation.
 - `make compose-config`
 - `rm -f apps/api/control_plane.db && cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade head`

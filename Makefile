@@ -1,4 +1,4 @@
-.PHONY: setup dev test lint typecheck migrate seed reset e2e api web compose-config docker-build
+.PHONY: setup dev test lint typecheck migrate migration-check security-audit seed reset e2e api web compose-config docker-build
 
 PODMAN_ENV = case "$${XDG_DATA_HOME:-}" in "$$HOME"/snap/code/*/.local/share) unset XDG_DATA_HOME ;; esac;
 
@@ -29,6 +29,14 @@ typecheck:
 
 migrate:
 	cd apps/api && uv run alembic upgrade head
+
+migration-check:
+	rm -f apps/api/ci_migration_check.db
+	cd apps/api && DATABASE_URL=sqlite:///./ci_migration_check.db uv run alembic upgrade head
+	rm -f apps/api/ci_migration_check.db
+
+security-audit:
+	npm audit --audit-level=high
 
 seed:
 	cd apps/api && uv run python -m scripts.seed
