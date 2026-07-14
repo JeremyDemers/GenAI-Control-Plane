@@ -52,7 +52,9 @@ import {
   listNotifications,
   listPolicies,
   listPendingApprovals,
+  listProviderConfiguration,
   listProviderAssignments,
+  listProviderHealth,
   listRequests,
   listUsageRecords,
   markNotificationRead,
@@ -133,6 +135,17 @@ export function ControlCenter() {
   const approvals = useQuery({
     queryKey: ["approvals", user],
     queryFn: () => listPendingApprovals(user),
+    retry: false
+  });
+  const providerHealth = useQuery({
+    queryKey: ["provider-health", user],
+    queryFn: () => listProviderHealth(user),
+    retry: false
+  });
+  const providerConfiguration = useQuery({
+    queryKey: ["provider-configuration", user],
+    queryFn: () => listProviderConfiguration(user),
+    enabled: user === "admin@example.local" || user === "auditor@example.local" || user === "cto@example.local",
     retry: false
   });
   const assignments = useQuery({
@@ -344,6 +357,10 @@ export function ControlCenter() {
   const latestUsage = usageRecords.data?.[0];
   const latestCost = costRecords.data?.[0];
   const visibleAssignments = providerAssignments.data?.length ?? 0;
+  const healthyProviders =
+    providerHealth.data?.filter((provider) => provider.status === "healthy").length ?? 0;
+  const totalProviders = providerHealth.data?.length ?? 0;
+  const allProvidersHealthy = totalProviders > 0 && healthyProviders === totalProviders;
 
   return (
     <main className="min-h-screen">
@@ -380,7 +397,12 @@ export function ControlCenter() {
           <Metric icon={Clock3} label="Pending approvals" value={pendingRequests.toString()} />
           <Metric icon={CheckCircle2} label="Active projects" value={activeRequests.toString()} />
           <Metric icon={Bell} label="Unread alerts" value={unreadNotifications.toString()} tone="amber" />
-          <Metric icon={CloudCog} label="Provider health" value="7/7" tone="mint" />
+          <Metric
+            icon={CloudCog}
+            label="Provider health"
+            value={`${healthyProviders}/${totalProviders || 7}`}
+            tone={allProvidersHealthy ? "mint" : "amber"}
+          />
         </div>
       </section>
 
@@ -414,6 +436,40 @@ export function ControlCenter() {
               </div>
             </Panel>
           </div>
+
+          <Panel title="Provider Health" icon={CloudCog}>
+            <div className="grid gap-3 md:grid-cols-2">
+              {(providerHealth.data ?? []).map((provider) => (
+                <div key={provider.provider} className="rounded-md border border-line p-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-semibold">{provider.provider.replaceAll("_", " ")}</p>
+                    <StatusPill status={provider.status} />
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">
+                    {provider.latency_ms}ms · {String(provider.details.mode ?? "unknown")}
+                  </p>
+                </div>
+              ))}
+              {providerHealth.data?.length === 0 ? (
+                <p className="text-sm text-slate-500">Provider checks unavailable.</p>
+              ) : null}
+            </div>
+            {providerConfiguration.data ? (
+              <div className="mt-4 grid gap-2 border-t border-line pt-4">
+                {providerConfiguration.data.map((provider) => (
+                  <div
+                    key={provider.provider}
+                    className="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <span>{provider.provider.replaceAll("_", " ")}</span>
+                    <span className="font-semibold">
+                      {provider.configured ? "configured" : "missing"} · {provider.mode}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </Panel>
 
           <Panel title="Requests" icon={FileClock}>
             {extensionMutation.isSuccess ? (
@@ -1056,7 +1112,7 @@ function Panel({
   );
 }
 
-function StatusPill({ status }: { status: AccessRequest["status"] }) {
+function StatusPill({ status }: { status: AccessRequest["status"] | string }) {
   const className = status === "ACTIVE" ? "bg-mint/10 text-mint" : "bg-amber/10 text-amber";
   return (
     <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${className}`}>

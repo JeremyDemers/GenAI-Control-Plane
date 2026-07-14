@@ -62,6 +62,20 @@ export type PolicyVersion = {
   updated_at: string;
 };
 
+export type ProviderHealth = {
+  provider: string;
+  status: string;
+  latency_ms: number;
+  details: Record<string, unknown>;
+};
+
+export type ProviderConfiguration = {
+  provider: string;
+  configured: boolean;
+  mode: string;
+  details: Record<string, unknown>;
+};
+
 export type ProviderAssignment = {
   id: string;
   request_id: string;
@@ -253,6 +267,14 @@ export function publishInternalSecurityReviewPolicy(user: DevUser, activePolicy:
 
 export function listPendingApprovals(user: DevUser) {
   return request<PendingApproval[]>("/approvals/pending", user);
+}
+
+export function listProviderHealth(user: DevUser) {
+  return request<ProviderHealth[]>("/providers/health", user);
+}
+
+export function listProviderConfiguration(user: DevUser) {
+  return request<ProviderConfiguration[]>("/providers/configuration", user);
 }
 
 export function decideApproval(user: DevUser, stepId: string, decision: "approve" | "reject") {

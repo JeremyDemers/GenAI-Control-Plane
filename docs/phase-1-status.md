@@ -22,6 +22,7 @@
 - CTO executive report summarizes request volume, active/suspended projects, remaining budget, provider spend, and cost-center spend.
 - Domain endpoints now expose visible provider assignments, usage records, cost records, and per-request budget summaries.
 - Frontend usage and budget evidence shows visible assignments, latest usage, latest cost, spend, remaining budget, and data freshness.
+- Provider health checks and privileged provider configuration validation are exposed in the dashboard.
 - User notification inbox is implemented for request submission, approval handoffs, provisioning, budget thresholds, suspension, restore, and closure.
 - Employees can cancel pending requests and request access extensions; CTOs and platform admins can approve or reject extension requests.
 - Platform administrators can publish new active standard-policy versions, and subsequent requests retain the policy version used during evaluation.
@@ -46,5 +47,5 @@
 ## Remaining Work
 
 - Move provisioning, usage, budget, lifecycle processing, and notifications from inline execution to durable asynchronous workers.
-- Expand live-safe provider adapters for AWS, Azure, Google Cloud, Microsoft Graph, and GitHub.
+- Expand live provider adapters for AWS, Azure, Google Cloud, Microsoft Graph, and GitHub behind safe feature flags.
 - Track the remaining moderate npm audit advisory for Next's transitive PostCSS dependency; the current `next@latest` still bundles the affected range, and `npm audit fix --force` recommends downgrading to an unusable legacy Next release.

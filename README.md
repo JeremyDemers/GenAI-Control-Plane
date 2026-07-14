@@ -53,7 +53,7 @@ Local development authentication uses the `x-dev-user` header. The web app inclu
 - Approval workflow with approver and CTO paths.
 - Mock provider adapter contract and provisioning flow.
 - Append-only audit event model from the application perspective.
-- Next.js dashboard with request form, request cancellation, extension workflow, approvals, policy evaluation, policy version management, usage and budget evidence, incident handling, notifications, CTO executive reporting, audit export, and spend charts.
+- Next.js dashboard with request form, request cancellation, extension workflow, approvals, policy evaluation, policy version management, provider health/configuration visibility, usage and budget evidence, incident handling, notifications, CTO executive reporting, audit export, and spend charts.
 - Docker Compose for PostgreSQL, Redis, API, worker, and web.
 - GitHub Actions workflow for backend, frontend, Docker, and Terraform validation.
 
@@ -86,7 +86,7 @@ cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade 
 ## Roadmap
 
 1. Move provisioning, usage, budget, lifecycle actions, and notifications to durable async jobs.
-2. Expand live-safe provider configuration and read-only health checks.
+2. Expand live provider adapters for AWS, Azure, Google Cloud, Microsoft Graph, and GitHub behind safe feature flags.
 3. Add repository-layer and service-layer coverage around provider adapters.
 4. Replace local development authentication with OIDC/PKCE and enterprise group mapping.
 5. Add cost allocation exports and scheduled delivery.

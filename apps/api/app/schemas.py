@@ -142,6 +142,13 @@ class ProviderHealthOut(BaseModel):
     details: dict[str, Any]
 
 
+class ProviderConfigurationOut(BaseModel):
+    provider: str
+    configured: bool
+    mode: str
+    details: dict[str, Any]
+
+
 class ProviderAssignmentOut(BaseModel):
     id: str
     request_id: str

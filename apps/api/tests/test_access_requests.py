@@ -468,6 +468,26 @@ def test_usage_cost_budget_and_assignment_domain_endpoints(client: TestClient) -
     assert len(auditor_assignments.json()) == 2
 
 
+def test_provider_health_and_configuration_visibility(client: TestClient) -> None:
+    health = client.get("/providers/health", headers={"x-dev-user": "employee@example.local"})
+    assert health.status_code == 200
+    assert len(health.json()) == 7
+    assert {check["status"] for check in health.json()} == {"healthy"}
+
+    configuration = client.get(
+        "/providers/configuration", headers={"x-dev-user": "admin@example.local"}
+    )
+    assert configuration.status_code == 200
+    assert len(configuration.json()) == 7
+    assert {check["mode"] for check in configuration.json()} == {"mock"}
+    assert all(check["configured"] for check in configuration.json())
+
+    denied_configuration = client.get(
+        "/providers/configuration", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert denied_configuration.status_code == 403
+
+
 def test_cto_can_view_executive_report_with_spend_rollups(client: TestClient) -> None:
     provision_demo_request(client)
     assignments = client.get(

@@ -13,6 +13,8 @@ Suspend assignments first, collect final usage and cost data, retry deprovisioni
 ## Provider Outage
 
 Mark provider health degraded, pause new provisioning for that provider, notify platform administrators, and retry queued jobs with exponential backoff.
+Provider health is available at `/providers/health`. Platform administrators, security auditors, and
+CTOs can validate safe provider configuration metadata at `/providers/configuration`.
 
 ## Policy Versioning
 
