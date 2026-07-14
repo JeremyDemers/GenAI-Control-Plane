@@ -25,6 +25,7 @@
 - Provider health checks and privileged provider configuration validation are exposed in the dashboard.
 - Access request submission creates project membership records, and project owners can review project requests, members, evidence, and add existing users to a project with audit and notification evidence.
 - Approvers can request additional information, and requesters can respond to requeue the same approval step.
+- Approval history is exposed for admin, auditor, and CTO review with request, step, decision, actor, and pending-step context.
 - User notification inbox is implemented for request submission, approval handoffs, provisioning, budget thresholds, suspension, restore, and closure.
 - Employees can cancel pending requests and request access extensions; CTOs and platform admins can approve or reject extension requests.
 - Platform administrators can publish new active standard-policy versions, and subsequent requests retain the policy version used during evaluation.

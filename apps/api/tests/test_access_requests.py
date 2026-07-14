@@ -269,6 +269,20 @@ def test_approval_workflow_provisions_mock_assignments(client: TestClient) -> No
         "request_provisioned"
     }
 
+    history = client.get("/approvals/history", headers={"x-dev-user": "auditor@example.local"})
+    assert history.status_code == 200
+    decisions = [row for row in history.json() if row["decision"] == "approve"]
+    assert {row["actor_email"] for row in decisions} == {
+        "approver@example.local",
+        "cto@example.local",
+    }
+    assert {row["request_id"] for row in decisions} == {created["id"]}
+
+    denied_history = client.get(
+        "/approvals/history", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert denied_history.status_code == 403
+
 
 def test_approver_can_request_information_and_requester_can_respond(
     client: TestClient,

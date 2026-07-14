@@ -45,6 +45,7 @@ import {
   getMe,
   getPolicyEvaluation,
   listArchives,
+  listApprovalHistory,
   listAssignments,
   listAuditEvents,
   listBudgetSummaries,
@@ -142,6 +143,15 @@ export function ControlCenter() {
   const approvals = useQuery({
     queryKey: ["approvals", user],
     queryFn: () => listPendingApprovals(user),
+    retry: false
+  });
+  const approvalHistory = useQuery({
+    queryKey: ["approval-history", user],
+    queryFn: () => listApprovalHistory(user),
+    enabled:
+      user === "admin@example.local" ||
+      user === "auditor@example.local" ||
+      user === "cto@example.local",
     retry: false
   });
   const providerHealth = useQuery({
@@ -275,6 +285,7 @@ export function ControlCenter() {
       setSelectedRequestId(updated.id);
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
       void queryClient.invalidateQueries({ queryKey: ["approvals"] });
+      void queryClient.invalidateQueries({ queryKey: ["approval-history"] });
       void queryClient.invalidateQueries({ queryKey: ["policy-evaluation"] });
       void queryClient.invalidateQueries({ queryKey: ["assignments"] });
       void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
@@ -883,6 +894,38 @@ export function ControlCenter() {
                 ))}
                 {incidents.data?.length === 0 ? (
                   <p className="text-sm text-slate-500">No incidents.</p>
+                ) : null}
+              </div>
+            </Panel>
+          ) : null}
+
+          {user === "admin@example.local" ||
+          user === "auditor@example.local" ||
+          user === "cto@example.local" ? (
+            <Panel title="Approval History" icon={CheckCircle2}>
+              <div className="grid gap-2">
+                {(approvalHistory.data ?? []).slice(0, 8).map((row) => (
+                  <div
+                    key={`${row.approval_step_id}-${row.decision_id ?? "pending"}`}
+                    className="rounded-md border border-line p-3 text-sm"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">{row.project_name}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {row.step_type} · {row.assigned_role}
+                        </p>
+                      </div>
+                      <StatusPill status={row.decision ?? row.step_status} />
+                    </div>
+                    <p className="mt-2 text-xs text-slate-600">
+                      {row.actor_email ?? "Awaiting reviewer"}
+                      {row.decided_at ? ` · ${new Date(row.decided_at).toLocaleTimeString()}` : ""}
+                    </p>
+                  </div>
+                ))}
+                {approvalHistory.data?.length === 0 ? (
+                  <p className="text-sm text-slate-500">No approval history yet.</p>
                 ) : null}
               </div>
             </Panel>

@@ -71,6 +71,21 @@ export type PendingApproval = {
   assigned_role: string;
 };
 
+export type ApprovalHistory = {
+  approval_step_id: string;
+  request_id: string;
+  project_name: string;
+  step_type: string;
+  assigned_role: string;
+  step_status: string;
+  decision_id: string | null;
+  decision: string | null;
+  comments: string;
+  actor_email: string | null;
+  decided_at: string | null;
+  step_created_at: string;
+};
+
 export type PolicyVersion = {
   id: string;
   policy_definition_id: string;
@@ -308,6 +323,10 @@ export function publishInternalSecurityReviewPolicy(user: DevUser, activePolicy:
 
 export function listPendingApprovals(user: DevUser) {
   return request<PendingApproval[]>("/approvals/pending", user);
+}
+
+export function listApprovalHistory(user: DevUser) {
+  return request<ApprovalHistory[]>("/approvals/history", user);
 }
 
 export function listProviderHealth(user: DevUser) {

@@ -152,6 +152,21 @@ class ApprovalAction(BaseModel):
     comments: str = Field(default="", max_length=2000)
 
 
+class ApprovalHistoryOut(BaseModel):
+    approval_step_id: str
+    request_id: str
+    project_name: str
+    step_type: str
+    assigned_role: str
+    step_status: str
+    decision_id: str | None
+    decision: str | None
+    comments: str
+    actor_email: str | None
+    decided_at: datetime | None
+    step_created_at: datetime
+
+
 class AuditEventOut(BaseModel):
     id: str
     event_type: str
