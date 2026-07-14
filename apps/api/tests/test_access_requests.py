@@ -53,16 +53,20 @@ def oidc_auth_header(
     *,
     audience: str = OIDC_TEST_AUDIENCE,
     issuer: str = OIDC_TEST_ISSUER,
+    groups: list[str] | None = None,
 ) -> dict[str, str]:
     now = int(time.time())
+    claims: dict[str, object] = {
+        "iss": issuer,
+        "aud": audience,
+        "email": email,
+        "iat": now,
+        "exp": now + 300,
+    }
+    if groups is not None:
+        claims["groups"] = groups
     token = jwt.encode(
-        {
-            "iss": issuer,
-            "aud": audience,
-            "email": email,
-            "iat": now,
-            "exp": now + 300,
-        },
+        claims,
         OIDC_TEST_SECRET,
         algorithm="HS256",
     )
@@ -101,6 +105,8 @@ def configure_oidc_auth_for_test() -> dict[str, object]:
         "oidc_jwks_url": settings.oidc_jwks_url,
         "oidc_jwks_json": settings.oidc_jwks_json,
         "oidc_allowed_algorithms": list(settings.oidc_allowed_algorithms),
+        "oidc_group_claims": list(settings.oidc_group_claims),
+        "oidc_group_role_map_json": settings.oidc_group_role_map_json,
     }
     settings.dev_auth_enabled = False
     settings.oidc_issuer = OIDC_TEST_ISSUER
@@ -109,6 +115,8 @@ def configure_oidc_auth_for_test() -> dict[str, object]:
     settings.oidc_jwks_url = ""
     settings.oidc_jwks_json = ""
     settings.oidc_allowed_algorithms = ["HS256"]
+    settings.oidc_group_claims = ["groups", "roles"]
+    settings.oidc_group_role_map_json = ""
     return original
 
 
@@ -121,6 +129,8 @@ def restore_auth_settings(original: dict[str, object]) -> None:
     settings.oidc_jwks_url = str(original["oidc_jwks_url"])
     settings.oidc_jwks_json = str(original["oidc_jwks_json"])
     settings.oidc_allowed_algorithms = list(original["oidc_allowed_algorithms"])
+    settings.oidc_group_claims = list(original["oidc_group_claims"])
+    settings.oidc_group_role_map_json = str(original["oidc_group_role_map_json"])
 
 
 def test_oidc_bearer_token_authenticates_seeded_user(client: TestClient) -> None:
@@ -160,6 +170,37 @@ def test_oidc_static_jwks_authenticates_rs256_token(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json()["email"] == "employee@example.local"
+
+
+def test_oidc_group_claims_sync_application_roles(client: TestClient) -> None:
+    original = configure_oidc_auth_for_test()
+    settings = get_settings()
+    settings.oidc_group_role_map_json = json.dumps(
+        {
+            "entra-platform-admins": ["platform_admin"],
+            "entra-auditors": ["security_auditor"],
+        }
+    )
+    try:
+        admin_headers = oidc_auth_header(
+            "employee@example.local",
+            groups=["entra-platform-admins"],
+        )
+        me = client.get("/auth/me", headers=admin_headers)
+        jobs = client.get("/lifecycle-jobs", headers=admin_headers)
+
+        auditor_headers = oidc_auth_header(
+            "auditor@example.local",
+            groups=["entra-auditors"],
+        )
+        audit = client.get("/audit-events", headers=auditor_headers)
+    finally:
+        restore_auth_settings(original)
+
+    assert me.status_code == 200
+    assert set(me.json()["roles"]) == {"platform_admin"}
+    assert jobs.status_code == 200
+    assert "identity.roles_synchronized" in {event["event_type"] for event in audit.json()}
 
 
 def test_dev_identity_header_is_rejected_when_dev_auth_is_disabled(

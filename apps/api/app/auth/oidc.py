@@ -8,6 +8,7 @@ import jwt
 from jwt import InvalidTokenError, PyJWKClient, PyJWKClientError
 
 from app.core.config import Settings
+from app.core.security import RoleName
 
 
 class OIDCAuthenticationError(Exception):
@@ -64,6 +65,21 @@ def principal_email_from_claims(claims: dict[str, Any], settings: Settings) -> s
     raise OIDCAuthenticationError("Token does not include a supported user email claim.")
 
 
+def role_names_from_group_claims(claims: dict[str, Any], settings: Settings) -> set[str]:
+    if not settings.oidc_group_role_map_json.strip():
+        return set()
+
+    group_role_map = _group_role_map(settings.oidc_group_role_map_json)
+    claim_values = set()
+    for claim_name in settings.oidc_group_claims:
+        claim_values.update(_string_claim_values(claims.get(claim_name)))
+
+    mapped_roles: set[str] = set()
+    for claim_value in claim_values:
+        mapped_roles.update(group_role_map.get(claim_value, set()))
+    return mapped_roles
+
+
 def _verification_key(token: str, algorithm: str, settings: Settings) -> Any:
     if algorithm.startswith("HS"):
         if algorithm == "HS256" and settings.oidc_hs256_secret:
@@ -100,6 +116,39 @@ def _key_from_static_jwks(token: str, jwks_json: str) -> Any:
             return jwt.PyJWK.from_dict(jwk).key
 
     raise OIDCAuthenticationError("Bearer token signing key is not trusted.")
+
+
+@lru_cache(maxsize=16)
+def _group_role_map(map_json: str) -> dict[str, set[str]]:
+    try:
+        payload = json.loads(map_json)
+    except json.JSONDecodeError as exc:
+        raise OIDCConfigurationError("OIDC_GROUP_ROLE_MAP_JSON is invalid JSON.") from exc
+
+    if not isinstance(payload, dict):
+        raise OIDCConfigurationError("OIDC_GROUP_ROLE_MAP_JSON must be a JSON object.")
+
+    valid_roles = {role.value for role in RoleName}
+    mapping: dict[str, set[str]] = {}
+    for group_name, role_value in payload.items():
+        if not isinstance(group_name, str) or not group_name:
+            raise OIDCConfigurationError("OIDC group names must be non-empty strings.")
+        role_names = _string_claim_values(role_value)
+        invalid_roles = role_names - valid_roles
+        if invalid_roles:
+            raise OIDCConfigurationError(
+                "OIDC_GROUP_ROLE_MAP_JSON contains unknown application roles."
+            )
+        mapping[group_name] = role_names
+    return mapping
+
+
+def _string_claim_values(value: Any) -> set[str]:
+    if isinstance(value, str) and value.strip():
+        return {value.strip()}
+    if isinstance(value, list):
+        return {item.strip() for item in value if isinstance(item, str) and item.strip()}
+    return set()
 
 
 @lru_cache(maxsize=8)

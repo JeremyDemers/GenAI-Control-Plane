@@ -3,7 +3,7 @@
 ## Completed
 
 - Monorepo scaffold with `apps/api`, `apps/web`, infrastructure, docs, CI, and Make targets.
-- FastAPI application with development authentication, OIDC-compatible bearer-token validation, RBAC, seeded users, health endpoints, policy evaluation, approval workflow, mock provider provisioning, and audit events.
+- FastAPI application with development authentication, OIDC-compatible bearer-token validation, enterprise group-to-role mapping, RBAC, seeded users, health endpoints, policy evaluation, approval workflow, mock provider provisioning, and audit events.
 - SQLAlchemy domain model covering the required control-plane tables.
 - Next.js portal with role switching, request submission, request list, approval queue, policy evaluation, and dashboard charts.
 - Docker Compose for PostgreSQL, Redis, API, worker, and web.
@@ -75,6 +75,6 @@
 
 ## Remaining Work
 
-- Add frontend OIDC/PKCE login and enterprise group-to-role mapping.
+- Add frontend OIDC/PKCE login and secure refresh-token handling.
 - Install concrete AWS, Azure, Google Cloud, Microsoft Graph, and GitHub SDK operations behind the live adapter feature flag.
 - Track the remaining moderate npm audit advisory for Next's transitive PostCSS dependency; the current `next@latest` still bundles the affected range, and `npm audit fix --force` recommends downgrading to an unusable legacy Next release.

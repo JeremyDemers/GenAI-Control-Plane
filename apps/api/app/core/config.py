@@ -25,6 +25,14 @@ class Settings(BaseSettings):
         default=["email", "preferred_username", "upn"],
         validation_alias="OIDC_EMAIL_CLAIMS",
     )
+    oidc_group_claims: list[str] = Field(
+        default=["groups", "roles"],
+        validation_alias="OIDC_GROUP_CLAIMS",
+    )
+    oidc_group_role_map_json: str = Field(
+        default="",
+        validation_alias="OIDC_GROUP_ROLE_MAP_JSON",
+    )
     cors_origins: list[str] = Field(
         default=[
             "http://localhost:3000",
