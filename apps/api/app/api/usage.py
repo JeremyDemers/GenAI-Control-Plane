@@ -1,14 +1,13 @@
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import current_user
 from app.core.database import get_db
 from app.models.entities import (
     AccessRequest,
-    ApprovalStep,
     CostRecord,
     ProviderAssignment,
     UsageRecord,
@@ -21,26 +20,7 @@ from app.schemas import (
     UsageRecordOut,
 )
 from app.services.lifecycle import assignment_totals
-
-
-def can_read_all(role_names: set[str]) -> bool:
-    return bool({"platform_admin", "security_auditor", "cto"} & role_names)
-
-
-def visible_request_ids(db: Session, user: User) -> list[str] | None:
-    role_names = {role.name for role in user.roles}
-    if can_read_all(role_names):
-        return None
-    if {"approver", "security_reviewer"} & role_names:
-        assigned = select(ApprovalStep.request_id).where(ApprovalStep.assigned_role.in_(role_names))
-        rows = db.scalars(
-            select(AccessRequest.id).where(
-                or_(AccessRequest.requester_id == user.id, AccessRequest.id.in_(assigned))
-            )
-        ).all()
-        return list(rows)
-    rows = db.scalars(select(AccessRequest.id).where(AccessRequest.requester_id == user.id)).all()
-    return list(rows)
+from app.services.visibility import visible_request_ids
 
 
 def assignment_out(db: Session, assignment: ProviderAssignment) -> ProviderAssignmentOut:

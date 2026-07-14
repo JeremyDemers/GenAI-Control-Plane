@@ -40,6 +40,28 @@ def test_employee_can_submit_request_and_policy_records_cto_path(client: TestCli
     assert response.status_code == 201
     created = response.json()
     assert created["status"] == "AWAITING_MANAGER_APPROVAL"
+    assert created["project_id"] is not None
+
+    owner_projects = client.get("/projects", headers={"x-dev-user": "owner@example.local"})
+    assert owner_projects.status_code == 200
+    assert owner_projects.json()[0]["id"] == created["project_id"]
+    assert owner_projects.json()[0]["member_count"] == 2
+
+    project_members = client.get(
+        f"/projects/{created['project_id']}/members",
+        headers={"x-dev-user": "owner@example.local"},
+    )
+    assert project_members.status_code == 200
+    assert {member["email"] for member in project_members.json()} == {
+        "employee@example.local",
+        "owner@example.local",
+    }
+
+    owner_requests = client.get(
+        "/access-requests", headers={"x-dev-user": "owner@example.local"}
+    )
+    assert owner_requests.status_code == 200
+    assert owner_requests.json()[0]["id"] == created["id"]
 
     evaluation = client.get(
         f"/access-requests/{created['id']}/policy-evaluation",
@@ -449,17 +471,18 @@ def test_usage_cost_budget_and_assignment_domain_endpoints(client: TestClient) -
     assert budgets.json()[0]["remaining_budget"] == "87.50"
     assert budgets.json()[0]["utilization_percent"] == 12
 
-    other_user_assignments = client.get(
+    owner_assignments = client.get(
         "/provider-assignments", headers={"x-dev-user": "owner@example.local"}
     )
-    assert other_user_assignments.status_code == 200
-    assert other_user_assignments.json() == []
+    assert owner_assignments.status_code == 200
+    assert len(owner_assignments.json()) == 2
 
-    denied_usage = client.get(
+    owner_usage = client.get(
         f"/usage?assignment_id={assignment_id}",
         headers={"x-dev-user": "owner@example.local"},
     )
-    assert denied_usage.status_code == 403
+    assert owner_usage.status_code == 200
+    assert owner_usage.json()[0]["assignment_id"] == assignment_id
 
     auditor_assignments = client.get(
         "/provider-assignments", headers={"x-dev-user": "auditor@example.local"}

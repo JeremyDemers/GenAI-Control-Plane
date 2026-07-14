@@ -11,6 +11,7 @@ export type DevUser =
 
 export type AccessRequest = {
   id: string;
+  project_id: string | null;
   project_name: string;
   requester_id: string;
   status: string;
@@ -23,6 +24,26 @@ export type AccessRequest = {
   requested_end_at: string;
   submitted_at: string | null;
   expires_at: string | null;
+};
+
+export type Project = {
+  id: string;
+  name: string;
+  cost_center: string;
+  owner_user_id: string | null;
+  status: string;
+  member_count: number;
+  created_at: string;
+};
+
+export type ProjectMember = {
+  id: string;
+  project_id: string;
+  user_id: string;
+  email: string;
+  display_name: string;
+  member_role: string;
+  created_at: string;
 };
 
 export type CurrentUser = {
@@ -225,6 +246,14 @@ export function getMe(user: DevUser) {
 
 export function listRequests(user: DevUser) {
   return request<AccessRequest[]>("/access-requests", user);
+}
+
+export function listProjects(user: DevUser) {
+  return request<Project[]>("/projects", user);
+}
+
+export function listProjectMembers(user: DevUser, projectId: string) {
+  return request<ProjectMember[]>(`/projects/${projectId}/members`, user);
 }
 
 export function createAccessRequest(user: DevUser, payload: AccessRequestFormValues) {

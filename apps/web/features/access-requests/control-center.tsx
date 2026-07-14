@@ -55,6 +55,8 @@ import {
   listProviderConfiguration,
   listProviderAssignments,
   listProviderHealth,
+  listProjectMembers,
+  listProjects,
   listRequests,
   listUsageRecords,
   markNotificationRead,
@@ -73,6 +75,7 @@ import {
 
 const users: DevUser[] = [
   "employee@example.local",
+  "owner@example.local",
   "approver@example.local",
   "cto@example.local",
   "admin@example.local",
@@ -132,6 +135,7 @@ export function ControlCenter() {
   const queryClient = useQueryClient();
   const me = useQuery({ queryKey: ["me", user], queryFn: () => getMe(user) });
   const requests = useQuery({ queryKey: ["requests", user], queryFn: () => listRequests(user) });
+  const projects = useQuery({ queryKey: ["projects", user], queryFn: () => listProjects(user) });
   const approvals = useQuery({
     queryKey: ["approvals", user],
     queryFn: () => listPendingApprovals(user),
@@ -218,6 +222,16 @@ export function ControlCenter() {
     () => requests.data?.find((request) => request.id === selectedRequestId) ?? requests.data?.[0],
     [requests.data, selectedRequestId]
   );
+  const selectedRequestProjectId = selectedRequest?.project_id;
+  const selectedProjectId = projects.data?.some((project) => project.id === selectedRequestProjectId)
+    ? selectedRequestProjectId
+    : projects.data?.[0]?.id;
+  const projectMembers = useQuery({
+    queryKey: ["project-members", user, selectedProjectId],
+    queryFn: () => listProjectMembers(user, selectedProjectId ?? ""),
+    enabled: Boolean(selectedProjectId),
+    retry: false
+  });
   const evaluation = useQuery({
     queryKey: ["policy-evaluation", user, selectedRequest?.id],
     queryFn: () => getPolicyEvaluation(user, selectedRequest?.id ?? ""),
@@ -235,6 +249,8 @@ export function ControlCenter() {
     onSuccess: (created) => {
       setSelectedRequestId(created.id);
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      void queryClient.invalidateQueries({ queryKey: ["project-members"] });
       void queryClient.invalidateQueries({ queryKey: ["approvals"] });
       void queryClient.invalidateQueries({ queryKey: ["assignments"] });
       void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
@@ -469,6 +485,42 @@ export function ControlCenter() {
                 ))}
               </div>
             ) : null}
+          </Panel>
+
+          <Panel title="Projects" icon={UserRound}>
+            <div className="grid gap-3">
+              {(projects.data ?? []).slice(0, 4).map((project) => (
+                <div key={project.id} className="rounded-md border border-line p-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">{project.name}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {project.cost_center} · {project.member_count} members
+                      </p>
+                    </div>
+                    <StatusPill status={project.status} />
+                  </div>
+                </div>
+              ))}
+              {projectMembers.data && projectMembers.data.length > 0 ? (
+                <div className="rounded-md border border-line bg-panel p-3 text-sm">
+                  <p className="font-semibold">Project members</p>
+                  <div className="mt-2 grid gap-2">
+                    {projectMembers.data.map((member) => (
+                      <div key={member.id} className="flex items-center justify-between gap-3">
+                        <span>{member.email}</span>
+                        <span className="text-xs font-semibold text-slate-500">
+                          {member.member_role}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {projects.data?.length === 0 ? (
+                <p className="text-sm text-slate-500">No projects visible for this identity.</p>
+              ) : null}
+            </div>
           </Panel>
 
           <Panel title="Requests" icon={FileClock}>

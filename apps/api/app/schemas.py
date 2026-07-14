@@ -81,6 +81,7 @@ class PolicyVersionCreate(BaseModel):
 
 class AccessRequestOut(BaseModel):
     id: str
+    project_id: str | None
     project_name: str
     requester_id: str
     status: RequestStatus
@@ -93,6 +94,26 @@ class AccessRequestOut(BaseModel):
     requested_end_at: datetime
     submitted_at: datetime | None
     expires_at: datetime | None
+
+
+class ProjectOut(BaseModel):
+    id: str
+    name: str
+    cost_center: str
+    owner_user_id: str | None
+    status: str
+    member_count: int
+    created_at: datetime
+
+
+class ProjectMemberOut(BaseModel):
+    id: str
+    project_id: str
+    user_id: str
+    email: str
+    display_name: str
+    member_role: str
+    created_at: datetime
 
 
 class ExtensionRequestCreate(BaseModel):

@@ -29,9 +29,10 @@ Show data freshness timestamps, distinguish estimated and provider-reported cost
 ## Usage, Cost, and Budget Evidence
 
 Employees can review evidence for their own requests at `/provider-assignments`, `/usage`, `/costs`,
-and `/budgets`. Reviewers can review evidence for requests assigned to their approval queue. Platform
-administrators, security auditors, and CTOs can review all visible assignments, usage records, cost
-records, and budget summaries with freshness timestamps.
+and `/budgets`. Project members can review evidence for their assigned projects through the same
+endpoints and can list visible projects at `/projects`. Reviewers can review evidence for requests
+assigned to their approval queue. Platform administrators, security auditors, and CTOs can review all
+visible assignments, usage records, cost records, and budget summaries with freshness timestamps.
 
 ## Emergency Suspension
 
