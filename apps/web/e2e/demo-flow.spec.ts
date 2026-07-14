@@ -37,7 +37,7 @@ test("interview demo lifecycle", async ({ page }) => {
   await page.getByTestId("usage-critical-amazon_bedrock").click();
   await page.getByTestId("usage-enforcement-amazon_bedrock").click();
   await expect(page.getByTestId("status-SUSPENDED")).toBeAttached();
-  await expect(page.getByText("Incidents")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Incidents" })).toBeVisible();
   await page.getByTestId("resolve-incident").click();
   await page.getByTestId("restore-amazon_bedrock").click();
   await expect(page.getByTestId("status-ACTIVE")).toBeAttached();

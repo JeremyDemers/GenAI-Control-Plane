@@ -306,10 +306,30 @@ export function listProviderConfiguration(user: DevUser) {
   return request<ProviderConfiguration[]>("/providers/configuration", user);
 }
 
-export function decideApproval(user: DevUser, stepId: string, decision: "approve" | "reject") {
+export function decideApproval(
+  user: DevUser,
+  stepId: string,
+  decision: "approve" | "reject" | "request_information"
+) {
   return request<AccessRequest>(`/approvals/${stepId}`, user, {
     method: "POST",
-    body: JSON.stringify({ decision, comments: "Reviewed in local demo." })
+    body: JSON.stringify({
+      decision,
+      comments:
+        decision === "request_information"
+          ? "Please clarify retention and artifact handling before approval."
+          : "Reviewed in local demo."
+    })
+  });
+}
+
+export function respondToInformationRequest(user: DevUser, requestId: string) {
+  return request<AccessRequest>(`/access-requests/${requestId}/information-response`, user, {
+    method: "POST",
+    body: JSON.stringify({
+      response:
+        "Artifacts will be retained for seven days, archived with checksum evidence, and removed during closure."
+    })
   });
 }
 

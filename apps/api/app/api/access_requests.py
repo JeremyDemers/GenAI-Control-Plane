@@ -15,7 +15,12 @@ from app.models.entities import (
     User,
 )
 from app.models.enums import RequestStatus
-from app.schemas import AccessRequestCreate, AccessRequestOut, PolicyEvaluationOut
+from app.schemas import (
+    AccessRequestCreate,
+    AccessRequestOut,
+    AdditionalInformationIn,
+    PolicyEvaluationOut,
+)
 from app.services.audit import record_audit_event
 from app.services.notifications import notify_approval_step, notify_user
 from app.services.policies import evaluate_request
@@ -262,6 +267,80 @@ def cancel_request(
         action="cancel",
         result="success",
         correlation_id=correlation_id,
+    )
+    db.commit()
+    db.refresh(request)
+    return to_request_out(request)
+
+
+@router.post("/{request_id}/information-response", response_model=AccessRequestOut)
+def respond_to_information_request(
+    request_id: str,
+    payload: AdditionalInformationIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("requests:create")),
+    correlation_id: str = Depends(get_correlation_id),
+) -> AccessRequestOut:
+    request = db.get(AccessRequest, request_id)
+    if not request:
+        raise HTTPException(
+            status_code=404, detail={"code": "NOT_FOUND", "message": "Request not found."}
+        )
+    if request.requester_id != user.id:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "FORBIDDEN",
+                "message": "Only the requester can provide additional information.",
+            },
+        )
+    step = db.scalar(
+        select(ApprovalStep)
+        .where(
+            ApprovalStep.request_id == request.id,
+            ApprovalStep.status == "request_information",
+        )
+        .order_by(ApprovalStep.sequence)
+    )
+    if request.status != RequestStatus.SUBMITTED or not step:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "INFORMATION_NOT_REQUESTED",
+                "message": "This request is not waiting for additional information.",
+            },
+        )
+
+    request.additional_notes = (
+        f"{request.additional_notes}\nAdditional information: {payload.response}".strip()
+    )
+    step.status = "pending"
+    request.status = transition(
+        request.status,
+        {
+            "manager": RequestStatus.AWAITING_MANAGER_APPROVAL,
+            "security": RequestStatus.AWAITING_SECURITY_REVIEW,
+            "cto": RequestStatus.AWAITING_CTO_APPROVAL,
+        }[step.step_type],
+    )
+    notify_approval_step(
+        db,
+        step_type=step.step_type,
+        project_name=request.project_name,
+        request_id=request.id,
+    )
+    record_audit_event(
+        db,
+        event_type="access_request.information_provided",
+        actor_user_id=user.id,
+        target_type="access_request",
+        target_id=request.id,
+        request_id=request.id,
+        project_id=request.project_id,
+        action="provide_information",
+        result="success",
+        correlation_id=correlation_id,
+        metadata_json={"response": payload.response},
     )
     db.commit()
     db.refresh(request)

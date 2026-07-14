@@ -61,6 +61,7 @@ import {
   listUsageRecords,
   markNotificationRead,
   publishInternalSecurityReviewPolicy,
+  respondToInformationRequest,
   restoreAssignment,
   resolveIncident,
   simulateUsage,
@@ -260,7 +261,13 @@ export function ControlCenter() {
   });
 
   const approvalMutation = useMutation({
-    mutationFn: ({ stepId, decision }: { stepId: string; decision: "approve" | "reject" }) =>
+    mutationFn: ({
+      stepId,
+      decision
+    }: {
+      stepId: string;
+      decision: "approve" | "reject" | "request_information";
+    }) =>
       decideApproval(user, stepId, decision),
     onSuccess: (updated) => {
       setSelectedRequestId(updated.id);
@@ -271,6 +278,16 @@ export function ControlCenter() {
       void queryClient.invalidateQueries({ queryKey: ["provider-assignments"] });
       void queryClient.invalidateQueries({ queryKey: ["budget-summaries"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    }
+  });
+  const informationResponseMutation = useMutation({
+    mutationFn: (requestId: string) => respondToInformationRequest(user, requestId),
+    onSuccess: (updated) => {
+      setSelectedRequestId(updated.id);
+      void queryClient.invalidateQueries({ queryKey: ["requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["approvals"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
     }
   });
   const cancelMutation = useMutation({
@@ -585,6 +602,17 @@ export function ControlCenter() {
                             }}
                           >
                             Extend
+                          </button>
+                        ) : null}
+                        {user === "employee@example.local" && request.status === "SUBMITTED" ? (
+                          <button
+                            className="rounded-md border border-line px-2 py-1 text-xs font-semibold"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              informationResponseMutation.mutate(request.id);
+                            }}
+                          >
+                            Respond
                           </button>
                         ) : null}
                       </td>
@@ -1102,6 +1130,17 @@ export function ControlCenter() {
                         }
                       >
                         Reject
+                      </button>
+                      <button
+                        className="rounded-md border border-line px-3 py-2 text-xs font-semibold"
+                        onClick={() =>
+                          approvalMutation.mutate({
+                            stepId: step.step_id,
+                            decision: "request_information"
+                          })
+                        }
+                      >
+                        Need Info
                       </button>
                     </div>
                   </div>

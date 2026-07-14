@@ -212,6 +212,61 @@ def test_approval_workflow_provisions_mock_assignments(client: TestClient) -> No
     }
 
 
+def test_approver_can_request_information_and_requester_can_respond(
+    client: TestClient,
+) -> None:
+    created = client.post(
+        "/access-requests",
+        headers={"x-dev-user": "employee@example.local"},
+        json=request_payload(),
+    ).json()
+    manager_step = client.get(
+        "/approvals/pending", headers={"x-dev-user": "approver@example.local"}
+    ).json()[0]
+
+    information_request = client.post(
+        f"/approvals/{manager_step['step_id']}",
+        headers={"x-dev-user": "approver@example.local"},
+        json={
+            "decision": "request_information",
+            "comments": "Clarify source-code retention controls.",
+        },
+    )
+    assert information_request.status_code == 200
+    assert information_request.json()["status"] == "SUBMITTED"
+
+    pending_after_request = client.get(
+        "/approvals/pending", headers={"x-dev-user": "approver@example.local"}
+    )
+    assert pending_after_request.status_code == 200
+    assert pending_after_request.json() == []
+
+    response = client.post(
+        f"/access-requests/{created['id']}/information-response",
+        headers={"x-dev-user": "employee@example.local"},
+        json={
+            "response": (
+                "Artifacts are retained for seven days, then archived with checksum evidence."
+            )
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "AWAITING_MANAGER_APPROVAL"
+
+    pending_after_response = client.get(
+        "/approvals/pending", headers={"x-dev-user": "approver@example.local"}
+    )
+    assert pending_after_response.status_code == 200
+    assert pending_after_response.json()[0]["step_id"] == manager_step["step_id"]
+
+    notifications = client.get(
+        "/notifications", headers={"x-dev-user": "employee@example.local"}
+    ).json()
+    assert {notification["event_type"] for notification in notifications} >= {
+        "request_information_requested"
+    }
+
+
 def test_employee_can_cancel_own_pending_request(client: TestClient) -> None:
     created = client.post(
         "/access-requests",

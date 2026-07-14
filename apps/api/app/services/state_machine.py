@@ -15,6 +15,7 @@ ALLOWED_TRANSITIONS: dict[RequestStatus, set[RequestStatus]] = {
         RequestStatus.CANCELLED,
     },
     RequestStatus.AWAITING_MANAGER_APPROVAL: {
+        RequestStatus.SUBMITTED,
         RequestStatus.AWAITING_SECURITY_REVIEW,
         RequestStatus.AWAITING_CTO_APPROVAL,
         RequestStatus.APPROVED,
@@ -22,12 +23,14 @@ ALLOWED_TRANSITIONS: dict[RequestStatus, set[RequestStatus]] = {
         RequestStatus.CANCELLED,
     },
     RequestStatus.AWAITING_SECURITY_REVIEW: {
+        RequestStatus.SUBMITTED,
         RequestStatus.AWAITING_CTO_APPROVAL,
         RequestStatus.APPROVED,
         RequestStatus.REJECTED,
         RequestStatus.CANCELLED,
     },
     RequestStatus.AWAITING_CTO_APPROVAL: {
+        RequestStatus.SUBMITTED,
         RequestStatus.APPROVED,
         RequestStatus.REJECTED,
         RequestStatus.CANCELLED,

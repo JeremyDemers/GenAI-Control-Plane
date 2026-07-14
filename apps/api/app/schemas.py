@@ -96,6 +96,10 @@ class AccessRequestOut(BaseModel):
     expires_at: datetime | None
 
 
+class AdditionalInformationIn(BaseModel):
+    response: str = Field(min_length=10, max_length=2000)
+
+
 class ProjectOut(BaseModel):
     id: str
     name: str
