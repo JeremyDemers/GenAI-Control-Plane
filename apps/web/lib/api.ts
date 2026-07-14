@@ -186,6 +186,7 @@ export type LifecycleJob = {
   status: string;
   attempt_count: number;
   idempotency_key: string;
+  payload: Record<string, unknown>;
   failure_information: Record<string, unknown>;
   created_at: string;
   updated_at: string;

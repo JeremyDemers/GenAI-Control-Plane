@@ -130,6 +130,24 @@ function nextIso(days: number) {
   return date.toISOString();
 }
 
+function payloadValue(payload: Record<string, unknown>, key: string) {
+  const value = payload[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function failureSummary(failure: Record<string, unknown>) {
+  const message = failure.message;
+  if (typeof message === "string" && message.length > 0) {
+    return message;
+  }
+  const details = failure.details;
+  if (details && typeof details === "object" && "code" in details) {
+    const code = (details as Record<string, unknown>).code;
+    return typeof code === "string" ? code : null;
+  }
+  return null;
+}
+
 const defaultValues: AccessRequestFormValues = {
   project_name: "Interview Demo Sandbox",
   business_justification: "Evaluate governed AI assistance for customer support workflows.",
@@ -1200,6 +1218,19 @@ export function ControlCenter() {
                           <p className="break-all text-xs text-slate-500">
                             {job.idempotency_key}
                           </p>
+                          <div className="grid gap-1 text-xs text-slate-500 sm:grid-cols-2">
+                            <span>
+                              Provider: {payloadValue(job.payload, "provider") ?? "n/a"}
+                            </span>
+                            <span>
+                              Correlation: {payloadValue(job.payload, "correlation_id") ?? "n/a"}
+                            </span>
+                          </div>
+                          {failureSummary(job.failure_information) ? (
+                            <p className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">
+                              {failureSummary(job.failure_information)}
+                            </p>
+                          ) : null}
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className="text-xs text-slate-500">
                               Attempt {job.attempt_count}
