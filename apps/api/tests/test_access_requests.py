@@ -158,6 +158,20 @@ def test_project_owner_can_add_existing_user_to_project(client: TestClient) -> N
     event_types = {event["event_type"] for event in audit.json()}
     assert {"project.member_added", "authorization.failure"} <= event_types
 
+    project_audit = client.get(
+        f"/projects/{created['project_id']}/audit-events",
+        headers={"x-dev-user": "owner@example.local"},
+    )
+    assert project_audit.status_code == 200
+    assert "project.member_added" in {event["event_type"] for event in project_audit.json()}
+    assert all(event["project_id"] == created["project_id"] for event in project_audit.json())
+
+    denied_project_audit = client.get(
+        f"/projects/{created['project_id']}/audit-events",
+        headers={"x-dev-user": "approver@example.local"},
+    )
+    assert denied_project_audit.status_code == 404
+
 
 def test_project_owner_reassignment_requires_acceptance_and_approval(
     client: TestClient,

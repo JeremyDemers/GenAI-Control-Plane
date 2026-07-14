@@ -186,6 +186,9 @@ export type AuditEvent = {
   actor_user_id: string | null;
   target_type: string;
   target_id: string | null;
+  request_id: string | null;
+  project_id: string | null;
+  provider: string | null;
   action: string;
   result: string;
   reason: string;
@@ -339,6 +342,10 @@ export function listProjects(user: DevUser) {
 
 export function listProjectMembers(user: DevUser, projectId: string) {
   return request<ProjectMember[]>(`/projects/${projectId}/members`, user);
+}
+
+export function listProjectAuditEvents(user: DevUser, projectId: string) {
+  return request<AuditEvent[]>(`/projects/${projectId}/audit-events`, user);
 }
 
 export function addProjectMember(

@@ -220,6 +220,9 @@ class AuditEventOut(BaseModel):
     actor_user_id: str | None
     target_type: str
     target_id: str | None
+    request_id: str | None = None
+    project_id: str | None = None
+    provider: str | None = None
     action: str
     result: str
     reason: str

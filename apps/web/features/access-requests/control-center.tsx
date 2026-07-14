@@ -63,6 +63,7 @@ import {
   listPolicies,
   listPendingApprovals,
   listProvisioningEvidence,
+  listProjectAuditEvents,
   listProviderConfiguration,
   listProviderAssignments,
   listProviderHealth,
@@ -303,10 +304,17 @@ export function ControlCenter() {
   const selectedProjectId = projects.data?.some((project) => project.id === selectedRequestProjectId)
     ? selectedRequestProjectId
     : projects.data?.[0]?.id;
+  const showProjectAudit = user !== "auditor@example.local";
   const projectMembers = useQuery({
     queryKey: ["project-members", user, selectedProjectId],
     queryFn: () => listProjectMembers(user, selectedProjectId ?? ""),
     enabled: Boolean(selectedProjectId),
+    retry: false
+  });
+  const projectAuditEvents = useQuery({
+    queryKey: ["project-audit-events", user, selectedProjectId],
+    queryFn: () => listProjectAuditEvents(user, selectedProjectId ?? ""),
+    enabled: Boolean(selectedProjectId) && showProjectAudit,
     retry: false
   });
   const evaluation = useQuery({
@@ -796,6 +804,26 @@ export function ControlCenter() {
                         <span className="text-xs font-semibold text-slate-500">
                           {member.member_role}
                         </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {showProjectAudit && projectAuditEvents.data && projectAuditEvents.data.length > 0 ? (
+                <div className="rounded-md border border-line bg-panel p-3 text-sm">
+                  <p className="font-semibold">Project audit</p>
+                  <div className="mt-2 grid gap-2">
+                    {projectAuditEvents.data.slice(0, 4).map((event) => (
+                      <div key={event.id} className="rounded-md border border-line bg-white p-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-semibold">{event.event_type}</span>
+                          <span className="text-xs text-slate-500">
+                            {new Date(event.created_at).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {event.action} · {event.result}
+                        </p>
                       </div>
                     ))}
                   </div>
