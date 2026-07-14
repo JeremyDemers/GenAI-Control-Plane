@@ -11,6 +11,7 @@ from app.providers.registry import get_provider_adapter
 from app.services.audit import record_audit_event
 from app.services.lifecycle import expire_and_archive_assignment, restore_assignment
 from app.services.notifications import notify_roles, notify_user
+from app.services.reports import cost_allocation_csv
 from app.services.state_machine import transition
 
 SAFE_PROVIDER_ERROR_KEYS = {"code", "message", "operation", "provider_status", "retry_after"}
@@ -292,7 +293,12 @@ async def run_queued_lifecycle_jobs(db: Session, limit: int = 10) -> int:
         .where(
             LifecycleJob.status == "queued",
             LifecycleJob.job_type.in_(
-                {"provision_access", "restore_access", "archive_and_deprovision"}
+                {
+                    "provision_access",
+                    "restore_access",
+                    "archive_and_deprovision",
+                    "cost_allocation_delivery",
+                }
             ),
         )
         .order_by(LifecycleJob.created_at.asc())
@@ -305,6 +311,8 @@ async def run_queued_lifecycle_jobs(db: Session, limit: int = 10) -> int:
             await run_restore_job(db, job)
         elif job.job_type == "archive_and_deprovision":
             await run_archive_and_deprovision_job(db, job)
+        elif job.job_type == "cost_allocation_delivery":
+            run_cost_allocation_delivery_job(db, job)
     return len(jobs)
 
 
@@ -428,3 +436,32 @@ async def enqueue_and_maybe_run_lifecycle_action(
     if get_settings().lifecycle_inline_execution and job.status == "queued":
         await run_queued_lifecycle_jobs(db, limit=1)
     return job
+
+
+def run_cost_allocation_delivery_job(db: Session, job: LifecycleJob) -> None:
+    _start_job(job)
+    payload = job.payload or {}
+    correlation_id = str(payload.get("correlation_id", "worker"))
+    _, row_count = cost_allocation_csv(db)
+    job.payload = {
+        **payload,
+        "row_count": row_count,
+        "format": str(payload.get("format", "csv")),
+    }
+    job.status = "completed"
+    record_audit_event(
+        db,
+        event_type="report.cost_allocation_delivery_completed",
+        actor_user_id=None,
+        target_type="lifecycle_job",
+        target_id=job.id,
+        action="deliver_report",
+        result="success",
+        correlation_id=correlation_id,
+        metadata_json={
+            "frequency": payload.get("frequency", "weekly"),
+            "recipients": payload.get("recipients", []),
+            "row_count": row_count,
+        },
+    )
+    db.flush()

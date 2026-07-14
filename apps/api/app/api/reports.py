@@ -1,7 +1,5 @@
-import csv
 from collections import Counter, defaultdict
 from decimal import Decimal
-from io import StringIO
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends
@@ -10,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_correlation_id, require_permission
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.entities import (
     AccessRequest,
@@ -28,70 +27,14 @@ from app.schemas import (
     ProviderSpendOut,
 )
 from app.services.audit import record_audit_event
+from app.services.reports import cost_allocation_csv
+from app.workers.jobs import run_queued_lifecycle_jobs
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
-COST_ALLOCATION_EXPORT_FIELDS = [
-    "cost_center",
-    "project_name",
-    "request_id",
-    "assignment_id",
-    "provider",
-    "assignment_status",
-    "currency",
-    "requested_budget",
-    "allocated_spend",
-    "tokens",
-    "request_count",
-]
-
-
-def cost_allocation_csv(db: Session) -> tuple[str, int]:
-    requests = db.scalars(select(AccessRequest)).all()
-    assignments = db.scalars(select(ProviderAssignment)).all()
-    costs = db.scalars(select(CostRecord)).all()
-    usage = db.scalars(select(UsageRecord)).all()
-
-    request_by_id = {request.id: request for request in requests}
-    spend_by_assignment: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
-    tokens_by_assignment: dict[str, int] = defaultdict(int)
-    calls_by_assignment: dict[str, int] = defaultdict(int)
-
-    for cost in costs:
-        spend_by_assignment[cost.assignment_id] += cost.amount
-    for record in usage:
-        tokens_by_assignment[record.assignment_id] += record.tokens
-        calls_by_assignment[record.assignment_id] += record.request_count
-
-    output = StringIO()
-    writer = csv.DictWriter(output, fieldnames=COST_ALLOCATION_EXPORT_FIELDS)
-    writer.writeheader()
-    row_count = 0
-    for assignment in sorted(assignments, key=lambda item: (item.provider, item.id)):
-        request = request_by_id.get(assignment.request_id)
-        if request is None:
-            continue
-        writer.writerow(
-            {
-                "cost_center": request.cost_center,
-                "project_name": request.project_name,
-                "request_id": request.id,
-                "assignment_id": assignment.id,
-                "provider": assignment.provider,
-                "assignment_status": assignment.status,
-                "currency": request.currency,
-                "requested_budget": request.requested_budget,
-                "allocated_spend": spend_by_assignment[assignment.id],
-                "tokens": tokens_by_assignment[assignment.id],
-                "request_count": calls_by_assignment[assignment.id],
-            }
-        )
-        row_count += 1
-    return output.getvalue(), row_count
-
 
 def delivery_out(job: LifecycleJob) -> CostAllocationDeliveryOut:
-    metadata = job.failure_information or {}
+    metadata = job.payload or job.failure_information or {}
     return CostAllocationDeliveryOut(
         id=job.id,
         status=job.status,
@@ -225,23 +168,23 @@ def list_cost_allocation_deliveries(
     response_model=CostAllocationDeliveryOut,
     status_code=201,
 )
-def schedule_cost_allocation_delivery(
+async def schedule_cost_allocation_delivery(
     payload: CostAllocationDeliveryCreate,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("reports:schedule")),
     correlation_id: str = Depends(get_correlation_id),
 ) -> CostAllocationDeliveryOut:
-    _, row_count = cost_allocation_csv(db)
     job = LifecycleJob(
         job_type="cost_allocation_delivery",
-        status="completed",
-        attempt_count=1,
+        status="queued",
+        attempt_count=0,
         idempotency_key=f"report-delivery:{uuid4()}",
-        failure_information={
+        payload={
             "frequency": payload.frequency,
             "recipients": payload.recipients,
-            "row_count": row_count,
+            "row_count": 0,
             "format": "csv",
+            "correlation_id": correlation_id,
         },
     )
     db.add(job)
@@ -253,14 +196,15 @@ def schedule_cost_allocation_delivery(
         target_type="lifecycle_job",
         target_id=job.id,
         action="schedule_delivery",
-        result="success",
+        result="queued",
         correlation_id=correlation_id,
         metadata_json={
             "frequency": payload.frequency,
             "recipients": payload.recipients,
-            "row_count": row_count,
         },
     )
+    if get_settings().lifecycle_inline_execution:
+        await run_queued_lifecycle_jobs(db, limit=1)
     db.commit()
     db.refresh(job)
     return delivery_out(job)

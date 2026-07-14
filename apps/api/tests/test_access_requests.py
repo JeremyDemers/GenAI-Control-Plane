@@ -1479,6 +1479,43 @@ def test_cto_can_schedule_cost_allocation_delivery(client: TestClient) -> None:
     }
 
 
+def test_worker_drains_queued_cost_allocation_delivery(client: TestClient) -> None:
+    settings = get_settings()
+    original_inline_execution = settings.lifecycle_inline_execution
+    provision_demo_request(client)
+    try:
+        settings.lifecycle_inline_execution = False
+        delivery = client.post(
+            "/reports/cost-allocation/deliveries",
+            headers={"x-dev-user": "cto@example.local", "x-correlation-id": "queued-delivery"},
+            json={"frequency": "weekly", "recipients": ["finance@example.local"]},
+        )
+        assert delivery.status_code == 201
+        assert delivery.json()["status"] == "queued"
+        assert delivery.json()["row_count"] == 0
+
+        jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"}).json()
+        report_job = next(job for job in jobs if job["job_type"] == "cost_allocation_delivery")
+        assert report_job["payload"]["correlation_id"] == "queued-delivery"
+
+        assert asyncio.run(drain_once(limit=10)) == 1
+        deliveries = client.get(
+            "/reports/cost-allocation/deliveries",
+            headers={"x-dev-user": "auditor@example.local"},
+        )
+        assert deliveries.status_code == 200
+        assert deliveries.json()[0]["status"] == "completed"
+        assert deliveries.json()[0]["row_count"] == 2
+
+        audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+        assert {
+            "report.cost_allocation_delivery_scheduled",
+            "report.cost_allocation_delivery_completed",
+        } <= {event["event_type"] for event in audit.json()}
+    finally:
+        settings.lifecycle_inline_execution = original_inline_execution
+
+
 def test_employee_can_request_extension_and_cto_can_approve(client: TestClient) -> None:
     created = provision_demo_request(client)
     current_end = datetime.fromisoformat(str(created["requested_end_at"]))
