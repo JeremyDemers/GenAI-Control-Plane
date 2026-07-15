@@ -224,6 +224,7 @@ export type AuditEvent = {
   result: string;
   reason: string;
   correlation_id: string;
+  metadata_json: Record<string, unknown>;
   created_at: string;
 };
 

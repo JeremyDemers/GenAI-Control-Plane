@@ -239,6 +239,7 @@ class AuditEventOut(BaseModel):
     result: str
     reason: str
     correlation_id: str
+    metadata_json: dict[str, Any]
     created_at: datetime
 
 
