@@ -1,4 +1,5 @@
 import asyncio
+import csv
 import json
 import time
 from datetime import UTC, datetime, timedelta
@@ -395,6 +396,8 @@ def test_employee_can_submit_request_and_policy_records_cto_path(client: TestCli
     )
     assert read_event["target_id"] == notification_id
     assert read_event["correlation_id"] == "notification-read"
+    assert read_event["metadata_json"]["event_type"] == "request_submitted"
+    assert read_event["metadata_json"]["delivery_status"] == "pending"
 
     denied_read = client.post(
         f"/notifications/{notification_id}/read",
@@ -454,6 +457,8 @@ def test_employee_can_mark_all_own_notifications_read(client: TestClient) -> Non
     assert read_all_event["actor_user_id"] == updated_employee_notifications.json()[0]["user_id"]
     assert read_all_event["target_id"] == updated_employee_notifications.json()[0]["user_id"]
     assert read_all_event["correlation_id"] == "notifications-read-all"
+    assert read_all_event["metadata_json"]["marked_read"] == len(employee_notifications.json())
+    assert "request_submitted" in read_all_event["metadata_json"]["event_types"]
 
 
 def test_worker_delivers_pending_notifications(client: TestClient) -> None:
@@ -543,6 +548,7 @@ def test_project_owner_can_add_existing_user_to_project(client: TestClient) -> N
     assert project_audit.status_code == 200
     assert "project.member_added" in {event["event_type"] for event in project_audit.json()}
     assert all(event["project_id"] == created["project_id"] for event in project_audit.json())
+    assert all("metadata_json" in event for event in project_audit.json())
 
     denied_project_audit = client.get(
         f"/projects/{created['project_id']}/audit-events",
@@ -1388,7 +1394,11 @@ def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -
     assert audit_export.status_code == 200
     assert audit_export.headers["content-type"].startswith("text/csv")
     assert "event_type" in audit_export.text.splitlines()[0]
+    assert "metadata_json" in audit_export.text.splitlines()[0]
     assert "lifecycle.closed" in audit_export.text
+    rows = list(csv.DictReader(audit_export.text.splitlines()))
+    closed_row = next(row for row in rows if row["event_type"] == "lifecycle.closed")
+    assert isinstance(json.loads(closed_row["metadata_json"]), dict)
 
     denied_export = client.get(
         "/audit-events/export", headers={"x-dev-user": "employee@example.local"}

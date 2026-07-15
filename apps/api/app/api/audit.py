@@ -1,4 +1,5 @@
 import csv
+import json
 from io import StringIO
 
 from fastapi import APIRouter, Depends
@@ -28,6 +29,7 @@ AUDIT_EXPORT_FIELDS = [
     "result",
     "reason",
     "correlation_id",
+    "metadata_json",
     "created_at",
 ]
 
@@ -52,6 +54,7 @@ def list_audit_events(
             result=event.result,
             reason=event.reason,
             correlation_id=event.correlation_id,
+            metadata_json=event.metadata_json,
             created_at=event.created_at,
         )
         for event in events
@@ -83,6 +86,7 @@ def export_audit_events(
                 "result": event.result,
                 "reason": event.reason,
                 "correlation_id": event.correlation_id,
+                "metadata_json": json.dumps(event.metadata_json, sort_keys=True),
                 "created_at": event.created_at.isoformat(),
             }
         )

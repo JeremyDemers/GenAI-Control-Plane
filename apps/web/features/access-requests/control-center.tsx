@@ -166,6 +166,20 @@ function failureSummary(failure: Record<string, unknown>) {
   return null;
 }
 
+function compactMetadata(metadata: Record<string, unknown>) {
+  const entries = Object.entries(metadata).filter(([, value]) => value !== null && value !== "");
+  if (entries.length === 0) {
+    return null;
+  }
+  return entries
+    .slice(0, 3)
+    .map(([key, value]) => {
+      const displayValue = Array.isArray(value) ? value.join(", ") : String(value);
+      return `${key}: ${displayValue}`;
+    })
+    .join(" · ");
+}
+
 const defaultValues: AccessRequestFormValues = {
   project_name: "Interview Demo Sandbox",
   business_justification: "Evaluate governed AI assistance for customer support workflows.",
@@ -1096,6 +1110,16 @@ function ControlCenterExperience({
                         <p className="mt-1 text-xs text-slate-500">
                           {event.action} · {event.result}
                         </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Target: {event.target_type}
+                          {event.target_id ? `/${event.target_id.slice(0, 8)}` : ""} ·
+                          Correlation: {event.correlation_id}
+                        </p>
+                        {compactMetadata(event.metadata_json) ? (
+                          <p className="mt-1 text-xs text-slate-600">
+                            {compactMetadata(event.metadata_json)}
+                          </p>
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -1838,6 +1862,16 @@ function ControlCenterExperience({
                         <p className="mt-1 text-slate-600">
                           {event.action} · {event.result}
                         </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Target: {event.target_type}
+                          {event.target_id ? `/${event.target_id.slice(0, 8)}` : ""} ·
+                          Correlation: {event.correlation_id}
+                        </p>
+                        {compactMetadata(event.metadata_json) ? (
+                          <p className="mt-1 text-xs text-slate-600">
+                            {compactMetadata(event.metadata_json)}
+                          </p>
+                        ) : null}
                       </div>
                     ))
                   : null}

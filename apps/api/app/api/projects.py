@@ -320,6 +320,7 @@ def list_project_audit_events(
             result=event.result,
             reason=event.reason,
             correlation_id=event.correlation_id,
+            metadata_json=event.metadata_json,
             created_at=event.created_at,
         )
         for event in events
