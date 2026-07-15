@@ -1,24 +1,69 @@
 # Interview Demo
 
-1. Start the stack with `make dev`.
-2. Open `http://localhost:3000`.
-3. Select `employee@example.local`.
-4. Submit the seeded Amazon Bedrock and GitHub Copilot request.
-5. Show the employee notification and policy evaluation with manager and CTO approvals.
-6. Select `approver@example.local`, show the approval notification, and approve the manager step.
-7. Select `cto@example.local`, show the approval notification, and approve final access.
-8. Show the request becoming `ACTIVE`.
-9. Select `admin@example.local`.
-10. Show the active policy version, then use Developer Controls to trigger 70%, 90%, and 100% budget thresholds.
-11. Show usage and budget evidence updating with spend, remaining budget, and data freshness.
-12. Show automatic suspension, incident creation, incident resolution, and admin budget notifications.
-13. Restore the assignment.
-14. Switch to `cto@example.local` and show the executive spend report.
-15. Switch to `employee@example.local`, request a one-week extension, then approve it as the CTO.
-16. Switch back to `admin@example.local`, force expiration, and show archive evidence.
-17. Switch to `auditor@example.local`, review the audit trail, and export CSV evidence.
+Use this as the short presenter path for AI Access Control Center. The goal is to show the
+interviewer a complete governance lifecycle, not every screen.
 
-The scenario is also automated:
+## Setup
+
+```bash
+make dev
+```
+
+Open `http://localhost:3000`.
+
+If local ports are already busy, use the alternate-port command and open `http://localhost:3001`:
+
+```bash
+API_PORT=8010 WEB_PORT=3001 POSTGRES_PORT=55432 REDIS_PORT=56379 NEXT_PUBLIC_API_URL=http://localhost:8010 make dev
+```
+
+If Podman is not reachable:
+
+```bash
+systemctl --user start podman.socket
+```
+
+## Opening Talk Track
+
+This is a production-style internal control plane for temporary enterprise access to generative AI
+platforms. The important design point is separation of concerns: the Next.js portal has no provider
+logic, the FastAPI API owns policy/RBAC/audit state, and provider-specific behavior sits behind
+adapter boundaries. Local mode uses seeded identities and mock provider operations so the full
+workflow can be demonstrated safely.
+
+## Five-Minute Path
+
+1. Select `employee@example.local`.
+2. Submit the seeded Amazon Bedrock and GitHub Copilot request.
+3. Point out policy evaluation, approval path, notifications, requested budget, data class, and provider list.
+4. Select `approver@example.local` and approve the manager step.
+5. Select `cto@example.local` and approve final access.
+6. Show the request becoming `ACTIVE`.
+7. Select `admin@example.local`.
+8. In Developer Controls, trigger 70%, 90%, and 100% budget thresholds.
+9. Show spend, remaining budget, fresh usage/cost evidence, automatic suspension, incident creation, and notifications.
+10. Resolve the incident and restore the assignment.
+11. Select `employee@example.local`, request a one-week extension, then approve it as `cto@example.local`.
+12. Select `admin@example.local`, force expiration, then show archive/deprovision evidence.
+13. Select `auditor@example.local`, show audit trail, role-change/provisioning evidence, and export CSV evidence.
+
+## What To Emphasize
+
+- **Enterprise auth shape:** local seeded identities mirror OIDC roles; API validates bearer tokens in OIDC mode and keeps refresh tokens server-side.
+- **RBAC and separation of duties:** employees request, approvers decide, admins operate, auditors read/export evidence.
+- **Policy governance:** requests retain the policy version used during evaluation.
+- **Temporary access:** assignments have expiration, extension workflow, forced expiration, archive, and deprovisioning.
+- **Cost control:** usage/cost records drive 70%, 90%, and 100% threshold behavior, including suspension and incident evidence.
+- **Provider boundary:** mock and live adapters share the same contract; live mutating operations are feature-flagged and fail closed.
+- **Auditability:** lifecycle jobs, approvals, provider evidence, incident resolution, exports, and retention actions produce audit records.
+- **Delivery readiness:** Docker Compose, health checks, Alembic, CI, backend/frontend tests, Playwright demo flow, and Terraform validation are wired.
+
+## Optional Deep Dives
+
+- Show `/docs` on the API for OpenAPI if they ask about backend surface area.
+- Show `docs/architecture.md`, `docs/security-model.md`, or `docs/threat-model.md` if they ask about design.
+- Mention `docs/dependency-audit.md` if dependency/security posture comes up.
+- Run the automated demo check if there is time:
 
 ```bash
 make e2e
