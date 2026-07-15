@@ -1505,14 +1505,23 @@ def test_live_provider_mode_reports_safe_configuration_boundaries(client: TestCl
         rows = {row["provider"]: row for row in configuration.json()}
         assert rows["amazon_bedrock"]["mode"] == "live"
         assert rows["amazon_bedrock"]["configured"] is True
+        assert rows["amazon_bedrock"]["details"]["required_sdks"] == ["boto3"]
+        assert rows["amazon_bedrock"]["details"]["missing_sdks"] == []
         assert rows["azure_openai"]["configured"] is False
         assert rows["azure_openai"]["details"]["missing_fields"] == ["azure_tenant_id"]
+        assert rows["azure_openai"]["details"]["required_sdks"] == ["azure.identity", "openai"]
+        assert rows["microsoft_foundry"]["details"]["required_sdks"] == [
+            "azure.identity",
+            "msgraph",
+        ]
         assert rows["github_copilot"]["details"]["operations_enabled"] is False
+        assert rows["github_copilot"]["details"]["required_sdks"] == ["github"]
 
         health = client.get("/providers/health", headers={"x-dev-user": "employee@example.local"})
         assert health.status_code == 200
         health_rows = {row["provider"]: row for row in health.json()}
         assert health_rows["amazon_bedrock"]["status"] == "healthy"
+        assert health_rows["amazon_bedrock"]["details"]["missing_sdks"] == []
         assert health_rows["azure_openai"]["status"] == "degraded"
     finally:
         for field, value in original_values.items():

@@ -4,9 +4,11 @@ Provider behavior is implemented behind adapter contracts. Phase 1 uses mock ada
 
 `PROVIDER_MODE=live` switches the registry to live adapter boundaries. Live configuration and
 health checks report provider-specific readiness from safe environment metadata such as
-`AWS_REGION`, `AZURE_TENANT_ID`, `GOOGLE_CLOUD_PROJECT`, and `GITHUB_ORG`. Mutating live
-operations fail closed unless `PROVIDER_LIVE_OPERATIONS_ENABLED=true`, and the concrete SDK
-implementations still need to be installed before real provider changes are allowed.
+`AWS_REGION`, `AZURE_TENANT_ID`, `GOOGLE_CLOUD_PROJECT`, and `GITHUB_ORG`, plus the required SDK
+module availability for AWS, Azure, Azure OpenAI, Microsoft Graph, Google Cloud, and GitHub.
+Mutating live operations still fail closed unless `PROVIDER_LIVE_OPERATIONS_ENABLED=true`;
+provider-specific mutating implementations must remain least-privilege and evidence-producing before
+real provider changes are allowed.
 
 ## Signed Provider Webhooks
 
