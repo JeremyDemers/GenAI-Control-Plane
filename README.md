@@ -28,7 +28,7 @@ use a URL such as `postgresql+psycopg://control_plane:control_plane@127.0.0.1:54
 If those host ports are already taken, run:
 
 ```bash
-API_PORT=8010 WEB_PORT=3001 NEXT_PUBLIC_API_URL=http://localhost:8010 make dev
+API_PORT=8010 WEB_PORT=3001 POSTGRES_PORT=55432 REDIS_PORT=56379 NEXT_PUBLIC_API_URL=http://localhost:8010 make dev
 ```
 
 The Makefile defaults Docker-compatible commands to native Podman because this workstation uses
