@@ -40,10 +40,12 @@ commands, which avoids a local Podman storage database mismatch seen on this wor
 - `auditor@example.local`
 - `cto@example.local`
 
-Local development authentication uses the `x-dev-user` header while `DEV_AUTH_ENABLED=true`. When
-`DEV_AUTH_ENABLED=false`, the API requires a signed OIDC-compatible bearer token with matching
-issuer and audience claims. Optional OIDC group-to-role mapping can synchronize enterprise group
-claims to application roles. The web app includes an identity switcher for the seeded users.
+Local development authentication uses the `x-dev-user` header while `DEV_AUTH_ENABLED=true`, and
+the web app includes an identity switcher for the seeded users. With
+`NEXT_PUBLIC_AUTH_MODE=oidc` and `DEV_AUTH_ENABLED=false`, the web app starts an
+authorization-code-with-PKCE login and calls the API with a bearer token. The API validates signed
+OIDC-compatible tokens with matching issuer and audience claims. Optional OIDC group-to-role mapping
+can synchronize enterprise group claims to application roles.
 
 ## Implemented Features
 
@@ -86,7 +88,7 @@ cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade 
 
 ## Known Limitations
 
-- OIDC-compatible API bearer-token validation and group-to-role mapping are implemented; the frontend PKCE login client remains future work.
+- OIDC-compatible API bearer-token validation, group-to-role mapping, and frontend PKCE login initiation are implemented; server-managed refresh-token handling remains future work.
 - Concrete live provider SDK operations are intentionally disabled until `PROVIDER_LIVE_OPERATIONS_ENABLED=true` and provider implementations are installed.
 - The API still creates local tables at startup for demo velocity, with Alembic migrations available for clean database setup.
 - Provisioning, usage/budget processing, restore, archive/deprovision, cost allocation delivery, and notification delivery are durably tracked and can be drained by the worker; local inline execution remains enabled by default for demo velocity.
@@ -96,5 +98,5 @@ cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade 
 
 1. Expand live provider adapters for AWS, Azure, Google Cloud, Microsoft Graph, and GitHub behind safe feature flags.
 2. Add repository-layer and service-layer coverage around provider adapters.
-3. Add frontend OIDC/PKCE login and secure refresh-token handling.
+3. Add server-managed OIDC refresh-token handling.
 4. Move scheduled report delivery from local worker evidence to external email infrastructure.
