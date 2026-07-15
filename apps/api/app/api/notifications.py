@@ -4,10 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.auth.dependencies import current_user
+from app.auth.dependencies import current_user, get_correlation_id
 from app.core.database import get_db
 from app.models.entities import Notification, User
 from app.schemas import NotificationOut, NotificationReadAllOut
+from app.services.audit import record_audit_event
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -45,6 +46,7 @@ def mark_notification_read(
     notification_id: str,
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
+    correlation_id: str = Depends(get_correlation_id),
 ) -> NotificationOut:
     notification = db.get(Notification, notification_id)
     if not notification or notification.user_id != user.id:
@@ -53,6 +55,20 @@ def mark_notification_read(
             detail={"code": "NOT_FOUND", "message": "Notification not found."},
         )
     notification.read_at = notification.read_at or datetime.now(UTC)
+    record_audit_event(
+        db,
+        event_type="notification.read",
+        actor_user_id=user.id,
+        target_type="notification",
+        target_id=notification.id,
+        action="mark_notification_read",
+        result="success",
+        correlation_id=correlation_id,
+        metadata_json={
+            "event_type": notification.event_type,
+            "delivery_status": notification.delivery_status,
+        },
+    )
     db.commit()
     db.refresh(notification)
     return to_notification_out(notification)
@@ -62,6 +78,7 @@ def mark_notification_read(
 def mark_all_notifications_read(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
+    correlation_id: str = Depends(get_correlation_id),
 ) -> NotificationReadAllOut:
     unread_notifications = db.scalars(
         select(Notification).where(Notification.user_id == user.id, Notification.read_at.is_(None))
@@ -69,5 +86,21 @@ def mark_all_notifications_read(
     now = datetime.now(UTC)
     for notification in unread_notifications:
         notification.read_at = now
+    record_audit_event(
+        db,
+        event_type="notification.read_all",
+        actor_user_id=user.id,
+        target_type="user",
+        target_id=user.id,
+        action="mark_all_notifications_read",
+        result="success",
+        correlation_id=correlation_id,
+        metadata_json={
+            "marked_read": len(unread_notifications),
+            "event_types": sorted(
+                {notification.event_type for notification in unread_notifications}
+            ),
+        },
+    )
     db.commit()
     return NotificationReadAllOut(marked_read=len(unread_notifications))

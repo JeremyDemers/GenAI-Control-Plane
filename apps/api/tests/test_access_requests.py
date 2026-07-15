@@ -381,10 +381,20 @@ def test_employee_can_submit_request_and_policy_records_cto_path(client: TestCli
     notification_id = employee_notifications.json()[0]["id"]
     read_response = client.post(
         f"/notifications/{notification_id}/read",
-        headers={"x-dev-user": "employee@example.local"},
+        headers={
+            "x-dev-user": "employee@example.local",
+            "x-correlation-id": "notification-read",
+        },
     )
     assert read_response.status_code == 200
     assert read_response.json()["read_at"] is not None
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    read_event = next(
+        event for event in audit.json() if event["event_type"] == "notification.read"
+    )
+    assert read_event["target_id"] == notification_id
+    assert read_event["correlation_id"] == "notification-read"
 
     denied_read = client.post(
         f"/notifications/{notification_id}/read",
@@ -413,7 +423,11 @@ def test_employee_can_mark_all_own_notifications_read(client: TestClient) -> Non
     assert any(notification["read_at"] is None for notification in approver_notifications.json())
 
     read_all = client.post(
-        "/notifications/read-all", headers={"x-dev-user": "employee@example.local"}
+        "/notifications/read-all",
+        headers={
+            "x-dev-user": "employee@example.local",
+            "x-correlation-id": "notifications-read-all",
+        },
     )
     assert read_all.status_code == 200
     assert read_all.json()["marked_read"] == len(employee_notifications.json())
@@ -432,6 +446,14 @@ def test_employee_can_mark_all_own_notifications_read(client: TestClient) -> Non
     assert any(
         notification["read_at"] is None for notification in updated_approver_notifications.json()
     )
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    read_all_event = next(
+        event for event in audit.json() if event["event_type"] == "notification.read_all"
+    )
+    assert read_all_event["actor_user_id"] == updated_employee_notifications.json()[0]["user_id"]
+    assert read_all_event["target_id"] == updated_employee_notifications.json()[0]["user_id"]
+    assert read_all_event["correlation_id"] == "notifications-read-all"
 
 
 def test_worker_delivers_pending_notifications(client: TestClient) -> None:
