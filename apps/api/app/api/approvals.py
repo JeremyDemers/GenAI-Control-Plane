@@ -9,7 +9,13 @@ from app.auth.dependencies import get_correlation_id, require_permission
 from app.core.database import get_db
 from app.models.entities import AccessRequest, ApprovalDecision, ApprovalStep, User
 from app.models.enums import RequestStatus
-from app.schemas import AccessRequestOut, ApprovalAction, ApprovalHistoryOut, CtoOverrideIn
+from app.schemas import (
+    AccessRequestOut,
+    ApprovalAction,
+    ApprovalHistoryOut,
+    CtoOverrideIn,
+    PendingApprovalOut,
+)
 from app.services.audit import record_audit_event
 from app.services.notifications import notify_approval_step, notify_user
 from app.services.state_machine import transition
@@ -18,13 +24,18 @@ from app.workers.jobs import enqueue_and_maybe_run_provisioning
 router = APIRouter(prefix="/approvals", tags=["approvals"])
 
 
-@router.get("/pending")
+@router.get("/pending", response_model=list[PendingApprovalOut])
 def pending_approvals(
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("approvals:review")),
-) -> list[dict[str, str]]:
+) -> list[PendingApprovalOut]:
     role_names = {role.name for role in user.roles}
-    statement = select(ApprovalStep).where(ApprovalStep.status == "pending")
+    statement = (
+        select(ApprovalStep, AccessRequest, User)
+        .join(AccessRequest, AccessRequest.id == ApprovalStep.request_id)
+        .join(User, User.id == AccessRequest.requester_id)
+        .where(ApprovalStep.status == "pending")
+    )
     role_map = {
         "approver": "approver",
         "security_reviewer": "security_reviewer",
@@ -33,15 +44,18 @@ def pending_approvals(
     allowed_roles = {role_map[role] for role in role_names if role in role_map}
     if allowed_roles:
         statement = statement.where(ApprovalStep.assigned_role.in_(allowed_roles))
-    steps = db.scalars(statement).all()
+    rows = db.execute(statement.order_by(ApprovalStep.sequence.asc())).all()
     return [
-        {
-            "step_id": step.id,
-            "request_id": step.request_id,
-            "step_type": step.step_type,
-            "assigned_role": step.assigned_role,
-        }
-        for step in steps
+        PendingApprovalOut(
+            step_id=step.id,
+            request_id=step.request_id,
+            step_type=step.step_type,
+            assigned_role=step.assigned_role,
+            project_name=request.project_name,
+            requester_email=requester.email,
+            requester_display_name=requester.display_name,
+        )
+        for step, request, requester in rows
     ]
 
 

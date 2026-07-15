@@ -206,6 +206,16 @@ class ApprovalAction(BaseModel):
     comments: str = Field(default="", max_length=2000)
 
 
+class PendingApprovalOut(BaseModel):
+    step_id: str
+    request_id: str
+    step_type: str
+    assigned_role: str
+    project_name: str
+    requester_email: str
+    requester_display_name: str
+
+
 class CtoOverrideIn(BaseModel):
     decision: str = Field(pattern="^(approve|reject)$")
     justification: str = Field(min_length=20, max_length=2000)

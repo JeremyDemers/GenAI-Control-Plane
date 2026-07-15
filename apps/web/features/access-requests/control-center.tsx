@@ -2554,7 +2554,10 @@ function ControlCenterExperience({
                                 {step.step_type.replaceAll("_", " ")}
                               </p>
                               <p className="mt-1 text-sm text-slate-600">
-                                {approvalRequest?.project_name ?? `Request ${step.request_id.slice(0, 8)}`}
+                                {step.project_name}
+                              </p>
+                              <p className="mt-1 text-xs font-medium text-slate-500">
+                                Requested by {step.requester_display_name} · {step.requester_email}
                               </p>
                               {approvalRequest ? (
                                 <p className="mt-1 text-xs text-slate-500">

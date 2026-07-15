@@ -1085,6 +1085,9 @@ def test_approver_can_request_information_and_requester_can_respond(
     manager_step = client.get(
         "/approvals/pending", headers={"x-dev-user": "approver@example.local"}
     ).json()[0]
+    assert manager_step["project_name"] == "Interview Demo Sandbox"
+    assert manager_step["requester_email"] == "employee@example.local"
+    assert manager_step["requester_display_name"] == "Erin Employee"
 
     information_request = client.post(
         f"/approvals/{manager_step['step_id']}",
