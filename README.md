@@ -33,6 +33,9 @@ If those host ports are already taken, run:
 API_PORT=8010 WEB_PORT=3001 POSTGRES_PORT=55432 REDIS_PORT=56379 NEXT_PUBLIC_API_URL=http://localhost:8010 make dev
 ```
 
+`NEXT_PUBLIC_API_URL` is passed into the web image at build time because Next.js embeds public
+environment variables into the browser bundle.
+
 The Makefile defaults Docker-compatible commands to native Podman because this workstation uses
 Podman-backed Docker emulation. If `make dev` reports that it cannot connect to
 `/run/user/1000/podman/podman.sock`, start the user socket with:
