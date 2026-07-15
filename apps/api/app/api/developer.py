@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.lifecycle_jobs import job_out
 from app.auth.dependencies import get_correlation_id, require_permission
 from app.core.config import get_settings
 from app.core.database import get_db
@@ -10,11 +11,13 @@ from app.schemas import (
     ArtifactArchiveOut,
     LifecycleActionIn,
     LifecycleActionOut,
+    LifecycleJobOut,
     ProviderAssignmentOut,
     SimulatedUsageIn,
 )
 from app.services.lifecycle import assignment_totals
 from app.workers.jobs import (
+    enqueue_and_maybe_run_archive_retention,
     enqueue_and_maybe_run_lifecycle_action,
     enqueue_and_maybe_run_usage_processing,
 )
@@ -191,3 +194,20 @@ def list_archives(
         )
         for archive in archives
     ]
+
+
+@router.post("/archives/enforce-retention", response_model=LifecycleJobOut)
+async def enforce_retention(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("admin:*")),
+    correlation_id: str = Depends(get_correlation_id),
+) -> LifecycleJobOut:
+    ensure_local_development()
+    job = await enqueue_and_maybe_run_archive_retention(
+        db,
+        actor_user_id=user.id,
+        correlation_id=correlation_id,
+    )
+    db.commit()
+    db.refresh(job)
+    return job_out(job)

@@ -143,6 +143,50 @@ def record_usage_and_cost(
     return event.event_type
 
 
+def enforce_archive_retention(
+    db: Session,
+    *,
+    actor_user_id: str,
+    correlation_id: str,
+    job: LifecycleJob,
+) -> int:
+    now = datetime.now(UTC)
+    job.status = "running"
+    expired_archives = db.scalars(
+        select(ArtifactArchive)
+        .where(ArtifactArchive.retention_expires_at <= now)
+        .order_by(ArtifactArchive.retention_expires_at.asc())
+    ).all()
+    purged_count = 0
+    for archive in expired_archives:
+        if archive.storage_location.startswith("purged://"):
+            continue
+        original_location = archive.storage_location
+        archive.storage_location = f"purged://{archive.id}"
+        record_audit_event(
+            db,
+            event_type="artifact.retention_purged",
+            actor_user_id=actor_user_id,
+            target_type="artifact_archive",
+            target_id=archive.id,
+            project_id=archive.project_id,
+            action="enforce_archive_retention",
+            result="success",
+            correlation_id=correlation_id,
+            metadata_json={
+                "assignment_id": archive.assignment_id,
+                "original_location": original_location,
+                "checksum": archive.checksum,
+                "retention_expires_at": archive.retention_expires_at.isoformat(),
+            },
+        )
+        purged_count += 1
+
+    job.status = "completed"
+    job.payload = {**(job.payload or {}), "purged_count": purged_count}
+    return purged_count
+
+
 async def restore_assignment(
     db: Session,
     *,

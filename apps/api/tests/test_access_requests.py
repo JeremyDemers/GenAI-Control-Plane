@@ -12,6 +12,8 @@ from fastapi.testclient import TestClient
 
 from app.api.webhooks import webhook_signature
 from app.core.config import get_settings
+from app.core.database import SessionLocal
+from app.models.entities import ArtifactArchive
 from app.observability.middleware import rate_limiter
 from app.providers.base import ProviderOperationError
 from app.workers.scheduler import drain_once
@@ -699,6 +701,60 @@ def test_admin_can_update_artifact_retention_policy_used_by_archives(
 
     audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
     assert "policy.retention_updated" in {event["event_type"] for event in audit.json()}
+
+
+def test_worker_enforces_expired_archive_retention(client: TestClient) -> None:
+    settings = get_settings()
+    original_inline_execution = settings.lifecycle_inline_execution
+    provision_demo_request(client)
+    try:
+        assignments = client.get(
+            "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+        ).json()
+        expired = client.post(
+            "/developer/expire",
+            headers={"x-dev-user": "admin@example.local"},
+            json={"assignment_id": assignments[0]["id"], "reason": "Create archive evidence."},
+        )
+        assert expired.status_code == 200
+
+        with SessionLocal() as db:
+            archive = db.query(ArtifactArchive).first()
+            assert archive is not None
+            archive.retention_expires_at = datetime.now(UTC) - timedelta(days=1)
+            original_location = archive.storage_location
+            db.commit()
+
+        settings.lifecycle_inline_execution = False
+        sweep = client.post(
+            "/developer/archives/enforce-retention",
+            headers={
+                "x-dev-user": "admin@example.local",
+                "x-correlation-id": "retention-sweep",
+            },
+        )
+        assert sweep.status_code == 200
+        assert sweep.json()["status"] == "queued"
+        assert sweep.json()["job_type"] == "enforce_archive_retention"
+
+        assert asyncio.run(drain_once(limit=10)) == 1
+
+        archives = client.get("/developer/archives", headers={"x-dev-user": "admin@example.local"})
+        assert archives.status_code == 200
+        assert archives.json()[0]["storage_location"].startswith("purged://")
+        assert archives.json()[0]["storage_location"] != original_location
+
+        jobs = client.get("/lifecycle-jobs", headers={"x-dev-user": "admin@example.local"})
+        retention_job = next(
+            job for job in jobs.json() if job["job_type"] == "enforce_archive_retention"
+        )
+        assert retention_job["status"] == "completed"
+        assert retention_job["payload"]["purged_count"] == 1
+
+        audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+        assert "artifact.retention_purged" in {event["event_type"] for event in audit.json()}
+    finally:
+        settings.lifecycle_inline_execution = original_inline_execution
 
 
 def test_auditor_cannot_submit_request_and_failure_is_audited(client: TestClient) -> None:

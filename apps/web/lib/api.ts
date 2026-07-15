@@ -659,6 +659,12 @@ export function listArchives(user: ApiIdentity) {
   return request<ArtifactArchive[]>("/developer/archives", user);
 }
 
+export function enforceArchiveRetention(user: ApiIdentity) {
+  return request<LifecycleJob>("/developer/archives/enforce-retention", user, {
+    method: "POST"
+  });
+}
+
 export function listProvisioningEvidence(user: ApiIdentity) {
   return request<ProvisioningEvidence[]>("/evidence/provisioning", user);
 }

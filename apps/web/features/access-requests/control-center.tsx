@@ -42,6 +42,7 @@ import {
   decideReassignment,
   decideExtension,
   decideApproval,
+  enforceArchiveRetention,
   expireAssignment,
   exportAuditEvents,
   exportCostAllocation,
@@ -630,6 +631,14 @@ function ControlCenterExperience({
   });
   const auditExportMutation = useMutation({
     mutationFn: () => exportAuditEvents(identity)
+  });
+  const retentionEnforcementMutation = useMutation({
+    mutationFn: () => enforceArchiveRetention(identity),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["archives"] });
+      void queryClient.invalidateQueries({ queryKey: ["lifecycle-jobs"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+    }
   });
 
   const costAllocationExportMutation = useMutation({
@@ -1297,8 +1306,23 @@ function ControlCenterExperience({
                 ) : null}
                 {archives.data && archives.data.length > 0 ? (
                   <div className="rounded-md border border-line bg-panel p-3 text-sm">
-                    <p className="font-semibold">Latest archive</p>
-                    <p className="mt-1 break-all text-slate-600">{archives.data[0].storage_location}</p>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-semibold">Latest archive</p>
+                      <ActionButton
+                        icon={Archive}
+                        label="Retention"
+                        onClick={() => retentionEnforcementMutation.mutate()}
+                      />
+                    </div>
+                    <p className="mt-1 break-all text-slate-600">
+                      {archives.data[0].storage_location}
+                    </p>
+                    {retentionEnforcementMutation.data ? (
+                      <p className="mt-2 text-xs text-slate-500">
+                        Retention job {retentionEnforcementMutation.data.status} · purged{" "}
+                        {String(retentionEnforcementMutation.data.payload.purged_count ?? 0)}
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
                 {lifecycleJobs.data && lifecycleJobs.data.length > 0 ? (

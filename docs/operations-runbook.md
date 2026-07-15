@@ -74,6 +74,9 @@ In local mode, the developer panel can simulate budget warning, critical, and en
 Enforcement suspends the assignment, creates an incident, and notifies the requester and platform
 administrators. Restore and forced expiration actions use the configured provider adapter, write
 audit events, archive artifacts, deprovision access, notify participants, and close the request.
+Use the local admin retention control, or `POST /developer/archives/enforce-retention`, to queue
+an archive-retention lifecycle job that purges expired archive locations while preserving checksum
+and audit evidence.
 Live provider operations remain gated by `PROVIDER_LIVE_OPERATIONS_ENABLED`.
 
 ## Credential Rotation
