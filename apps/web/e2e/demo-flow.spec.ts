@@ -31,8 +31,8 @@ test("interview demo lifecycle", async ({ page }) => {
   await expect(page.getByTestId("status-ACTIVE")).toBeAttached();
 
   await page.getByTestId("identity-switcher").selectOption("admin@example.local");
-  await expect(page.getByText("Developer Controls")).toBeVisible();
-  await expect(page.getByText("Policies")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Developer Controls" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Policies" })).toBeVisible();
   await page.getByTestId("usage-warning-amazon_bedrock").click();
   await page.getByTestId("usage-critical-amazon_bedrock").click();
   await page.getByTestId("usage-enforcement-amazon_bedrock").click();
@@ -42,22 +42,22 @@ test("interview demo lifecycle", async ({ page }) => {
   await page.getByTestId("restore-amazon_bedrock").click();
   await expect(page.getByTestId("status-ACTIVE")).toBeAttached();
   await page.getByTestId("identity-switcher").selectOption("cto@example.local");
-  await expect(page.getByText("Executive Report")).toBeVisible();
-  await expect(page.getByText("Total spend")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Executive Report" })).toBeVisible();
+  await expect(page.getByText("Total spend", { exact: true })).toBeVisible();
   await page.getByTestId("identity-switcher").selectOption("employee@example.local");
-  await page.getByText("Extend").click();
+  await page.getByRole("button", { name: "Extend" }).click();
   await expect(page.getByText("Extension requested.")).toBeVisible();
   await page.getByTestId("identity-switcher").selectOption("cto@example.local");
-  await expect(page.getByText("Extension Queue")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Extension Queue" })).toBeVisible();
   await page.getByTestId("approve-extension").click();
   await page.getByTestId("identity-switcher").selectOption("admin@example.local");
   await page.getByTestId("expire-amazon_bedrock").click();
   await expect(page.getByTestId("status-CLOSED")).toBeAttached();
-  await expect(page.getByText("Latest archive")).toBeVisible();
+  await expect(page.getByText("Latest archive", { exact: true })).toBeVisible();
 
   await page.getByTestId("identity-switcher").selectOption("auditor@example.local");
   await expect(page.getByRole("heading", { name: "Audit Trail" })).toBeVisible();
-  await expect(page.getByText("lifecycle.closed")).toBeVisible();
-  await page.getByText("Export CSV").click();
+  await expect(page.getByText("lifecycle.closed", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Export CSV" }).click();
   await expect(page.getByText(/CSV export ready/)).toBeVisible();
 });
