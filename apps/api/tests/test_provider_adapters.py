@@ -6,8 +6,16 @@ from typing import Any
 import pytest
 
 from app.core.config import get_settings
+from app.models.enums import ProviderName
 from app.providers.base import ProviderOperationError
-from app.providers.live.adapter import LiveProviderAdapter
+from app.providers.live import adapter as live_adapter_module
+from app.providers.live.adapter import (
+    PROVIDER_OPERATION_PROFILES,
+    PROVIDER_REQUIREMENTS,
+    LiveProviderAdapter,
+)
+from app.providers.mock.adapter import MockProviderAdapter
+from app.providers.registry import all_provider_adapters, get_provider_adapter
 
 
 def with_live_settings(test: Callable[[], None]) -> None:
@@ -25,6 +33,101 @@ def with_live_settings(test: Callable[[], None]) -> None:
     finally:
         for field, value in original_values.items():
             setattr(settings, field, value)
+
+
+def live_required_settings(provider: str) -> dict[str, str]:
+    return {field: f"{provider}-{field}-test-value" for field in PROVIDER_REQUIREMENTS[provider]}
+
+
+@pytest.mark.parametrize("provider", [provider.value for provider in ProviderName])
+def test_live_adapter_profiles_cover_every_provider(
+    provider: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = get_settings()
+    original_values: dict[str, Any] = {
+        "provider_mode": settings.provider_mode,
+        "provider_live_operations_enabled": settings.provider_live_operations_enabled,
+        "aws_region": settings.aws_region,
+        "azure_tenant_id": settings.azure_tenant_id,
+        "google_cloud_project": settings.google_cloud_project,
+        "github_org": settings.github_org,
+    }
+    settings.provider_mode = "live"
+    settings.provider_live_operations_enabled = True
+    for field, value in live_required_settings(provider).items():
+        setattr(settings, field, value)
+    monkeypatch.setattr(live_adapter_module, "find_spec", lambda module: object())
+    try:
+        result = asyncio.run(
+            LiveProviderAdapter(provider).provision_access(
+                "request-1",
+                f"provision:request-1:{provider}",
+            )
+        )
+    finally:
+        for field, value in original_values.items():
+            setattr(settings, field, value)
+
+    profile = PROVIDER_OPERATION_PROFILES[provider]
+    assert result["status"] == "active"
+    assert result["resource_type"] == profile["resource_type"]
+    assert result["least_privilege_scope"] == profile["scope"]
+    assert result["subject_type"] == profile["subject_type"]
+    assert result["execution_mode"] == "live_control_plane_guarded"
+
+
+@pytest.mark.parametrize("provider", [provider.value for provider in ProviderName])
+def test_live_adapter_reports_missing_required_configuration(
+    provider: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = get_settings()
+    original_values: dict[str, Any] = {
+        "provider_mode": settings.provider_mode,
+        "provider_live_operations_enabled": settings.provider_live_operations_enabled,
+        "aws_region": settings.aws_region,
+        "azure_tenant_id": settings.azure_tenant_id,
+        "google_cloud_project": settings.google_cloud_project,
+        "github_org": settings.github_org,
+    }
+    settings.provider_mode = "live"
+    settings.provider_live_operations_enabled = True
+    for field in PROVIDER_REQUIREMENTS[provider]:
+        setattr(settings, field, "")
+    monkeypatch.setattr(live_adapter_module, "find_spec", lambda module: object())
+    try:
+        with pytest.raises(ProviderOperationError) as exc_info:
+            asyncio.run(
+                LiveProviderAdapter(provider).provision_access(
+                    "request-1",
+                    f"provision:request-1:{provider}",
+                )
+            )
+    finally:
+        for field, value in original_values.items():
+            setattr(settings, field, value)
+
+    assert exc_info.value.retryable is False
+    assert exc_info.value.details["code"] == "provider_not_configured"
+    assert exc_info.value.details["missing_fields"] == list(PROVIDER_REQUIREMENTS[provider])
+
+
+def test_provider_registry_switches_between_mock_and_live_adapters() -> None:
+    settings = get_settings()
+    original_mode = settings.provider_mode
+    try:
+        settings.provider_mode = "mock"
+        assert isinstance(get_provider_adapter("azure_openai"), MockProviderAdapter)
+        assert all(isinstance(adapter, MockProviderAdapter) for adapter in all_provider_adapters())
+
+        settings.provider_mode = "live"
+        assert isinstance(get_provider_adapter("azure_openai"), LiveProviderAdapter)
+        adapters = all_provider_adapters()
+        assert all(isinstance(adapter, LiveProviderAdapter) for adapter in adapters)
+        assert {adapter.name for adapter in adapters} == {
+            provider.value for provider in ProviderName
+        }
+    finally:
+        settings.provider_mode = original_mode
 
 
 def test_live_adapter_fails_closed_when_operations_are_disabled() -> None:
