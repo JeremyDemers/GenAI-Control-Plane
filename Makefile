@@ -1,4 +1,4 @@
-.PHONY: setup dev test lint typecheck migrate migration-check security-audit seed reset e2e api web compose-config docker-build
+.PHONY: setup dev stop test lint typecheck migrate migration-check security-audit seed reset e2e api web compose-config docker-build
 
 PODMAN_ENV = case "$${XDG_DATA_HOME:-}" in "$$HOME"/snap/code/*/.local/share) unset XDG_DATA_HOME ;; esac;
 CONTAINER_ENGINE ?= podman
@@ -9,6 +9,9 @@ setup:
 
 dev:
 	$(PODMAN_ENV) $(CONTAINER_ENGINE) compose up --build
+
+stop:
+	$(PODMAN_ENV) $(CONTAINER_ENGINE) compose down
 
 api:
 	cd apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
