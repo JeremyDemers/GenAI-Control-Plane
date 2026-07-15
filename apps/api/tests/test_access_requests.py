@@ -1590,6 +1590,9 @@ def test_live_provider_mode_reports_safe_configuration_boundaries(client: TestCl
         assert rows["amazon_bedrock"]["configured"] is True
         assert rows["amazon_bedrock"]["details"]["required_sdks"] == ["boto3"]
         assert rows["amazon_bedrock"]["details"]["missing_sdks"] == []
+        assert rows["amazon_bedrock"]["details"]["operation_profile"]["scope"] == (
+            "bedrock:InvokeModel,bedrock:InvokeModelWithResponseStream"
+        )
         assert rows["azure_openai"]["configured"] is False
         assert rows["azure_openai"]["details"]["missing_fields"] == ["azure_tenant_id"]
         assert rows["azure_openai"]["details"]["required_sdks"] == ["azure.identity", "openai"]
@@ -1606,6 +1609,48 @@ def test_live_provider_mode_reports_safe_configuration_boundaries(client: TestCl
         assert health_rows["amazon_bedrock"]["status"] == "healthy"
         assert health_rows["amazon_bedrock"]["details"]["missing_sdks"] == []
         assert health_rows["azure_openai"]["status"] == "degraded"
+    finally:
+        for field, value in original_values.items():
+            setattr(settings, field, value)
+
+
+def test_live_provider_operations_create_least_privilege_assignments(
+    client: TestClient,
+) -> None:
+    settings = get_settings()
+    original_values = {
+        "provider_mode": settings.provider_mode,
+        "provider_live_operations_enabled": settings.provider_live_operations_enabled,
+        "aws_region": settings.aws_region,
+        "github_org": settings.github_org,
+    }
+    settings.provider_mode = "live"
+    settings.provider_live_operations_enabled = True
+    settings.aws_region = "us-east-1"
+    settings.github_org = "demo-org"
+    try:
+        provision_demo_request(client)
+
+        assignments = client.get(
+            "/provider-assignments", headers={"x-dev-user": "admin@example.local"}
+        )
+        assert assignments.status_code == 200
+        rows = {row["provider"]: row for row in assignments.json()}
+        assert rows["amazon_bedrock"]["status"] == "active"
+        assert rows["amazon_bedrock"]["external_resource_id"].startswith(
+            "live-amazon_bedrock-"
+        )
+        assert rows["github_copilot"]["external_resource_id"].startswith(
+            "live-github_copilot-"
+        )
+
+        evidence = client.get(
+            "/evidence/provisioning", headers={"x-dev-user": "auditor@example.local"}
+        )
+        assert evidence.status_code == 200
+        evidence_rows = {row["provider"]: row for row in evidence.json()}
+        assert evidence_rows["amazon_bedrock"]["provision_job_status"] == "completed"
+        assert evidence_rows["github_copilot"]["provision_job_status"] == "completed"
     finally:
         for field, value in original_values.items():
             setattr(settings, field, value)

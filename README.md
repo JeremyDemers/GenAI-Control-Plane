@@ -58,7 +58,7 @@ group-to-role mapping can synchronize enterprise group claims to application rol
 - Versioned standard policy evaluation.
 - Approval workflow with approver and CTO paths.
 - Mock provider adapter contract with durable queued provisioning jobs and local inline execution.
-- Live provider adapter boundaries with safe readiness checks and disabled-by-default mutating operations.
+- Live provider adapter boundaries with safe readiness checks and feature-flagged least-privilege mutating operations.
 - Signed provider webhook endpoint with replay-window validation.
 - Process-local API rate limiting with response headers for local/demo protection.
 - Append-only audit event model from the application perspective.
@@ -90,7 +90,7 @@ cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade 
 ## Known Limitations
 
 - OIDC-compatible API bearer-token validation, group-to-role mapping, frontend PKCE login initiation, and server-managed refresh-token sessions are implemented.
-- Concrete live provider mutating operations are intentionally disabled until `PROVIDER_LIVE_OPERATIONS_ENABLED=true`; SDK readiness is reported through provider health/configuration checks.
+- Live provider mutating operations are intentionally disabled until `PROVIDER_LIVE_OPERATIONS_ENABLED=true`; when enabled, provider assignments use guarded least-privilege operation profiles and SDK/config readiness checks.
 - The API still creates local tables at startup for demo velocity, with Alembic migrations available for clean database setup.
 - Provisioning, usage/budget processing, restore, archive/deprovision, cost allocation delivery, and notification delivery are durably tracked and can be drained by the worker; local inline execution remains enabled by default for demo velocity.
 - `npm audit --audit-level=high` passes; full `npm audit` currently reports a moderate Next/PostCSS transitive advisory where `next@latest` still bundles the affected range.

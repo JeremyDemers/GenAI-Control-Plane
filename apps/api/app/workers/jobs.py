@@ -341,7 +341,13 @@ async def run_provisioning_job(db: Session, job: LifecycleJob) -> ProviderAssign
         action="provision_access",
         result="success",
         correlation_id=correlation_id,
-        metadata_json={"resource_id": result["resource_id"]},
+        metadata_json={
+            "resource_id": result["resource_id"],
+            "resource_type": result.get("resource_type", ""),
+            "least_privilege_scope": result.get("least_privilege_scope", ""),
+            "subject_type": result.get("subject_type", ""),
+            "execution_mode": result.get("execution_mode", ""),
+        },
     )
     _complete_request_if_ready(db, request)
     db.flush()
