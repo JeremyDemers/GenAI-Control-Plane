@@ -1,5 +1,7 @@
 # AI Access Control Center
 
+[![CI](https://github.com/JeremyDemers/GenAI-Control-Plane/actions/workflows/ci.yml/badge.svg)](https://github.com/JeremyDemers/GenAI-Control-Plane/actions/workflows/ci.yml)
+
 AI Access Control Center is a production-style internal portal for governed, temporary access to enterprise generative AI platforms. It demonstrates enterprise authentication boundaries, server-side RBAC, request approval workflows, policy evaluation, provider adapter boundaries, budget governance, user notifications, audit logging, Docker-based local development, and CI readiness.
 
 ![AI Access Control Center dashboard](docs/images/dashboard.png)
