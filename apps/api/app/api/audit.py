@@ -2,9 +2,9 @@ import csv
 import json
 from io import StringIO
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_correlation_id, require_permission
@@ -34,12 +34,43 @@ AUDIT_EXPORT_FIELDS = [
 ]
 
 
+def _audit_event_query(
+    *,
+    event_type: str | None,
+    correlation_id: str | None,
+    target_type: str | None,
+    result: str | None,
+) -> Select[tuple[AuditEvent]]:
+    statement = select(AuditEvent)
+    if event_type:
+        statement = statement.where(AuditEvent.event_type == event_type)
+    if correlation_id:
+        statement = statement.where(AuditEvent.correlation_id == correlation_id)
+    if target_type:
+        statement = statement.where(AuditEvent.target_type == target_type)
+    if result:
+        statement = statement.where(AuditEvent.result == result)
+    return statement.order_by(AuditEvent.created_at.desc())
+
+
 @router.get("", response_model=list[AuditEventOut])
 def list_audit_events(
+    event_type: str | None = None,
+    correlation_id: str | None = None,
+    target_type: str | None = None,
+    result: str | None = None,
+    limit: int = Query(default=200, ge=1, le=500),
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("audit:read_all")),
 ) -> list[AuditEventOut]:
-    events = db.scalars(select(AuditEvent).order_by(AuditEvent.created_at.desc()).limit(200)).all()
+    events = db.scalars(
+        _audit_event_query(
+            event_type=event_type,
+            correlation_id=correlation_id,
+            target_type=target_type,
+            result=result,
+        ).limit(limit)
+    ).all()
     return [
         AuditEventOut(
             id=event.id,
@@ -63,11 +94,23 @@ def list_audit_events(
 
 @router.get("/export")
 def export_audit_events(
+    event_type: str | None = None,
+    correlation_id: str | None = None,
+    target_type: str | None = None,
+    result: str | None = None,
+    limit: int = Query(default=1000, ge=1, le=5000),
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("audit:export")),
-    correlation_id: str = Depends(get_correlation_id),
+    request_correlation_id: str = Depends(get_correlation_id),
 ) -> Response:
-    events = db.scalars(select(AuditEvent).order_by(AuditEvent.created_at.desc()).limit(1000)).all()
+    events = db.scalars(
+        _audit_event_query(
+            event_type=event_type,
+            correlation_id=correlation_id,
+            target_type=target_type,
+            result=result,
+        ).limit(limit)
+    ).all()
     output = StringIO()
     writer = csv.DictWriter(output, fieldnames=AUDIT_EXPORT_FIELDS)
     writer.writeheader()
@@ -98,8 +141,18 @@ def export_audit_events(
         target_id=None,
         action="export",
         result="success",
-        correlation_id=correlation_id,
-        metadata_json={"format": "csv", "row_count": len(events)},
+        correlation_id=request_correlation_id,
+        metadata_json={
+            "format": "csv",
+            "row_count": len(events),
+            "filters": {
+                "event_type": event_type,
+                "correlation_id": correlation_id,
+                "target_type": target_type,
+                "result": result,
+                "limit": limit,
+            },
+        },
     )
     db.commit()
     return Response(

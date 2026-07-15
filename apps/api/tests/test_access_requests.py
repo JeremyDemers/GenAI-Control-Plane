@@ -399,6 +399,32 @@ def test_employee_can_submit_request_and_policy_records_cto_path(client: TestCli
     assert read_event["metadata_json"]["event_type"] == "request_submitted"
     assert read_event["metadata_json"]["delivery_status"] == "pending"
 
+    filtered_audit = client.get(
+        "/audit-events",
+        headers={"x-dev-user": "auditor@example.local"},
+        params={
+            "event_type": "notification.read",
+            "correlation_id": "notification-read",
+            "limit": 1,
+        },
+    )
+    assert filtered_audit.status_code == 200
+    assert len(filtered_audit.json()) == 1
+    assert filtered_audit.json()[0]["id"] == read_event["id"]
+
+    filtered_export = client.get(
+        "/audit-events/export",
+        headers={
+            "x-dev-user": "auditor@example.local",
+            "x-correlation-id": "filtered-audit-export",
+        },
+        params={"event_type": "notification.read", "correlation_id": "notification-read"},
+    )
+    assert filtered_export.status_code == 200
+    rows = list(csv.DictReader(filtered_export.text.splitlines()))
+    assert {row["event_type"] for row in rows} == {"notification.read"}
+    assert {row["correlation_id"] for row in rows} == {"notification-read"}
+
     denied_read = client.post(
         f"/notifications/{notification_id}/read",
         headers={"x-dev-user": "approver@example.local"},

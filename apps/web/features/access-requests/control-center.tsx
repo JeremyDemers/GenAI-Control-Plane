@@ -292,8 +292,14 @@ function ControlCenterExperience({
   onLogout: () => void;
 }) {
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+  const [auditEventTypeFilter, setAuditEventTypeFilter] = useState("");
+  const [auditCorrelationFilter, setAuditCorrelationFilter] = useState("");
   const queryClient = useQueryClient();
   const identityKey = typeof identity === "string" ? identity : identity.email;
+  const auditFilters = {
+    event_type: auditEventTypeFilter.trim() || undefined,
+    correlation_id: auditCorrelationFilter.trim() || undefined
+  };
   const me = useQuery({ queryKey: ["me", identityKey], queryFn: () => getMe(identity) });
   const roles = me.data?.roles ?? [];
   const isPlatformAdmin = roles.includes("platform_admin");
@@ -369,8 +375,8 @@ function ControlCenterExperience({
     retry: false
   });
   const auditEvents = useQuery({
-    queryKey: ["audit-events", identityKey],
-    queryFn: () => listAuditEvents(identity),
+    queryKey: ["audit-events", identityKey, auditFilters.event_type, auditFilters.correlation_id],
+    queryFn: () => listAuditEvents(identity, auditFilters),
     enabled: isSecurityAuditor,
     retry: false
   });
@@ -655,7 +661,7 @@ function ControlCenterExperience({
     }
   });
   const auditExportMutation = useMutation({
-    mutationFn: () => exportAuditEvents(identity)
+    mutationFn: () => exportAuditEvents(identity, auditFilters)
   });
   const retentionEnforcementMutation = useMutation({
     mutationFn: () => enforceArchiveRetention(identity),
@@ -1827,6 +1833,20 @@ function ControlCenterExperience({
           {user === "auditor@example.local" ? (
             <Panel title="Audit Trail" icon={Archive}>
               <div className="grid gap-2">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <TextInput
+                    label="Event type filter"
+                    placeholder="lifecycle.closed"
+                    value={auditEventTypeFilter}
+                    onChange={(event) => setAuditEventTypeFilter(event.target.value)}
+                  />
+                  <TextInput
+                    label="Correlation filter"
+                    placeholder="provider-webhook"
+                    value={auditCorrelationFilter}
+                    onChange={(event) => setAuditCorrelationFilter(event.target.value)}
+                  />
+                </div>
                 <button
                   className="h-10 rounded-md border border-line px-3 text-sm font-semibold"
                   onClick={() => auditExportMutation.mutate()}

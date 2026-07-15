@@ -228,6 +228,14 @@ export type AuditEvent = {
   created_at: string;
 };
 
+export type AuditEventFilters = {
+  event_type?: string;
+  correlation_id?: string;
+  target_type?: string;
+  result?: string;
+  limit?: number;
+};
+
 export type ArtifactArchive = {
   id: string;
   assignment_id: string | null;
@@ -637,12 +645,23 @@ export function retryLifecycleJob(user: ApiIdentity, jobId: string) {
   });
 }
 
-export function listAuditEvents(user: ApiIdentity) {
-  return request<AuditEvent[]>("/audit-events", user);
+function queryString(filters: Record<string, string | number | undefined>) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== "") {
+      params.set(key, String(value));
+    }
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
 }
 
-export async function exportAuditEvents(user: ApiIdentity) {
-  const response = await fetch(`${apiBaseUrl()}/audit-events/export`, {
+export function listAuditEvents(user: ApiIdentity, filters: AuditEventFilters = {}) {
+  return request<AuditEvent[]>(`/audit-events${queryString(filters)}`, user);
+}
+
+export async function exportAuditEvents(user: ApiIdentity, filters: AuditEventFilters = {}) {
+  const response = await fetch(`${apiBaseUrl()}/audit-events/export${queryString(filters)}`, {
     headers: authHeaders(user)
   });
   if (!response.ok) {
