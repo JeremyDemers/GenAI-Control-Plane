@@ -36,15 +36,18 @@ API_PORT=8010 WEB_PORT=3001 POSTGRES_PORT=55432 REDIS_PORT=56379 NEXT_PUBLIC_API
 `NEXT_PUBLIC_API_URL` is passed into the web image at build time because Next.js embeds public
 environment variables into the browser bundle.
 
-The Makefile defaults Docker-compatible commands to native Podman because this workstation uses
-Podman-backed Docker emulation. If `make dev` reports that it cannot connect to
-`/run/user/1000/podman/podman.sock`, start the user socket with:
+The Makefile prefers native `podman-compose` when it is installed, which avoids requiring Podman's
+Docker-compatible socket for local Compose workflows. If native `podman-compose` is not available,
+the Makefile falls back to `podman compose`.
+
+Install native Compose support with:
 
 ```bash
-systemctl --user start podman.socket
+sudo apt install podman-compose
 ```
 
-Set `CONTAINER_ENGINE=docker` if you want to force Docker on a host with a healthy Docker daemon.
+Set `COMPOSE="podman compose"` if you explicitly want the Docker-compatible provider path, or
+`COMPOSE="docker compose"` if you want to force Docker on a host with a healthy Docker daemon.
 
 ## Demo Users
 
