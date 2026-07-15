@@ -33,6 +33,7 @@ import {
   YAxis
 } from "recharts";
 
+import { evidencePanelState } from "@/lib/evidence-state";
 import { notificationPanelState } from "@/lib/notification-state";
 import {
   acceptReassignment,
@@ -724,6 +725,11 @@ function ControlCenterExperience({
   const latestUsage = usageRecords.data?.[0];
   const latestCost = costRecords.data?.[0];
   const visibleAssignments = providerAssignments.data?.length ?? 0;
+  const budgetEvidenceState = evidencePanelState({
+    count: budgetSummaries.data?.length,
+    isError: budgetSummaries.isError || usageRecords.isError || costRecords.isError,
+    isLoading: budgetSummaries.isLoading || usageRecords.isLoading || costRecords.isLoading
+  });
   const healthyProviders =
     providerHealth.data?.filter((provider) => provider.status === "healthy").length ?? 0;
   const totalProviders = providerHealth.data?.length ?? 0;
@@ -1216,35 +1222,49 @@ function ControlCenterExperience({
                 />
               </div>
               <div className="grid gap-2">
-                {(budgetSummaries.data ?? []).slice(0, 4).map((summary) => (
-                  <div key={summary.request_id} className="rounded-md border border-line p-3 text-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="font-semibold">{summary.project_name}</p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {summary.freshness_at
-                            ? `Fresh ${new Date(summary.freshness_at).toLocaleTimeString()}`
-                            : "No usage reported yet"}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold">
-                          {summary.currency} {summary.total_spend} / {summary.requested_budget}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {summary.utilization_percent}% used · {summary.currency}{" "}
-                          {summary.remaining_budget} remaining
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {budgetSummaries.data?.length === 0 ? (
-                  <p className="text-sm text-slate-500">Budget evidence will appear after a request is submitted.</p>
+                {budgetEvidenceState === "loading" ? (
+                  <p className="text-sm text-slate-500">Loading usage and budget evidence...</p>
                 ) : null}
-                {budgetSummaries.isError || usageRecords.isError || costRecords.isError ? (
-                  <p className="text-sm text-coral">Usage and budget evidence unavailable.</p>
+                {budgetEvidenceState === "error" ? (
+                  <p className="text-sm text-coral">
+                    Usage and budget evidence could not be loaded. Check that the API is running
+                    for this dashboard session.
+                  </p>
                 ) : null}
+                {budgetEvidenceState === "empty" ? (
+                  <p className="text-sm text-slate-500">
+                    Budget evidence will appear after a request is submitted.
+                  </p>
+                ) : null}
+                {budgetEvidenceState === "ready"
+                  ? (budgetSummaries.data ?? []).slice(0, 4).map((summary) => (
+                      <div
+                        key={summary.request_id}
+                        className="rounded-md border border-line p-3 text-sm"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="font-semibold">{summary.project_name}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {summary.freshness_at
+                                ? `Fresh ${new Date(summary.freshness_at).toLocaleTimeString()}`
+                                : "No usage reported yet"}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold">
+                              {summary.currency} {summary.total_spend} /{" "}
+                              {summary.requested_budget}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {summary.utilization_percent}% used · {summary.currency}{" "}
+                              {summary.remaining_budget} remaining
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  : null}
               </div>
             </div>
           </Panel>
