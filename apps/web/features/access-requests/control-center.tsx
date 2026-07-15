@@ -468,6 +468,10 @@ function ControlCenterExperience({
     () => requests.data?.find((request) => request.id === selectedRequestId) ?? requests.data?.[0],
     [requests.data, selectedRequestId]
   );
+  const requestById = useMemo(
+    () => new Map((requests.data ?? []).map((request) => [request.id, request])),
+    [requests.data]
+  );
   const selectedRequestProjectId = selectedRequest?.project_id;
   const selectedProjectId = projects.data?.some((project) => project.id === selectedRequestProjectId)
     ? selectedRequestProjectId
@@ -1386,7 +1390,7 @@ function ControlCenterExperience({
                               informationResponseMutation.mutate(request.id);
                             }}
                           >
-                            Respond
+                            Send Info
                           </button>
                         ) : null}
                         {user === "cto@example.local" &&
@@ -2540,52 +2544,66 @@ function ControlCenterExperience({
                   <p className="text-sm text-slate-500">No pending approvals.</p>
                 ) : null}
                 {approvalQueueState === "ready"
-                  ? (approvals.data ?? []).map((step) => (
-                    <div key={step.step_id} className="rounded-md border border-line p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold">{step.step_type}</p>
-                          <p className="break-all text-xs text-slate-500">{step.request_id}</p>
+                  ? (approvals.data ?? []).map((step) => {
+                      const approvalRequest = requestById.get(step.request_id);
+                      return (
+                        <div key={step.step_id} className="rounded-md border border-line p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold capitalize">
+                                {step.step_type.replaceAll("_", " ")}
+                              </p>
+                              <p className="mt-1 text-sm text-slate-600">
+                                {approvalRequest?.project_name ?? `Request ${step.request_id.slice(0, 8)}`}
+                              </p>
+                              {approvalRequest ? (
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {approvalRequest.provider_names.join(", ")} ·{" "}
+                                  {approvalRequest.currency} {approvalRequest.requested_budget} ·{" "}
+                                  {approvalRequest.data_classification}
+                                </p>
+                              ) : null}
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                data-testid={`approve-${step.step_type}`}
+                                className="rounded-md bg-mint px-3 py-2 text-xs font-semibold text-white"
+                                onClick={() =>
+                                  approvalMutation.mutate({
+                                    stepId: step.step_id,
+                                    decision: "approve"
+                                  })
+                                }
+                              >
+                                Approve
+                              </button>
+                              <button
+                                className="rounded-md border border-coral px-3 py-2 text-xs font-semibold text-coral"
+                                onClick={() =>
+                                  approvalMutation.mutate({
+                                    stepId: step.step_id,
+                                    decision: "reject"
+                                  })
+                                }
+                              >
+                                Reject
+                              </button>
+                              <button
+                                className="rounded-md border border-line px-3 py-2 text-xs font-semibold"
+                                onClick={() =>
+                                  approvalMutation.mutate({
+                                    stepId: step.step_id,
+                                    decision: "request_information"
+                                  })
+                              }
+                            >
+                                Request Info
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex gap-2">
-                          <button
-                            data-testid={`approve-${step.step_type}`}
-                            className="rounded-md bg-mint px-3 py-2 text-xs font-semibold text-white"
-                            onClick={() =>
-                              approvalMutation.mutate({
-                                stepId: step.step_id,
-                                decision: "approve"
-                              })
-                            }
-                          >
-                            Approve
-                          </button>
-                          <button
-                            className="rounded-md border border-coral px-3 py-2 text-xs font-semibold text-coral"
-                            onClick={() =>
-                              approvalMutation.mutate({
-                                stepId: step.step_id,
-                                decision: "reject"
-                              })
-                            }
-                          >
-                            Reject
-                          </button>
-                          <button
-                            className="rounded-md border border-line px-3 py-2 text-xs font-semibold"
-                            onClick={() =>
-                              approvalMutation.mutate({
-                                stepId: step.step_id,
-                                decision: "request_information"
-                              })
-                            }
-                          >
-                            Need Info
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    ))
+                      );
+                    })
                   : null}
               </div>
             </Panel>
