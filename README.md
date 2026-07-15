@@ -24,6 +24,8 @@ The API runs on `http://localhost:8000` and the web portal runs on `http://local
 Local values in `.env` are loaded by Docker Compose and by the API settings layer when running from `apps/api`.
 Use the Compose host name `postgres` only inside Docker Compose. For a host-local PostgreSQL install,
 use a URL such as `postgresql+psycopg://control_plane:control_plane@127.0.0.1:5432/control_plane`.
+Use `make stop` to stop the local Compose stack without deleting volumes, or `make reset` to stop it
+and remove Compose volumes.
 
 If those host ports are already taken, run:
 
