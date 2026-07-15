@@ -89,14 +89,14 @@ cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade 
 ## Known Limitations
 
 - OIDC-compatible API bearer-token validation, group-to-role mapping, and frontend PKCE login initiation are implemented; server-managed refresh-token handling remains future work.
-- Concrete live provider SDK operations are intentionally disabled until `PROVIDER_LIVE_OPERATIONS_ENABLED=true` and provider implementations are installed.
+- Concrete live provider mutating operations are intentionally disabled until `PROVIDER_LIVE_OPERATIONS_ENABLED=true`; SDK readiness is reported through provider health/configuration checks.
 - The API still creates local tables at startup for demo velocity, with Alembic migrations available for clean database setup.
 - Provisioning, usage/budget processing, restore, archive/deprovision, cost allocation delivery, and notification delivery are durably tracked and can be drained by the worker; local inline execution remains enabled by default for demo velocity.
 - `npm audit --audit-level=high` passes; full `npm audit` currently reports a moderate Next/PostCSS transitive advisory where `next@latest` still bundles the affected range.
 
 ## Roadmap
 
-1. Expand live provider adapters for AWS, Azure, Google Cloud, Microsoft Graph, and GitHub behind safe feature flags.
+1. Expand live provider adapters with least-privilege mutating AWS, Azure, Google Cloud, Microsoft Graph, and GitHub operations behind safe feature flags.
 2. Add repository-layer and service-layer coverage around provider adapters.
 3. Add server-managed OIDC refresh-token handling.
 4. Move scheduled report delivery from local worker evidence to external email infrastructure.

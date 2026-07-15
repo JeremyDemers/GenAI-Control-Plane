@@ -1,4 +1,5 @@
 from datetime import datetime
+from importlib.util import find_spec
 from typing import Any
 
 from app.core.config import get_settings
@@ -14,6 +15,16 @@ PROVIDER_REQUIREMENTS: dict[str, tuple[str, ...]] = {
     "github_copilot": ("github_org",),
 }
 
+PROVIDER_SDKS: dict[str, tuple[str, ...]] = {
+    "amazon_bedrock": ("boto3",),
+    "amazon_sagemaker": ("boto3",),
+    "google_gemini_enterprise": ("google.cloud.resourcemanager_v3",),
+    "google_vertex_ai": ("google.cloud.resourcemanager_v3",),
+    "microsoft_foundry": ("azure.identity", "msgraph"),
+    "azure_openai": ("azure.identity", "openai"),
+    "github_copilot": ("github",),
+}
+
 
 class LiveProviderAdapter:
     def __init__(self, name: str) -> None:
@@ -25,18 +36,22 @@ class LiveProviderAdapter:
         missing_fields = [
             field for field in required_fields if not str(getattr(settings, field, "")).strip()
         ]
+        required_sdks = PROVIDER_SDKS.get(self.name, ())
+        missing_sdks = [module for module in required_sdks if find_spec(module) is None]
         return {
             "provider": self.name,
-            "configured": not missing_fields,
+            "configured": not missing_fields and not missing_sdks,
             "mode": "live",
             "operations_enabled": settings.provider_live_operations_enabled,
             "required_fields": list(required_fields),
             "missing_fields": missing_fields,
+            "required_sdks": list(required_sdks),
+            "missing_sdks": missing_sdks,
         }
 
     def _ensure_operations_enabled(self, operation: str) -> None:
         configuration = self._configuration()
-        if not configuration["configured"]:
+        if configuration["missing_fields"]:
             raise ProviderOperationError(
                 f"{self.name} is not configured for live {operation}.",
                 retryable=False,
@@ -44,6 +59,18 @@ class LiveProviderAdapter:
                     "code": "provider_not_configured",
                     "operation": operation,
                     "provider_status": "configuration_missing",
+                    "missing_fields": configuration["missing_fields"],
+                },
+            )
+        if configuration["missing_sdks"]:
+            raise ProviderOperationError(
+                f"{self.name} provider SDK is not installed for live {operation}.",
+                retryable=False,
+                details={
+                    "code": "provider_sdk_missing",
+                    "operation": operation,
+                    "provider_status": "sdk_missing",
+                    "missing_sdks": configuration["missing_sdks"],
                 },
             )
         if not configuration["operations_enabled"]:
@@ -129,4 +156,5 @@ class LiveProviderAdapter:
             "mode": "live",
             "configured": configuration["configured"],
             "missing_fields": configuration["missing_fields"],
+            "missing_sdks": configuration["missing_sdks"],
         }
