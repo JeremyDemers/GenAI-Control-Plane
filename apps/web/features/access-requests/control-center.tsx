@@ -744,6 +744,11 @@ function ControlCenterExperience({
     isError: approvals.isError,
     isLoading: approvals.isLoading
   });
+  const reassignmentState = evidencePanelState({
+    count: reassignments.data?.length,
+    isError: reassignments.isError,
+    isLoading: reassignments.isLoading
+  });
   const canManageSelectedProject =
     me.data?.roles.some((role) => role === "project_owner" || role === "platform_admin") ?? false;
   const securityAlreadyMember =
@@ -1051,63 +1056,75 @@ function ControlCenterExperience({
 
           <Panel title="Reassignments" icon={UserRound}>
             <div className="grid gap-2">
-              {(reassignments.data ?? []).slice(0, 5).map((reassignment) => (
-                <div key={reassignment.id} className="rounded-md border border-line p-3 text-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold">{reassignment.project_name}</p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {reassignment.current_owner_email} → {reassignment.proposed_owner_email}
-                      </p>
-                    </div>
-                    <StatusPill status={reassignment.status} />
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {user === "owner2@example.local" &&
-                    reassignment.status === "pending_acceptance" ? (
-                      <button
-                        className="rounded-md border border-line px-3 py-2 text-xs font-semibold"
-                        onClick={() => acceptReassignmentMutation.mutate(reassignment.id)}
-                      >
-                        Accept
-                      </button>
-                    ) : null}
-                    {(user === "admin@example.local" || user === "cto@example.local") &&
-                    reassignment.status === "pending_approval" ? (
-                      <>
-                        <button
-                          className="rounded-md bg-mint px-3 py-2 text-xs font-semibold text-white"
-                          onClick={() =>
-                            reassignmentDecisionMutation.mutate({
-                              reassignmentId: reassignment.id,
-                              decision: "approve"
-                            })
-                          }
-                        >
-                          Approve
-                        </button>
-                        <button
-                          className="rounded-md border border-coral px-3 py-2 text-xs font-semibold text-coral"
-                          onClick={() =>
-                            reassignmentDecisionMutation.mutate({
-                              reassignmentId: reassignment.id,
-                              decision: "reject"
-                            })
-                          }
-                        >
-                          Reject
-                        </button>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-              {reassignments.data?.length === 0 ? (
+              {reassignmentState === "loading" ? (
+                <p className="text-sm text-slate-500">Loading reassignment activity...</p>
+              ) : null}
+              {reassignmentState === "error" ? (
+                <p className="text-sm text-coral">
+                  Reassignment activity could not be loaded. Check that the API is running for this
+                  dashboard session.
+                </p>
+              ) : null}
+              {reassignmentState === "empty" ? (
                 <p className="text-sm text-slate-500">No reassignment activity for this identity.</p>
               ) : null}
-              {reassignments.isError ? (
-                <p className="text-sm text-slate-500">Reassignment activity unavailable.</p>
-              ) : null}
+              {reassignmentState === "ready"
+                ? (reassignments.data ?? []).slice(0, 5).map((reassignment) => (
+                    <div
+                      key={reassignment.id}
+                      className="rounded-md border border-line p-3 text-sm"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="font-semibold">{reassignment.project_name}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {reassignment.current_owner_email} →{" "}
+                            {reassignment.proposed_owner_email}
+                          </p>
+                        </div>
+                        <StatusPill status={reassignment.status} />
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {user === "owner2@example.local" &&
+                        reassignment.status === "pending_acceptance" ? (
+                          <button
+                            className="rounded-md border border-line px-3 py-2 text-xs font-semibold"
+                            onClick={() => acceptReassignmentMutation.mutate(reassignment.id)}
+                          >
+                            Accept
+                          </button>
+                        ) : null}
+                        {(user === "admin@example.local" || user === "cto@example.local") &&
+                        reassignment.status === "pending_approval" ? (
+                          <>
+                            <button
+                              className="rounded-md bg-mint px-3 py-2 text-xs font-semibold text-white"
+                              onClick={() =>
+                                reassignmentDecisionMutation.mutate({
+                                  reassignmentId: reassignment.id,
+                                  decision: "approve"
+                                })
+                              }
+                            >
+                              Approve
+                            </button>
+                            <button
+                              className="rounded-md border border-coral px-3 py-2 text-xs font-semibold text-coral"
+                              onClick={() =>
+                                reassignmentDecisionMutation.mutate({
+                                  reassignmentId: reassignment.id,
+                                  decision: "reject"
+                                })
+                              }
+                            >
+                              Reject
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))
+                : null}
             </div>
           </Panel>
 
