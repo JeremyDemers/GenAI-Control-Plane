@@ -298,6 +298,7 @@ def test_oidc_callback_refresh_and_logout_use_server_session(
         refresh = client.post("/auth/oidc/refresh")
         logout = client.post("/auth/logout")
         refresh_after_logout = client.post("/auth/oidc/refresh")
+        audit = client.get("/audit-events", headers=oidc_auth_header("auditor@example.local"))
     finally:
         restore_auth_settings(original)
 
@@ -311,6 +312,10 @@ def test_oidc_callback_refresh_and_logout_use_server_session(
     assert refresh_after_logout.status_code == 401
     assert exchanged_forms[0]["code"] == "authorization-code"
     assert exchanged_forms[1]["refresh_token"] == "refresh-token-one"
+    assert audit.status_code == 200
+    assert {"auth.session_created", "auth.session_revoked"} <= {
+        event["event_type"] for event in audit.json()
+    }
 
 
 def test_employee_can_submit_request_and_policy_records_cto_path(client: TestClient) -> None:
