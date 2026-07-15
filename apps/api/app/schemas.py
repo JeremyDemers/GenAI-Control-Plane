@@ -19,6 +19,18 @@ class UserOut(BaseModel):
     roles: list[str]
 
 
+class OidcCodeExchangeIn(BaseModel):
+    code: str = Field(min_length=1)
+    code_verifier: str = Field(min_length=32, max_length=256)
+    redirect_uri: str = Field(min_length=1, max_length=1000)
+
+
+class OidcTokenOut(BaseModel):
+    access_token: str
+    expires_at: datetime
+    user: UserOut
+
+
 class AccessRequestCreate(BaseModel):
     project_name: str = Field(min_length=3, max_length=180)
     business_justification: str = Field(min_length=20)

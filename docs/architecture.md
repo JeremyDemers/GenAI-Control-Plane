@@ -32,9 +32,9 @@ Production uses an OIDC-compatible API boundary: with `DEV_AUTH_ENABLED=false`, 
 signed bearer token whose issuer and audience match configuration and whose signing key resolves from
 `OIDC_JWKS_URL` or `OIDC_JWKS_JSON`. Optional `OIDC_GROUP_ROLE_MAP_JSON` maps enterprise groups to
 server-side roles. Local development uses seeded identities passed through `x-dev-user`. With
-`NEXT_PUBLIC_AUTH_MODE=oidc`, the frontend starts authorization-code flow with PKCE and stores the
-short-lived access token in `sessionStorage`; server-managed refresh-token handling remains the next
-identity-layer step.
+`NEXT_PUBLIC_AUTH_MODE=oidc`, the frontend starts authorization-code flow with PKCE, the API
+exchanges the code through `OIDC_TOKEN_ENDPOINT`, stores refresh tokens server-side, and issues an
+HttpOnly session cookie for access-token refresh.
 
 ## Failure Handling
 

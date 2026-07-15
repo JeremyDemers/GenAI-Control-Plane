@@ -72,8 +72,9 @@ provider assignment expiration while preserving audit and notification evidence.
 
 In local mode, the developer panel can simulate budget warning, critical, and enforcement thresholds.
 Enforcement suspends the assignment, creates an incident, and notifies the requester and platform
-administrators. Restore and forced expiration actions use the mock provider adapter, write audit events,
-archive artifacts locally, deprovision access, notify participants, and close the request.
+administrators. Restore and forced expiration actions use the configured provider adapter, write
+audit events, archive artifacts, deprovision access, notify participants, and close the request.
+Live provider operations remain gated by `PROVIDER_LIVE_OPERATIONS_ENABLED`.
 
 ## Credential Rotation
 

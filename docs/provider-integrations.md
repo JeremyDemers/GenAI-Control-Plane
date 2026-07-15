@@ -6,9 +6,10 @@ Provider behavior is implemented behind adapter contracts. Phase 1 uses mock ada
 health checks report provider-specific readiness from safe environment metadata such as
 `AWS_REGION`, `AZURE_TENANT_ID`, `GOOGLE_CLOUD_PROJECT`, and `GITHUB_ORG`, plus the required SDK
 module availability for AWS, Azure, Azure OpenAI, Microsoft Graph, Google Cloud, and GitHub.
-Mutating live operations still fail closed unless `PROVIDER_LIVE_OPERATIONS_ENABLED=true`;
-provider-specific mutating implementations must remain least-privilege and evidence-producing before
-real provider changes are allowed.
+Mutating live operations still fail closed unless `PROVIDER_LIVE_OPERATIONS_ENABLED=true`. When the
+flag is enabled, live adapters return provider-specific least-privilege operation profiles, resource
+identifiers, and audit metadata for assignments, suspension, restore, deprovisioning, usage, and
+artifact archival.
 
 ## Signed Provider Webhooks
 

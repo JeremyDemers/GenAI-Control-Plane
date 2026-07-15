@@ -32,7 +32,6 @@ describe("OIDC auth helpers", () => {
     vi.setSystemTime(now);
     const session: OidcSession = {
       accessToken: "access-token",
-      idToken: null,
       email: "employee@example.local",
       expiresAt: now - 1
     };

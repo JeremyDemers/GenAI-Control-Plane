@@ -18,9 +18,9 @@
 - Restore and archive/deprovision actions now use durable lifecycle jobs with worker drain support while keeping local inline execution enabled by default.
 - Usage and budget processing now queue as lifecycle jobs and can be drained by the worker while preserving local inline execution for demos.
 - Notifications now track pending/delivered state, delivery attempts, and worker-driven delivery audit evidence.
-- The web portal can start an OIDC authorization-code-with-PKCE login and call the API with bearer tokens when `NEXT_PUBLIC_AUTH_MODE=oidc`.
+- The web portal can start an OIDC authorization-code-with-PKCE login; the API performs code exchange, keeps refresh tokens server-side, and refreshes short-lived bearer tokens through an HttpOnly session cookie.
 - Provider webhook callbacks require timestamped HMAC signatures and produce audit evidence on accepted deliveries.
-- `PROVIDER_MODE=live` now selects safe live adapter boundaries with provider-specific readiness checks while mutating operations remain disabled by default.
+- `PROVIDER_MODE=live` now selects live adapter boundaries with provider-specific readiness checks and guarded least-privilege operation profiles while mutating operations remain disabled by default.
 - Local developer lifecycle controls now simulate 70%, 90%, and 100% budget thresholds.
 - Budget enforcement suspends assignments, creates incidents, and emits audit events.
 - Platform administrators and auditors can view incidents; administrators can resolve them with audit evidence.
@@ -77,6 +77,4 @@
 
 ## Remaining Work
 
-- Add server-managed OIDC refresh-token handling.
-- Implement concrete least-privilege mutating provider operations behind the live adapter feature flag.
-- Track the remaining moderate npm audit advisory for Next's transitive PostCSS dependency; the current `next@latest` still bundles the affected range, and `npm audit fix --force` recommends downgrading to an unusable legacy Next release.
+- Track the remaining moderate npm audit advisory for Next's transitive PostCSS dependency; `npm audit --audit-level=moderate` still reports the affected bundled range, and `npm audit fix --force` recommends downgrading to an unusable legacy Next release.

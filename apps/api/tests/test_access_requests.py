@@ -3,6 +3,7 @@ import json
 import time
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import cast
 
 import jwt
 import pytest
@@ -73,6 +74,18 @@ def oidc_auth_header(
     return {"Authorization": f"Bearer {token}"}
 
 
+def oidc_access_token(
+    email: str,
+    *,
+    audience: str = OIDC_TEST_AUDIENCE,
+    issuer: str = OIDC_TEST_ISSUER,
+    groups: list[str] | None = None,
+) -> str:
+    return oidc_auth_header(email, audience=audience, issuer=issuer, groups=groups)[
+        "Authorization"
+    ].removeprefix("Bearer ")
+
+
 def oidc_rs256_auth_header(
     email: str,
     private_key: rsa.RSAPrivateKey,
@@ -107,6 +120,12 @@ def configure_oidc_auth_for_test() -> dict[str, object]:
         "oidc_allowed_algorithms": list(settings.oidc_allowed_algorithms),
         "oidc_group_claims": list(settings.oidc_group_claims),
         "oidc_group_role_map_json": settings.oidc_group_role_map_json,
+        "oidc_token_endpoint": settings.oidc_token_endpoint,
+        "oidc_client_id": settings.oidc_client_id,
+        "oidc_client_secret": settings.oidc_client_secret,
+        "auth_session_cookie_name": settings.auth_session_cookie_name,
+        "auth_session_cookie_secure": settings.auth_session_cookie_secure,
+        "auth_session_ttl_hours": settings.auth_session_ttl_hours,
     }
     settings.dev_auth_enabled = False
     settings.oidc_issuer = OIDC_TEST_ISSUER
@@ -117,6 +136,12 @@ def configure_oidc_auth_for_test() -> dict[str, object]:
     settings.oidc_allowed_algorithms = ["HS256"]
     settings.oidc_group_claims = ["groups", "roles"]
     settings.oidc_group_role_map_json = ""
+    settings.oidc_token_endpoint = "https://login.example.test/token"
+    settings.oidc_client_id = "genai-control-plane-test"
+    settings.oidc_client_secret = ""
+    settings.auth_session_cookie_name = "genai_cp_session"
+    settings.auth_session_cookie_secure = False
+    settings.auth_session_ttl_hours = 12
     return original
 
 
@@ -128,9 +153,15 @@ def restore_auth_settings(original: dict[str, object]) -> None:
     settings.oidc_hs256_secret = str(original["oidc_hs256_secret"])
     settings.oidc_jwks_url = str(original["oidc_jwks_url"])
     settings.oidc_jwks_json = str(original["oidc_jwks_json"])
-    settings.oidc_allowed_algorithms = list(original["oidc_allowed_algorithms"])
-    settings.oidc_group_claims = list(original["oidc_group_claims"])
+    settings.oidc_allowed_algorithms = cast(list[str], original["oidc_allowed_algorithms"])
+    settings.oidc_group_claims = cast(list[str], original["oidc_group_claims"])
     settings.oidc_group_role_map_json = str(original["oidc_group_role_map_json"])
+    settings.oidc_token_endpoint = str(original["oidc_token_endpoint"])
+    settings.oidc_client_id = str(original["oidc_client_id"])
+    settings.oidc_client_secret = str(original["oidc_client_secret"])
+    settings.auth_session_cookie_name = str(original["auth_session_cookie_name"])
+    settings.auth_session_cookie_secure = bool(original["auth_session_cookie_secure"])
+    settings.auth_session_ttl_hours = cast(int, original["auth_session_ttl_hours"])
 
 
 def test_oidc_bearer_token_authenticates_seeded_user(client: TestClient) -> None:
@@ -228,6 +259,58 @@ def test_oidc_bearer_token_rejects_wrong_audience(client: TestClient) -> None:
 
     assert response.status_code == 401
     assert response.json()["detail"]["code"] == "UNAUTHENTICATED"
+
+
+def test_oidc_callback_refresh_and_logout_use_server_session(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = configure_oidc_auth_for_test()
+    exchanged_forms = []
+
+    async def fake_exchange_oidc_code(**kwargs: object) -> dict[str, object]:
+        exchanged_forms.append(kwargs)
+        return {
+            "access_token": oidc_access_token("employee@example.local"),
+            "refresh_token": "refresh-token-one",
+            "expires_in": 300,
+        }
+
+    async def fake_refresh_oidc_access_token(**kwargs: object) -> dict[str, object]:
+        exchanged_forms.append(kwargs)
+        return {
+            "access_token": oidc_access_token("employee@example.local"),
+            "refresh_token": "refresh-token-two",
+            "expires_in": 300,
+        }
+
+    monkeypatch.setattr("app.api.auth.exchange_oidc_code", fake_exchange_oidc_code)
+    monkeypatch.setattr("app.api.auth.refresh_oidc_access_token", fake_refresh_oidc_access_token)
+    try:
+        callback = client.post(
+            "/auth/oidc/callback",
+            json={
+                "code": "authorization-code",
+                "code_verifier": "a" * 64,
+                "redirect_uri": "http://localhost:3000",
+            },
+        )
+        refresh = client.post("/auth/oidc/refresh")
+        logout = client.post("/auth/logout")
+        refresh_after_logout = client.post("/auth/oidc/refresh")
+    finally:
+        restore_auth_settings(original)
+
+    assert callback.status_code == 200
+    assert callback.json()["user"]["email"] == "employee@example.local"
+    assert "refresh-token-one" not in callback.text
+    assert "httponly" in callback.headers["set-cookie"].lower()
+    assert refresh.status_code == 200
+    assert refresh.json()["user"]["email"] == "employee@example.local"
+    assert logout.status_code == 204
+    assert refresh_after_logout.status_code == 401
+    assert exchanged_forms[0]["code"] == "authorization-code"
+    assert exchanged_forms[1]["refresh_token"] == "refresh-token-one"
 
 
 def test_employee_can_submit_request_and_policy_records_cto_path(client: TestClient) -> None:
@@ -926,7 +1009,7 @@ def provision_demo_request(client: TestClient) -> dict[str, object]:
         headers={"x-dev-user": "cto@example.local"},
         json={"decision": "approve", "comments": "Approved."},
     )
-    return created
+    return cast(dict[str, object], created)
 
 
 def test_retryable_provider_failure_creates_safe_lifecycle_job(
@@ -1507,6 +1590,9 @@ def test_live_provider_mode_reports_safe_configuration_boundaries(client: TestCl
         assert rows["amazon_bedrock"]["configured"] is True
         assert rows["amazon_bedrock"]["details"]["required_sdks"] == ["boto3"]
         assert rows["amazon_bedrock"]["details"]["missing_sdks"] == []
+        assert rows["amazon_bedrock"]["details"]["operation_profile"]["scope"] == (
+            "bedrock:InvokeModel,bedrock:InvokeModelWithResponseStream"
+        )
         assert rows["azure_openai"]["configured"] is False
         assert rows["azure_openai"]["details"]["missing_fields"] == ["azure_tenant_id"]
         assert rows["azure_openai"]["details"]["required_sdks"] == ["azure.identity", "openai"]
@@ -1523,6 +1609,48 @@ def test_live_provider_mode_reports_safe_configuration_boundaries(client: TestCl
         assert health_rows["amazon_bedrock"]["status"] == "healthy"
         assert health_rows["amazon_bedrock"]["details"]["missing_sdks"] == []
         assert health_rows["azure_openai"]["status"] == "degraded"
+    finally:
+        for field, value in original_values.items():
+            setattr(settings, field, value)
+
+
+def test_live_provider_operations_create_least_privilege_assignments(
+    client: TestClient,
+) -> None:
+    settings = get_settings()
+    original_values = {
+        "provider_mode": settings.provider_mode,
+        "provider_live_operations_enabled": settings.provider_live_operations_enabled,
+        "aws_region": settings.aws_region,
+        "github_org": settings.github_org,
+    }
+    settings.provider_mode = "live"
+    settings.provider_live_operations_enabled = True
+    settings.aws_region = "us-east-1"
+    settings.github_org = "demo-org"
+    try:
+        provision_demo_request(client)
+
+        assignments = client.get(
+            "/provider-assignments", headers={"x-dev-user": "admin@example.local"}
+        )
+        assert assignments.status_code == 200
+        rows = {row["provider"]: row for row in assignments.json()}
+        assert rows["amazon_bedrock"]["status"] == "active"
+        assert rows["amazon_bedrock"]["external_resource_id"].startswith(
+            "live-amazon_bedrock-"
+        )
+        assert rows["github_copilot"]["external_resource_id"].startswith(
+            "live-github_copilot-"
+        )
+
+        evidence = client.get(
+            "/evidence/provisioning", headers={"x-dev-user": "auditor@example.local"}
+        )
+        assert evidence.status_code == 200
+        evidence_rows = {row["provider"]: row for row in evidence.json()}
+        assert evidence_rows["amazon_bedrock"]["provision_job_status"] == "completed"
+        assert evidence_rows["github_copilot"]["provision_job_status"] == "completed"
     finally:
         for field, value in original_values.items():
             setattr(settings, field, value)

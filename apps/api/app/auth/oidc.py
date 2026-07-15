@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import Any
 
+import httpx
 import jwt
 from jwt import InvalidTokenError, PyJWKClient, PyJWKClientError
 
@@ -19,6 +21,47 @@ class OIDCConfigurationError(Exception):
     """Raised when production token validation is not configured."""
 
 
+async def exchange_oidc_code(
+    *,
+    code: str,
+    code_verifier: str,
+    redirect_uri: str,
+    settings: Settings,
+) -> dict[str, Any]:
+    return await _post_oidc_token_request(
+        settings,
+        {
+            "grant_type": "authorization_code",
+            "client_id": settings.oidc_client_id,
+            "code": code,
+            "redirect_uri": redirect_uri,
+            "code_verifier": code_verifier,
+        },
+    )
+
+
+async def refresh_oidc_access_token(
+    *,
+    refresh_token: str,
+    settings: Settings,
+) -> dict[str, Any]:
+    return await _post_oidc_token_request(
+        settings,
+        {
+            "grant_type": "refresh_token",
+            "client_id": settings.oidc_client_id,
+            "refresh_token": refresh_token,
+        },
+    )
+
+
+def access_token_expires_at(token_response: dict[str, Any]) -> datetime:
+    expires_in = token_response.get("expires_in")
+    if not isinstance(expires_in, int) or expires_in < 60:
+        expires_in = 900
+    return datetime.now(UTC) + timedelta(seconds=expires_in)
+
+
 def bearer_token_from_authorization(authorization: str | None) -> str:
     if not authorization:
         raise OIDCAuthenticationError("Missing Authorization bearer token.")
@@ -27,6 +70,29 @@ def bearer_token_from_authorization(authorization: str | None) -> str:
     if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1]:
         raise OIDCAuthenticationError("Expected Authorization: Bearer <token>.")
     return parts[1]
+
+
+async def _post_oidc_token_request(
+    settings: Settings,
+    form_data: dict[str, str],
+) -> dict[str, Any]:
+    if not settings.oidc_token_endpoint or not settings.oidc_client_id:
+        raise OIDCConfigurationError("OIDC_TOKEN_ENDPOINT and OIDC_CLIENT_ID must be configured.")
+
+    if settings.oidc_client_secret:
+        form_data["client_secret"] = settings.oidc_client_secret
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(settings.oidc_token_endpoint, data=form_data)
+            response.raise_for_status()
+            payload = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise OIDCAuthenticationError("OIDC token endpoint request failed.") from exc
+
+    if not isinstance(payload, dict) or not isinstance(payload.get("access_token"), str):
+        raise OIDCAuthenticationError("OIDC token response did not include an access token.")
+    return payload
 
 
 def decode_oidc_claims(token: str, settings: Settings) -> dict[str, Any]:
