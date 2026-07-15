@@ -734,6 +734,11 @@ function ControlCenterExperience({
     providerHealth.data?.filter((provider) => provider.status === "healthy").length ?? 0;
   const totalProviders = providerHealth.data?.length ?? 0;
   const allProvidersHealthy = totalProviders > 0 && healthyProviders === totalProviders;
+  const providerHealthState = evidencePanelState({
+    count: providerHealth.data?.length,
+    isError: providerHealth.isError,
+    isLoading: providerHealth.isLoading
+  });
   const canManageSelectedProject =
     me.data?.roles.some((role) => role === "project_owner" || role === "platform_admin") ?? false;
   const securityAlreadyMember =
@@ -855,20 +860,36 @@ function ControlCenterExperience({
 
           <Panel title="Provider Health" icon={CloudCog}>
             <div className="grid gap-3 md:grid-cols-2">
-              {(providerHealth.data ?? []).map((provider) => (
-                <div key={provider.provider} className="rounded-md border border-line p-3 text-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold">{provider.provider.replaceAll("_", " ")}</p>
-                    <StatusPill status={provider.status} />
-                  </div>
-                  <p className="mt-2 text-xs text-slate-500">
-                    {provider.latency_ms}ms · {String(provider.details.mode ?? "unknown")}
-                  </p>
-                </div>
-              ))}
-              {providerHealth.data?.length === 0 ? (
-                <p className="text-sm text-slate-500">Provider checks unavailable.</p>
+              {providerHealthState === "loading" ? (
+                <p className="text-sm text-slate-500">Loading provider checks...</p>
               ) : null}
+              {providerHealthState === "error" ? (
+                <p className="text-sm text-coral">
+                  Provider checks could not be loaded. Check that the API is running for this
+                  dashboard session.
+                </p>
+              ) : null}
+              {providerHealthState === "empty" ? (
+                <p className="text-sm text-slate-500">
+                  No provider checks have been recorded yet.
+                </p>
+              ) : null}
+              {providerHealthState === "ready"
+                ? (providerHealth.data ?? []).map((provider) => (
+                    <div
+                      key={provider.provider}
+                      className="rounded-md border border-line p-3 text-sm"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-semibold">{provider.provider.replaceAll("_", " ")}</p>
+                        <StatusPill status={provider.status} />
+                      </div>
+                      <p className="mt-2 text-xs text-slate-500">
+                        {provider.latency_ms}ms · {String(provider.details.mode ?? "unknown")}
+                      </p>
+                    </div>
+                  ))
+                : null}
             </div>
             {providerConfiguration.data ? (
               <div className="mt-4 grid gap-2 border-t border-line pt-4">
