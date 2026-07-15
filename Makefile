@@ -24,7 +24,7 @@ lint:
 	npm --workspace apps/web run lint
 
 typecheck:
-	cd apps/api && uv run mypy app
+	cd apps/api && uv run mypy .
 	npm --workspace apps/web run typecheck
 
 migrate:
