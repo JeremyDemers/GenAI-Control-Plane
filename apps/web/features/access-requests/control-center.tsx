@@ -749,6 +749,52 @@ function ControlCenterExperience({
     isError: reassignments.isError,
     isLoading: reassignments.isLoading
   });
+  const activePolicy = policies.data?.find((policy) => policy.active);
+  const policyState = evidencePanelState({
+    count: activePolicy || retentionPolicy.data ? 1 : policies.data?.length,
+    isError: policies.isError || retentionPolicy.isError,
+    isLoading: policies.isLoading || retentionPolicy.isLoading
+  });
+  const incidentsState = evidencePanelState({
+    count: incidents.data?.length,
+    isError: incidents.isError,
+    isLoading: incidents.isLoading
+  });
+  const approvalHistoryState = evidencePanelState({
+    count: approvalHistory.data?.length,
+    isError: approvalHistory.isError,
+    isLoading: approvalHistory.isLoading
+  });
+  const roleChangesState = evidencePanelState({
+    count: roleChanges.data?.length,
+    isError: roleChanges.isError,
+    isLoading: roleChanges.isLoading
+  });
+  const operationalHealthState = evidencePanelState({
+    count: operationalHealth.data ? 1 : 0,
+    isError: operationalHealth.isError,
+    isLoading: operationalHealth.isLoading
+  });
+  const provisioningEvidenceState = evidencePanelState({
+    count: provisioningEvidence.data?.length,
+    isError: provisioningEvidence.isError,
+    isLoading: provisioningEvidence.isLoading
+  });
+  const auditTrailState = evidencePanelState({
+    count: auditEvents.data?.length,
+    isError: auditEvents.isError,
+    isLoading: auditEvents.isLoading
+  });
+  const executiveReportState = evidencePanelState({
+    count: executiveReport.data ? 1 : 0,
+    isError: executiveReport.isError,
+    isLoading: executiveReport.isLoading
+  });
+  const extensionQueueState = evidencePanelState({
+    count: extensions.data?.length,
+    isError: extensions.isError,
+    isLoading: extensions.isLoading
+  });
   const canManageSelectedProject =
     me.data?.roles.some((role) => role === "project_owner" || role === "platform_admin") ?? false;
   const securityAlreadyMember =
@@ -1472,15 +1518,25 @@ function ControlCenterExperience({
           {user === "admin@example.local" || user === "auditor@example.local" ? (
             <Panel title="Policies" icon={ShieldCheck}>
               <div className="grid gap-3 text-sm">
-                {policies.data?.find((policy) => policy.active) ? (
+                {policyState === "loading" ? (
+                  <p className="text-sm text-slate-500">Loading policy evidence...</p>
+                ) : null}
+                {policyState === "error" ? (
+                  <p className="text-sm text-coral">
+                    Policy evidence could not be loaded. Check that the API is running for this
+                    dashboard session.
+                  </p>
+                ) : null}
+                {policyState === "empty" ? (
+                  <p className="text-sm text-slate-500">No active policy evidence yet.</p>
+                ) : null}
+                {policyState === "ready" && activePolicy ? (
                   <div className="rounded-md border border-line p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="font-semibold">
-                          {policies.data.find((policy) => policy.active)?.name}
-                        </p>
+                        <p className="font-semibold">{activePolicy.name}</p>
                         <p className="mt-1 text-slate-600">
-                          Version {policies.data.find((policy) => policy.active)?.version} · active
+                          Version {activePolicy.version} · active
                         </p>
                       </div>
                       {user === "admin@example.local" ? (
@@ -1493,15 +1549,13 @@ function ControlCenterExperience({
                       ) : null}
                     </div>
                   </div>
-                ) : (
-                  <p className="text-sm text-slate-500">Policy versions unavailable.</p>
-                )}
+                ) : null}
                 {policyPublishMutation.data ? (
                   <p className="rounded-md bg-panel p-2 text-xs text-slate-600">
                     Published policy version {policyPublishMutation.data.version}.
                   </p>
                 ) : null}
-                {retentionPolicy.data ? (
+                {policyState === "ready" && retentionPolicy.data ? (
                   <div className="rounded-md border border-line p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
@@ -1534,33 +1588,45 @@ function ControlCenterExperience({
           {user === "admin@example.local" || user === "auditor@example.local" ? (
             <Panel title="Incidents" icon={AlertTriangle}>
               <div className="grid gap-2">
-                {(incidents.data ?? []).slice(0, 5).map((incident) => (
-                  <div key={incident.id} className="rounded-md border border-line p-3 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-semibold">{incident.summary}</p>
-                          <StatusPill status={incident.status} />
-                        </div>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {incident.severity} · {new Date(incident.created_at).toLocaleTimeString()}
-                        </p>
-                      </div>
-                      {user === "admin@example.local" && incident.status !== "resolved" ? (
-                        <button
-                          data-testid="resolve-incident"
-                          className="rounded-md border border-line px-3 py-2 text-xs font-semibold"
-                          onClick={() => incidentResolveMutation.mutate(incident.id)}
-                        >
-                          Resolve
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                ))}
-                {incidents.data?.length === 0 ? (
+                {incidentsState === "loading" ? (
+                  <p className="text-sm text-slate-500">Loading incidents...</p>
+                ) : null}
+                {incidentsState === "error" ? (
+                  <p className="text-sm text-coral">
+                    Incidents could not be loaded. Check that the API is running for this dashboard
+                    session.
+                  </p>
+                ) : null}
+                {incidentsState === "empty" ? (
                   <p className="text-sm text-slate-500">No incidents.</p>
                 ) : null}
+                {incidentsState === "ready"
+                  ? (incidents.data ?? []).slice(0, 5).map((incident) => (
+                      <div key={incident.id} className="rounded-md border border-line p-3 text-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-semibold">{incident.summary}</p>
+                              <StatusPill status={incident.status} />
+                            </div>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {incident.severity} ·{" "}
+                              {new Date(incident.created_at).toLocaleTimeString()}
+                            </p>
+                          </div>
+                          {user === "admin@example.local" && incident.status !== "resolved" ? (
+                            <button
+                              data-testid="resolve-incident"
+                              className="rounded-md border border-line px-3 py-2 text-xs font-semibold"
+                              onClick={() => incidentResolveMutation.mutate(incident.id)}
+                            >
+                              Resolve
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))
+                  : null}
               </div>
             </Panel>
           ) : null}
@@ -1570,29 +1636,42 @@ function ControlCenterExperience({
           user === "cto@example.local" ? (
             <Panel title="Approval History" icon={CheckCircle2}>
               <div className="grid gap-2">
-                {(approvalHistory.data ?? []).slice(0, 8).map((row) => (
-                  <div
-                    key={`${row.approval_step_id}-${row.decision_id ?? "pending"}`}
-                    className="rounded-md border border-line p-3 text-sm"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="font-semibold">{row.project_name}</p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {row.step_type} · {row.assigned_role}
-                        </p>
-                      </div>
-                      <StatusPill status={row.decision ?? row.step_status} />
-                    </div>
-                    <p className="mt-2 text-xs text-slate-600">
-                      {row.actor_email ?? "Awaiting reviewer"}
-                      {row.decided_at ? ` · ${new Date(row.decided_at).toLocaleTimeString()}` : ""}
-                    </p>
-                  </div>
-                ))}
-                {approvalHistory.data?.length === 0 ? (
+                {approvalHistoryState === "loading" ? (
+                  <p className="text-sm text-slate-500">Loading approval history...</p>
+                ) : null}
+                {approvalHistoryState === "error" ? (
+                  <p className="text-sm text-coral">
+                    Approval history could not be loaded. Check that the API is running for this
+                    dashboard session.
+                  </p>
+                ) : null}
+                {approvalHistoryState === "empty" ? (
                   <p className="text-sm text-slate-500">No approval history yet.</p>
                 ) : null}
+                {approvalHistoryState === "ready"
+                  ? (approvalHistory.data ?? []).slice(0, 8).map((row) => (
+                      <div
+                        key={`${row.approval_step_id}-${row.decision_id ?? "pending"}`}
+                        className="rounded-md border border-line p-3 text-sm"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="font-semibold">{row.project_name}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {row.step_type} · {row.assigned_role}
+                            </p>
+                          </div>
+                          <StatusPill status={row.decision ?? row.step_status} />
+                        </div>
+                        <p className="mt-2 text-xs text-slate-600">
+                          {row.actor_email ?? "Awaiting reviewer"}
+                          {row.decided_at
+                            ? ` · ${new Date(row.decided_at).toLocaleTimeString()}`
+                            : ""}
+                        </p>
+                      </div>
+                    ))
+                  : null}
               </div>
             </Panel>
           ) : null}
@@ -1600,26 +1679,37 @@ function ControlCenterExperience({
           {user === "auditor@example.local" ? (
             <Panel title="Role Changes" icon={UserRound}>
               <div className="grid gap-2">
-                {(roleChanges.data ?? []).slice(0, 6).map((change) => (
-                  <div key={change.id} className="rounded-md border border-line p-3 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-semibold">{change.target_email}</p>
-                      <span className="text-xs text-slate-500">
-                        {new Date(change.created_at).toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-slate-600">
-                      {change.old_role} to {change.new_role} ·{" "}
-                      {change.project_name ?? "organization"}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {change.source_event_type} · {change.actor_email ?? "system"}
-                    </p>
-                  </div>
-                ))}
-                {roleChanges.data?.length === 0 ? (
+                {roleChangesState === "loading" ? (
+                  <p className="text-sm text-slate-500">Loading role changes...</p>
+                ) : null}
+                {roleChangesState === "error" ? (
+                  <p className="text-sm text-coral">
+                    Role-change evidence could not be loaded. Check that the API is running for
+                    this dashboard session.
+                  </p>
+                ) : null}
+                {roleChangesState === "empty" ? (
                   <p className="text-sm text-slate-500">No role changes yet.</p>
                 ) : null}
+                {roleChangesState === "ready"
+                  ? (roleChanges.data ?? []).slice(0, 6).map((change) => (
+                      <div key={change.id} className="rounded-md border border-line p-3 text-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="font-semibold">{change.target_email}</p>
+                          <span className="text-xs text-slate-500">
+                            {new Date(change.created_at).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-slate-600">
+                          {change.old_role} to {change.new_role} ·{" "}
+                          {change.project_name ?? "organization"}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {change.source_event_type} · {change.actor_email ?? "system"}
+                        </p>
+                      </div>
+                    ))
+                  : null}
               </div>
             </Panel>
           ) : null}
@@ -1628,7 +1718,19 @@ function ControlCenterExperience({
           user === "auditor@example.local" ||
           user === "cto@example.local" ? (
             <Panel title="Operational Health" icon={Activity}>
-              {operationalHealth.data ? (
+              {operationalHealthState === "loading" ? (
+                <p className="text-sm text-slate-500">Loading operational telemetry...</p>
+              ) : null}
+              {operationalHealthState === "error" ? (
+                <p className="text-sm text-coral">
+                  Operational telemetry could not be loaded. Check that the API is running for this
+                  dashboard session.
+                </p>
+              ) : null}
+              {operationalHealthState === "empty" ? (
+                <p className="text-sm text-slate-500">No operational telemetry yet.</p>
+              ) : null}
+              {operationalHealthState === "ready" && operationalHealth.data ? (
                 <div className="grid grid-cols-3 gap-3 text-sm">
                   <Detail
                     label="Requests"
@@ -1643,9 +1745,7 @@ function ControlCenterExperience({
                     value={operationalHealth.data.lifecycle_jobs.queued_or_failed.toString()}
                   />
                 </div>
-              ) : (
-                <p className="text-sm text-slate-500">Operational telemetry unavailable.</p>
-              )}
+              ) : null}
             </Panel>
           ) : null}
 
@@ -1654,30 +1754,41 @@ function ControlCenterExperience({
           user === "cto@example.local" ? (
             <Panel title="Provisioning Evidence" icon={FileClock}>
               <div className="grid gap-2">
-                {(provisioningEvidence.data ?? []).slice(0, 5).map((evidence) => (
-                  <div
-                    key={evidence.assignment_id}
-                    className="rounded-md border border-line p-3 text-sm"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="font-semibold">{evidence.project_name}</p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {evidence.provider.replaceAll("_", " ")} · provision{" "}
-                          {evidence.provision_job_status ?? "pending"} · archive{" "}
-                          {evidence.archive_job_status ?? "pending"}
-                        </p>
-                      </div>
-                      <StatusPill status={evidence.evidence_result} />
-                    </div>
-                    <p className="mt-2 break-all text-xs text-slate-500">
-                      {evidence.archive_checksum ?? evidence.external_resource_id}
-                    </p>
-                  </div>
-                ))}
-                {provisioningEvidence.data?.length === 0 ? (
+                {provisioningEvidenceState === "loading" ? (
+                  <p className="text-sm text-slate-500">Loading provisioning evidence...</p>
+                ) : null}
+                {provisioningEvidenceState === "error" ? (
+                  <p className="text-sm text-coral">
+                    Provisioning evidence could not be loaded. Check that the API is running for
+                    this dashboard session.
+                  </p>
+                ) : null}
+                {provisioningEvidenceState === "empty" ? (
                   <p className="text-sm text-slate-500">No provisioning evidence yet.</p>
                 ) : null}
+                {provisioningEvidenceState === "ready"
+                  ? (provisioningEvidence.data ?? []).slice(0, 5).map((evidence) => (
+                      <div
+                        key={evidence.assignment_id}
+                        className="rounded-md border border-line p-3 text-sm"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="font-semibold">{evidence.project_name}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {evidence.provider.replaceAll("_", " ")} · provision{" "}
+                              {evidence.provision_job_status ?? "pending"} · archive{" "}
+                              {evidence.archive_job_status ?? "pending"}
+                            </p>
+                          </div>
+                          <StatusPill status={evidence.evidence_result} />
+                        </div>
+                        <p className="mt-2 break-all text-xs text-slate-500">
+                          {evidence.archive_checksum ?? evidence.external_resource_id}
+                        </p>
+                      </div>
+                    ))
+                  : null}
               </div>
             </Panel>
           ) : null}
@@ -1696,29 +1807,54 @@ function ControlCenterExperience({
                     CSV export ready · {auditExportMutation.data.trim().split("\n").length - 1} rows
                   </p>
                 ) : null}
-                {(auditEvents.data ?? []).slice(0, 8).map((event) => (
-                  <div key={event.id} className="rounded-md border border-line p-3 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-semibold">{event.event_type}</p>
-                      <span className="text-xs text-slate-500">
-                        {new Date(event.created_at).toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-slate-600">
-                      {event.action} · {event.result}
-                    </p>
-                  </div>
-                ))}
-                {auditEvents.data?.length === 0 ? (
+                {auditTrailState === "loading" ? (
+                  <p className="text-sm text-slate-500">Loading audit trail...</p>
+                ) : null}
+                {auditTrailState === "error" ? (
+                  <p className="text-sm text-coral">
+                    Audit trail could not be loaded. Check that the API is running for this
+                    dashboard session.
+                  </p>
+                ) : null}
+                {auditTrailState === "empty" ? (
                   <p className="text-sm text-slate-500">No audit events yet.</p>
                 ) : null}
+                {auditTrailState === "ready"
+                  ? (auditEvents.data ?? []).slice(0, 8).map((event) => (
+                      <div key={event.id} className="rounded-md border border-line p-3 text-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="font-semibold">{event.event_type}</p>
+                          <span className="text-xs text-slate-500">
+                            {new Date(event.created_at).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-slate-600">
+                          {event.action} · {event.result}
+                        </p>
+                      </div>
+                    ))
+                  : null}
               </div>
             </Panel>
           ) : null}
 
           {user === "cto@example.local" ? (
             <Panel title="Executive Report" icon={LineChart}>
-              {executiveReport.data ? (
+              {executiveReportState === "loading" ? (
+                <p className="text-sm text-slate-500">Loading executive report...</p>
+              ) : null}
+              {executiveReportState === "error" ? (
+                <p className="text-sm text-coral">
+                  Executive report could not be loaded. Check that the API is running for this
+                  dashboard session.
+                </p>
+              ) : null}
+              {executiveReportState === "empty" ? (
+                <p className="text-sm text-slate-500">
+                  Executive report will populate after activity.
+                </p>
+              ) : null}
+              {executiveReportState === "ready" && executiveReport.data ? (
                 <div className="grid gap-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm text-slate-600">Cost allocation evidence</p>
@@ -1811,55 +1947,66 @@ function ControlCenterExperience({
                     </div>
                   ) : null}
                 </div>
-              ) : (
-                <p className="text-sm text-slate-500">Executive report will populate after activity.</p>
-              )}
+              ) : null}
             </Panel>
           ) : null}
 
           {user === "cto@example.local" || user === "admin@example.local" ? (
             <Panel title="Extension Queue" icon={Clock3}>
               <div className="grid gap-2">
-                {(extensions.data ?? []).map((extension) => (
-                  <div key={extension.id} className="rounded-md border border-line p-3 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="font-semibold">{extension.status}</p>
-                        <p className="break-all text-xs text-slate-500">{extension.request_id}</p>
-                      </div>
-                      {extension.status === "pending" ? (
-                        <div className="flex gap-2">
-                          <button
-                            data-testid="approve-extension"
-                            className="rounded-md bg-mint px-3 py-2 text-xs font-semibold text-white"
-                            onClick={() =>
-                              extensionDecisionMutation.mutate({
-                                extensionId: extension.id,
-                                decision: "approve"
-                              })
-                            }
-                          >
-                            Approve
-                          </button>
-                          <button
-                            className="rounded-md border border-coral px-3 py-2 text-xs font-semibold text-coral"
-                            onClick={() =>
-                              extensionDecisionMutation.mutate({
-                                extensionId: extension.id,
-                                decision: "reject"
-                              })
-                            }
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                ))}
-                {extensions.data?.length === 0 ? (
+                {extensionQueueState === "loading" ? (
+                  <p className="text-sm text-slate-500">Loading extension requests...</p>
+                ) : null}
+                {extensionQueueState === "error" ? (
+                  <p className="text-sm text-coral">
+                    Extension requests could not be loaded. Check that the API is running for this
+                    dashboard session.
+                  </p>
+                ) : null}
+                {extensionQueueState === "empty" ? (
                   <p className="text-sm text-slate-500">No extension requests.</p>
                 ) : null}
+                {extensionQueueState === "ready"
+                  ? (extensions.data ?? []).map((extension) => (
+                      <div key={extension.id} className="rounded-md border border-line p-3 text-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-semibold">{extension.status}</p>
+                            <p className="break-all text-xs text-slate-500">
+                              {extension.request_id}
+                            </p>
+                          </div>
+                          {extension.status === "pending" ? (
+                            <div className="flex gap-2">
+                              <button
+                                data-testid="approve-extension"
+                                className="rounded-md bg-mint px-3 py-2 text-xs font-semibold text-white"
+                                onClick={() =>
+                                  extensionDecisionMutation.mutate({
+                                    extensionId: extension.id,
+                                    decision: "approve"
+                                  })
+                                }
+                              >
+                                Approve
+                              </button>
+                              <button
+                                className="rounded-md border border-coral px-3 py-2 text-xs font-semibold text-coral"
+                                onClick={() =>
+                                  extensionDecisionMutation.mutate({
+                                    extensionId: extension.id,
+                                    decision: "reject"
+                                  })
+                                }
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))
+                  : null}
               </div>
             </Panel>
           ) : null}
