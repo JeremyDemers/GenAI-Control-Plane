@@ -1,3 +1,5 @@
+import { apiBaseUrl } from "@/lib/api-config";
+
 export type AuthMode = "development" | "oidc";
 
 export type OidcConfig = {
@@ -35,7 +37,7 @@ export function oidcConfig(): OidcConfig | null {
       process.env.NEXT_PUBLIC_OIDC_REDIRECT_URI ??
       (typeof window === "undefined" ? "" : window.location.origin),
     scope: process.env.NEXT_PUBLIC_OIDC_SCOPE ?? "openid profile email offline_access",
-    apiBaseUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+    apiBaseUrl: apiBaseUrl()
   };
 }
 
