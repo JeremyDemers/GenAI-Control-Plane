@@ -19,6 +19,7 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.entities import AuthSession, User
 from app.schemas import OidcCodeExchangeIn, OidcTokenOut, UserOut
+from app.services.audit import record_audit_event
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -69,6 +70,19 @@ async def oidc_callback(
     db.add(session)
     db.commit()
     db.refresh(session)
+    record_audit_event(
+        db,
+        event_type="auth.session_created",
+        actor_user_id=user.id,
+        target_type="auth_session",
+        target_id=session.id,
+        action="oidc_code_exchange",
+        result="success",
+        reason="OIDC authorization code exchanged for a server-managed session.",
+        correlation_id=_correlation_id(request),
+        metadata_json=_session_audit_metadata(session),
+    )
+    db.commit()
     _set_session_cookie(response, session.id)
     return OidcTokenOut(
         access_token=access_token,
@@ -132,6 +146,18 @@ def logout(
         session = db.get(AuthSession, session_id)
         if session and session.revoked_at is None:
             session.revoked_at = datetime.now(UTC)
+            record_audit_event(
+                db,
+                event_type="auth.session_revoked",
+                actor_user_id=session.user_id,
+                target_type="auth_session",
+                target_id=session.id,
+                action="logout",
+                result="success",
+                reason="OIDC server-managed session was revoked by logout.",
+                correlation_id=_correlation_id(request),
+                metadata_json=_session_audit_metadata(session),
+            )
             db.commit()
     _clear_session_cookie(response)
 
@@ -210,6 +236,17 @@ def _user_out(user: User) -> UserOut:
         display_name=user.display_name,
         roles=[role.name for role in user.roles],
     )
+
+
+def _correlation_id(request: Request) -> str:
+    return str(getattr(request.state, "correlation_id", None) or "auth-session")
+
+
+def _session_audit_metadata(session: AuthSession) -> dict[str, str]:
+    return {
+        "expires_at": session.expires_at.isoformat(),
+        "revoked_at": session.revoked_at.isoformat() if session.revoked_at else "",
+    }
 
 
 def _as_utc(value: datetime) -> datetime:
