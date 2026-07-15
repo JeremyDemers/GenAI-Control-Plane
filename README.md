@@ -99,7 +99,7 @@ cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade 
 
 ## Roadmap
 
-1. Expand live provider adapters with least-privilege mutating AWS, Azure, Google Cloud, Microsoft Graph, and GitHub operations behind safe feature flags.
+1. Replace guarded live-provider operation profiles with provider-specific API calls after credentials, tenancy, and rollback procedures are approved.
 2. Add repository-layer and service-layer coverage around provider adapters.
-3. Add server-managed OIDC refresh-token handling.
-4. Move scheduled report delivery from local worker evidence to external email infrastructure.
+3. Move scheduled report delivery from local worker evidence to external email infrastructure.
+4. Track and resolve the remaining moderate Next/PostCSS advisory when a non-breaking Next release is available.
