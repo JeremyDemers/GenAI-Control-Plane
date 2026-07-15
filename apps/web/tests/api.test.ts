@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { getAuditEventSummary, scanExpirationWarnings } from "@/lib/api";
+import { exportExecutiveReport, getAuditEventSummary, scanExpirationWarnings } from "@/lib/api";
 import { apiBaseUrl, apiDocsUrl } from "@/lib/api-config";
 
 const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -84,6 +84,25 @@ describe("api helpers", () => {
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({ "x-dev-user": "admin@example.local" })
+      })
+    );
+  });
+
+  it("exports executive reports with CTO identity headers", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve("section,name,metric,value\nsummary,total_spend,amount,25.00\n")
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(exportExecutiveReport("cto@example.local")).resolves.toContain(
+      "summary,total_spend"
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8000/reports/executive/export",
+      expect.objectContaining({
+        headers: expect.objectContaining({ "x-dev-user": "cto@example.local" })
       })
     );
   });

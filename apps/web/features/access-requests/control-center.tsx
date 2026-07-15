@@ -50,6 +50,7 @@ import {
   expireAssignment,
   exportAuditEvents,
   exportCostAllocation,
+  exportExecutiveReport,
   getAuditEventSummary,
   getExecutiveReport,
   getMe,
@@ -709,6 +710,13 @@ function ControlCenterExperience({
 
   const costAllocationExportMutation = useMutation({
     mutationFn: () => exportCostAllocation(identity)
+  });
+  const executiveReportExportMutation = useMutation({
+    mutationFn: () => exportExecutiveReport(identity),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
+    }
   });
 
   const costAllocationDeliveryMutation = useMutation({
@@ -2034,13 +2042,19 @@ function ControlCenterExperience({
               {executiveReportState === "ready" && executiveReport.data ? (
                 <div className="grid gap-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm text-slate-600">Cost allocation evidence</p>
+                    <p className="text-sm text-slate-600">Executive and cost evidence</p>
                     <div className="flex gap-2">
                       <button
                         className="h-10 rounded-md border border-line px-3 text-sm font-semibold"
                         onClick={() => costAllocationDeliveryMutation.mutate()}
                       >
                         Schedule
+                      </button>
+                      <button
+                        className="h-10 rounded-md border border-line px-3 text-sm font-semibold"
+                        onClick={() => executiveReportExportMutation.mutate()}
+                      >
+                        Export Report
                       </button>
                       <button
                         className="h-10 rounded-md border border-line px-3 text-sm font-semibold"
@@ -2054,6 +2068,12 @@ function ControlCenterExperience({
                     <p className="rounded-md bg-panel p-2 text-xs text-slate-600">
                       Allocation export ready ·{" "}
                       {costAllocationExportMutation.data.trim().split("\n").length - 1} rows
+                    </p>
+                  ) : null}
+                  {executiveReportExportMutation.data ? (
+                    <p className="rounded-md bg-panel p-2 text-xs text-slate-600">
+                      Executive report export ready ·{" "}
+                      {executiveReportExportMutation.data.trim().split("\n").length - 1} rows
                     </p>
                   ) : null}
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
