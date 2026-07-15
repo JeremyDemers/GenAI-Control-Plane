@@ -41,12 +41,8 @@ services:
     healthcheck:
       test:
         [
-          "CMD",
-          "uv",
-          "run",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)",
+          "CMD-SHELL",
+          "uv run python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)\"",
         ]
       interval: 10s
       timeout: 5s
@@ -88,10 +84,8 @@ services:
     healthcheck:
       test:
         [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:3000').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))",
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\"",
         ]
       interval: 10s
       timeout: 5s
