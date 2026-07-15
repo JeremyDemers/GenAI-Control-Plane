@@ -6,7 +6,7 @@ AI Access Control Center is a production-style internal portal for governed, tem
 
 ## Current Phase
 
-Phase 1 foundation is implemented with a working FastAPI API, Next.js portal, development users, mock provider provisioning, baseline tests, Docker Compose, and documentation. Live AWS, Azure, Google Cloud, Microsoft Graph, and GitHub integrations are intentionally adapter boundaries in this phase.
+Phase 1 foundation is implemented with a working FastAPI API, Next.js portal, development users, mock provider provisioning, baseline tests, Docker Compose, and documentation. Live AWS, Azure, Google Cloud, Microsoft Graph, and GitHub integrations expose SDK/config readiness checks and guarded least-privilege operation profiles behind a feature flag.
 
 ## Local Setup
 
@@ -79,7 +79,7 @@ make migration-check
 make security-audit
 ```
 
-Backend tests cover state transitions, RBAC denial/audit logging, request submission, trace/correlation propagation, rate limiting, queued lifecycle worker execution, project ownership and scoped audit visibility, project member management/reassignment/suspension, approval information requests, CTO override, approval history, role-change and provisioning evidence visibility, provider retryable failure handling, provider configuration modes, provider credential inventory/rotation, cancellation, extension requests, incidents, notifications, executive reporting, usage/cost/budget evidence, audit/cost allocation export, policy versioning/retention/evaluation, and mock provisioning through approval. Frontend tests cover request form validation.
+Backend tests cover state transitions, RBAC denial/audit logging, request submission, trace/correlation propagation, rate limiting, queued lifecycle worker execution, project ownership and scoped audit visibility, project member management/reassignment/suspension, approval information requests, CTO override, approval history, role-change and provisioning evidence visibility, provider retryable failure handling, provider configuration modes, guarded live-provider operations, provider credential inventory/rotation, cancellation, extension requests, incidents, notifications, executive reporting, usage/cost/budget evidence, audit/cost allocation export, policy versioning/retention/evaluation, and mock provisioning through approval. Frontend tests cover request form validation.
 Playwright covers the seeded interview demo lifecycle end to end.
 
 For a clean local SQLite migration check:
@@ -95,7 +95,7 @@ cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade 
 - Live provider mutating operations are intentionally disabled until `PROVIDER_LIVE_OPERATIONS_ENABLED=true`; when enabled, provider assignments use guarded least-privilege operation profiles and SDK/config readiness checks.
 - The API still creates local tables at startup for demo velocity, with Alembic migrations available for clean database setup.
 - Provisioning, usage/budget processing, restore, archive/deprovision, cost allocation delivery, and notification delivery are durably tracked and can be drained by the worker; local inline execution remains enabled by default for demo velocity.
-- `npm audit --audit-level=high` passes; full `npm audit` currently reports a moderate Next/PostCSS transitive advisory where `next@latest` still bundles the affected range.
+- `npm audit --audit-level=high` passes; `npm audit --audit-level=moderate` currently reports the known Next/PostCSS transitive advisory where the suggested forced fix downgrades Next to an unusable legacy release.
 
 ## Roadmap
 
