@@ -79,4 +79,4 @@
 
 ## Remaining Work
 
-- Track the remaining moderate npm audit advisory for Next's transitive PostCSS dependency; `npm audit --audit-level=moderate` still reports the affected bundled range, and `npm audit fix --force` recommends downgrading to an unusable legacy Next release.
+- Track the remaining moderate Next/PostCSS advisory documented in `docs/dependency-audit.md`; `npm audit --audit-level=high` remains clean for CI gating.

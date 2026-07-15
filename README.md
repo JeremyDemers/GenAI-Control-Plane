@@ -106,11 +106,10 @@ cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade 
 - Live provider mutating operations are intentionally disabled until `PROVIDER_LIVE_OPERATIONS_ENABLED=true`; when enabled, provider assignments use guarded least-privilege operation profiles and SDK/config readiness checks.
 - The API still creates local tables at startup for demo velocity, with Alembic migrations available for clean database setup.
 - Provisioning, usage/budget processing, restore, archive/deprovision, cost allocation delivery, and notification delivery are durably tracked and can be drained by the worker; local inline execution remains enabled by default for demo velocity.
-- `npm audit --audit-level=high` passes; `npm audit --audit-level=moderate` currently reports the known Next/PostCSS transitive advisory where the suggested forced fix downgrades Next to an unusable legacy release.
+- `npm audit --audit-level=high` passes; `npm audit --audit-level=moderate` currently reports the known Next/PostCSS transitive advisory documented in [Dependency Audit](docs/dependency-audit.md).
 
 ## Roadmap
 
 1. Replace guarded live-provider operation profiles with provider-specific API calls after credentials, tenancy, and rollback procedures are approved.
-2. Add repository-layer and service-layer coverage around provider adapters.
-3. Move scheduled report delivery from local worker evidence to external email infrastructure.
-4. Track and resolve the remaining moderate Next/PostCSS advisory when a non-breaking Next release is available.
+2. Move scheduled report delivery from local worker evidence to external email infrastructure.
+3. Track and resolve the remaining moderate Next/PostCSS advisory when a non-breaking Next release is available.
