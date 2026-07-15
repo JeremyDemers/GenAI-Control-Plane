@@ -64,6 +64,12 @@ usage, and cost-center spend. CTOs can export the same rollup as CSV at
 `/reports/executive/export`; the export writes `report.executive_exported` audit evidence with row
 count and correlation ID metadata.
 
+CTOs, platform administrators, and security auditors can review adoption rollups at
+`/reports/adoption`. The report summarizes users with requests, projects with usage, active
+assignments, department adoption, provider adoption, and project-level activity. CSV export is
+available at `/reports/adoption/export` and writes `report.adoption_exported` audit evidence with
+row count and correlation ID metadata.
+
 ## Extension Requests
 
 Employees can request a later expiration date for active access at `/extensions`. CTOs and platform
