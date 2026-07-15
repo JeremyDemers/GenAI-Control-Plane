@@ -2,15 +2,14 @@ export type AuthMode = "development" | "oidc";
 
 export type OidcConfig = {
   authorizationEndpoint: string;
-  tokenEndpoint: string;
   clientId: string;
   redirectUri: string;
   scope: string;
+  apiBaseUrl: string;
 };
 
 export type OidcSession = {
   accessToken: string;
-  idToken: string | null;
   email: string;
   expiresAt: number;
 };
@@ -25,19 +24,18 @@ export function authMode(): AuthMode {
 
 export function oidcConfig(): OidcConfig | null {
   const authorizationEndpoint = process.env.NEXT_PUBLIC_OIDC_AUTHORIZATION_ENDPOINT;
-  const tokenEndpoint = process.env.NEXT_PUBLIC_OIDC_TOKEN_ENDPOINT;
   const clientId = process.env.NEXT_PUBLIC_OIDC_CLIENT_ID;
-  if (!authorizationEndpoint || !tokenEndpoint || !clientId) {
+  if (!authorizationEndpoint || !clientId) {
     return null;
   }
   return {
     authorizationEndpoint,
-    tokenEndpoint,
     clientId,
     redirectUri:
       process.env.NEXT_PUBLIC_OIDC_REDIRECT_URI ??
       (typeof window === "undefined" ? "" : window.location.origin),
-    scope: process.env.NEXT_PUBLIC_OIDC_SCOPE ?? "openid profile email"
+    scope: process.env.NEXT_PUBLIC_OIDC_SCOPE ?? "openid profile email offline_access",
+    apiBaseUrl: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
   };
 }
 
@@ -75,42 +73,68 @@ export async function completeOidcLogin(search: string, config: OidcConfig): Pro
     throw new Error("OIDC PKCE verifier is missing.");
   }
 
-  const response = await fetch(config.tokenEndpoint, {
+  const response = await fetch(`${config.apiBaseUrl}/auth/oidc/callback`, {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      client_id: config.clientId,
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
       code,
       redirect_uri: config.redirectUri,
       code_verifier: verifier
     })
   });
   if (!response.ok) {
-    throw new Error(`OIDC token exchange failed: ${response.status}`);
+    throw new Error(`OIDC session exchange failed: ${response.status}`);
   }
 
   const payload = (await response.json()) as {
     access_token?: string;
-    id_token?: string;
-    expires_in?: number;
+    expires_at?: string;
+    user?: { email?: string };
   };
   if (!payload.access_token) {
-    throw new Error("OIDC token response did not include an access token.");
+    throw new Error("OIDC session response did not include an access token.");
   }
 
-  const claims = decodeJwtClaims(payload.id_token ?? payload.access_token);
-  const email = emailFromClaims(claims);
-  const expiresAt = Date.now() + Math.max(payload.expires_in ?? 900, 60) * 1000;
+  const email =
+    payload.user?.email?.trim().toLowerCase() ??
+    emailFromClaims(decodeJwtClaims(payload.access_token));
+  const expiresAt = payload.expires_at ? Date.parse(payload.expires_at) : Date.now() + 900_000;
   const session = {
     accessToken: payload.access_token,
-    idToken: payload.id_token ?? null,
     email,
     expiresAt
   };
   saveOidcSession(session);
   sessionStorage.removeItem(verifierKey);
   sessionStorage.removeItem(stateKey);
+  return session;
+}
+
+export async function refreshOidcSession(config: OidcConfig): Promise<OidcSession | null> {
+  const response = await fetch(`${config.apiBaseUrl}/auth/oidc/refresh`, {
+    method: "POST",
+    credentials: "include"
+  });
+  if (!response.ok) {
+    clearOidcSession();
+    return null;
+  }
+  const payload = (await response.json()) as {
+    access_token?: string;
+    expires_at?: string;
+    user?: { email?: string };
+  };
+  if (!payload.access_token || !payload.user?.email) {
+    clearOidcSession();
+    return null;
+  }
+  const session = {
+    accessToken: payload.access_token,
+    email: payload.user.email.trim().toLowerCase(),
+    expiresAt: payload.expires_at ? Date.parse(payload.expires_at) : Date.now() + 900_000
+  };
+  saveOidcSession(session);
   return session;
 }
 
@@ -136,6 +160,14 @@ export function saveOidcSession(session: OidcSession) {
 
 export function clearOidcSession() {
   sessionStorage.removeItem(sessionKey);
+}
+
+export async function logoutOidcSession(config: OidcConfig) {
+  await fetch(`${config.apiBaseUrl}/auth/logout`, {
+    method: "POST",
+    credentials: "include"
+  }).catch(() => undefined);
+  clearOidcSession();
 }
 
 export function decodeJwtClaims(token: string): Record<string, unknown> {

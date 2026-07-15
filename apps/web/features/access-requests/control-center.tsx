@@ -97,7 +97,9 @@ import {
   clearOidcSession,
   completeOidcLogin,
   loadOidcSession,
+  logoutOidcSession,
   oidcConfig,
+  refreshOidcSession,
   type OidcSession
 } from "@/lib/auth";
 import {
@@ -198,6 +200,14 @@ export function ControlCenter() {
       setOidcSession(existing);
       return;
     }
+    if (!window.location.search.includes("code=")) {
+      void refreshOidcSession(config).then((session) => {
+        if (session) {
+          setOidcSession(session);
+        }
+      });
+      return;
+    }
     void completeOidcLogin(window.location.search, config)
       .then((session) => {
         if (session) {
@@ -214,7 +224,7 @@ export function ControlCenter() {
     return (
       <AuthShell
         title="OIDC is not configured"
-        detail="Set the public OIDC authorization endpoint, token endpoint, and client ID before using enterprise login."
+        detail="Set the public OIDC authorization endpoint and client ID before using enterprise login."
       />
     );
   }
@@ -237,7 +247,11 @@ export function ControlCenter() {
       user={user}
       setUser={setUser}
       onLogout={() => {
-        clearOidcSession();
+        if (config) {
+          void logoutOidcSession(config);
+        } else {
+          clearOidcSession();
+        }
         setOidcSession(null);
       }}
     />

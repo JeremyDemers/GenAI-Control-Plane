@@ -33,6 +33,21 @@ class Settings(BaseSettings):
         default="",
         validation_alias="OIDC_GROUP_ROLE_MAP_JSON",
     )
+    oidc_token_endpoint: str = Field(default="", validation_alias="OIDC_TOKEN_ENDPOINT")
+    oidc_client_id: str = Field(default="", validation_alias="OIDC_CLIENT_ID")
+    oidc_client_secret: str = Field(default="", validation_alias="OIDC_CLIENT_SECRET")
+    auth_session_cookie_name: str = Field(
+        default="genai_cp_session",
+        validation_alias="AUTH_SESSION_COOKIE_NAME",
+    )
+    auth_session_cookie_secure: bool = Field(
+        default=False,
+        validation_alias="AUTH_SESSION_COOKIE_SECURE",
+    )
+    auth_session_ttl_hours: int = Field(
+        default=12,
+        validation_alias="AUTH_SESSION_TTL_HOURS",
+    )
     cors_origins: list[str] = Field(
         default=[
             "http://localhost:3000",

@@ -43,9 +43,10 @@ commands, which avoids a local Podman storage database mismatch seen on this wor
 Local development authentication uses the `x-dev-user` header while `DEV_AUTH_ENABLED=true`, and
 the web app includes an identity switcher for the seeded users. With
 `NEXT_PUBLIC_AUTH_MODE=oidc` and `DEV_AUTH_ENABLED=false`, the web app starts an
-authorization-code-with-PKCE login and calls the API with a bearer token. The API validates signed
-OIDC-compatible tokens with matching issuer and audience claims. Optional OIDC group-to-role mapping
-can synchronize enterprise group claims to application roles.
+authorization-code-with-PKCE login, lets the API exchange the code, stores refresh tokens
+server-side behind an HttpOnly session cookie, and calls the API with short-lived bearer tokens. The
+API validates signed OIDC-compatible tokens with matching issuer and audience claims. Optional OIDC
+group-to-role mapping can synchronize enterprise group claims to application roles.
 
 ## Implemented Features
 
@@ -88,7 +89,7 @@ cd apps/api && DATABASE_URL=sqlite:///./control_plane.db uv run alembic upgrade 
 
 ## Known Limitations
 
-- OIDC-compatible API bearer-token validation, group-to-role mapping, and frontend PKCE login initiation are implemented; server-managed refresh-token handling remains future work.
+- OIDC-compatible API bearer-token validation, group-to-role mapping, frontend PKCE login initiation, and server-managed refresh-token sessions are implemented.
 - Concrete live provider mutating operations are intentionally disabled until `PROVIDER_LIVE_OPERATIONS_ENABLED=true`; SDK readiness is reported through provider health/configuration checks.
 - The API still creates local tables at startup for demo velocity, with Alembic migrations available for clean database setup.
 - Provisioning, usage/budget processing, restore, archive/deprovision, cost allocation delivery, and notification delivery are durably tracked and can be drained by the worker; local inline execution remains enabled by default for demo velocity.

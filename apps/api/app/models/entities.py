@@ -57,6 +57,16 @@ class User(Base, TimestampMixin):
     roles: Mapped[list["Role"]] = relationship(secondary=user_roles, back_populates="users")
 
 
+class AuthSession(Base, TimestampMixin):
+    __tablename__ = "auth_sessions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    refresh_token: Mapped[str] = mapped_column(Text)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Role(Base):
     __tablename__ = "roles"
 
