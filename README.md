@@ -31,8 +31,15 @@ If those host ports are already taken, run:
 API_PORT=8010 WEB_PORT=3001 NEXT_PUBLIC_API_URL=http://localhost:8010 make dev
 ```
 
-The Makefile also clears Snap VS Code's revision-specific `XDG_DATA_HOME` before Docker-compatible
-commands, which avoids a local Podman storage database mismatch seen on this workstation.
+The Makefile defaults Docker-compatible commands to native Podman because this workstation uses
+Podman-backed Docker emulation. If `make dev` reports that it cannot connect to
+`/run/user/1000/podman/podman.sock`, start the user socket with:
+
+```bash
+systemctl --user start podman.socket
+```
+
+Set `CONTAINER_ENGINE=docker` if you want to force Docker on a host with a healthy Docker daemon.
 
 ## Demo Users
 
