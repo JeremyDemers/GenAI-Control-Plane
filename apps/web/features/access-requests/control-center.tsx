@@ -1789,17 +1789,20 @@ function ControlCenterExperience({
             >
               <TextInput label="Project name" {...form.register("project_name")} />
               <TextArea label="Business justification" {...form.register("business_justification")} />
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <TextInput label="Sponsor" {...form.register("project_sponsor")} />
                 <TextInput label="Cost center" {...form.register("cost_center")} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <TextInput label="Budget" type="number" {...form.register("requested_budget")} />
                 <TextInput label="Users" type="number" {...form.register("expected_users")} />
               </div>
               <label className="grid gap-1 text-sm font-medium">
                 Data class
-                <select className="h-10 rounded-md border border-line px-3" {...form.register("data_classification")}>
+                <select
+                  className="h-10 min-w-0 rounded-md border border-line px-3"
+                  {...form.register("data_classification")}
+                >
                   <option value="public">public</option>
                   <option value="internal">internal</option>
                   <option value="confidential">confidential</option>
@@ -2035,9 +2038,9 @@ const TextInput = ({
   label,
   ...props
 }: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) => (
-  <label className="grid gap-1 text-sm font-medium">
+  <label className="grid min-w-0 gap-1 text-sm font-medium">
     {label}
-    <input className="h-10 rounded-md border border-line px-3" {...props} />
+    <input className="h-10 min-w-0 rounded-md border border-line px-3" {...props} />
   </label>
 );
 
@@ -2045,8 +2048,8 @@ const TextArea = ({
   label,
   ...props
 }: React.TextareaHTMLAttributes<HTMLTextAreaElement> & { label: string }) => (
-  <label className="grid gap-1 text-sm font-medium">
+  <label className="grid min-w-0 gap-1 text-sm font-medium">
     {label}
-    <textarea className="min-h-20 rounded-md border border-line px-3 py-2" {...props} />
+    <textarea className="min-h-20 min-w-0 rounded-md border border-line px-3 py-2" {...props} />
   </label>
 );
