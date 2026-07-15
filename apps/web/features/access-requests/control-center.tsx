@@ -857,6 +857,26 @@ function ControlCenterExperience({
     isError: executiveReport.isError,
     isLoading: executiveReport.isLoading
   });
+  const executiveProviderChartData = useMemo(
+    () =>
+      (executiveReport.data?.spend_by_provider ?? []).map((provider) => ({
+        provider: provider.provider.replaceAll("_", " "),
+        spend: Number(provider.spend),
+        tokens: provider.tokens,
+        activeAssignments: provider.active_assignments
+      })),
+    [executiveReport.data?.spend_by_provider]
+  );
+  const executiveCostCenterChartData = useMemo(
+    () =>
+      (executiveReport.data?.spend_by_cost_center ?? []).map((center) => ({
+        costCenter: center.cost_center,
+        budget: Number(center.budget),
+        spend: Number(center.spend),
+        remaining: Number(center.remaining_budget)
+      })),
+    [executiveReport.data?.spend_by_cost_center]
+  );
   const extensionQueueState = evidencePanelState({
     count: extensions.data?.length,
     isError: extensions.isError,
@@ -2050,6 +2070,42 @@ function ControlCenterExperience({
                       label="Pending approvals"
                       value={executiveReport.data.pending_approvals.toString()}
                     />
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <div className="rounded-md border border-line p-3">
+                      <p className="text-sm font-semibold">Provider spend mix</p>
+                      <div className="mt-3 h-56">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={executiveProviderChartData}>
+                            <CartesianGrid stroke="#d8dee8" strokeDasharray="3 3" />
+                            <XAxis dataKey="provider" tick={{ fontSize: 11 }} />
+                            <YAxis tick={{ fontSize: 11 }} />
+                            <Tooltip />
+                            <Bar dataKey="spend" fill="#4267ac" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                    <div className="rounded-md border border-line p-3">
+                      <p className="text-sm font-semibold">Cost center budget</p>
+                      <div className="mt-3 h-56">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={executiveCostCenterChartData}>
+                            <CartesianGrid stroke="#d8dee8" strokeDasharray="3 3" />
+                            <XAxis dataKey="costCenter" tick={{ fontSize: 11 }} />
+                            <YAxis tick={{ fontSize: 11 }} />
+                            <Tooltip />
+                            <Bar dataKey="spend" stackId="budget" fill="#1f8f75" />
+                            <Bar
+                              dataKey="remaining"
+                              stackId="budget"
+                              fill="#cfeee6"
+                              radius={[4, 4, 0, 0]}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
                   </div>
                   <div className="grid gap-3 lg:grid-cols-2">
                     <div className="rounded-md border border-line p-3">
