@@ -739,6 +739,11 @@ function ControlCenterExperience({
     isError: providerHealth.isError,
     isLoading: providerHealth.isLoading
   });
+  const approvalQueueState = evidencePanelState({
+    count: approvals.data?.length,
+    isError: approvals.isError,
+    isLoading: approvals.isLoading
+  });
   const canManageSelectedProject =
     me.data?.roles.some((role) => role === "project_owner" || role === "platform_admin") ?? false;
   const securityAlreadyMember =
@@ -1963,52 +1968,66 @@ function ControlCenterExperience({
 
           <Panel title="Approval Queue" icon={CheckCircle2}>
             <div className="grid gap-3">
-              {(approvals.data ?? []).map((step) => (
-                <div key={step.step_id} className="rounded-md border border-line p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold">{step.step_type}</p>
-                      <p className="break-all text-xs text-slate-500">{step.request_id}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        data-testid={`approve-${step.step_type}`}
-                        className="rounded-md bg-mint px-3 py-2 text-xs font-semibold text-white"
-                        onClick={() =>
-                          approvalMutation.mutate({ stepId: step.step_id, decision: "approve" })
-                        }
-                      >
-                        Approve
-                      </button>
-                      <button
-                        className="rounded-md border border-coral px-3 py-2 text-xs font-semibold text-coral"
-                        onClick={() =>
-                          approvalMutation.mutate({ stepId: step.step_id, decision: "reject" })
-                        }
-                      >
-                        Reject
-                      </button>
-                      <button
-                        className="rounded-md border border-line px-3 py-2 text-xs font-semibold"
-                        onClick={() =>
-                          approvalMutation.mutate({
-                            stepId: step.step_id,
-                            decision: "request_information"
-                          })
-                        }
-                      >
-                        Need Info
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {approvals.isError ? (
-                <p className="text-sm text-slate-500">Queue unavailable for this identity.</p>
+              {approvalQueueState === "loading" ? (
+                <p className="text-sm text-slate-500">Loading approval queue...</p>
               ) : null}
-              {approvals.data?.length === 0 ? (
+              {approvalQueueState === "error" ? (
+                <p className="text-sm text-coral">
+                  Approval queue could not be loaded. Check that the API is running for this
+                  dashboard session.
+                </p>
+              ) : null}
+              {approvalQueueState === "empty" ? (
                 <p className="text-sm text-slate-500">No pending approvals.</p>
               ) : null}
+              {approvalQueueState === "ready"
+                ? (approvals.data ?? []).map((step) => (
+                    <div key={step.step_id} className="rounded-md border border-line p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold">{step.step_type}</p>
+                          <p className="break-all text-xs text-slate-500">{step.request_id}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            data-testid={`approve-${step.step_type}`}
+                            className="rounded-md bg-mint px-3 py-2 text-xs font-semibold text-white"
+                            onClick={() =>
+                              approvalMutation.mutate({
+                                stepId: step.step_id,
+                                decision: "approve"
+                              })
+                            }
+                          >
+                            Approve
+                          </button>
+                          <button
+                            className="rounded-md border border-coral px-3 py-2 text-xs font-semibold text-coral"
+                            onClick={() =>
+                              approvalMutation.mutate({
+                                stepId: step.step_id,
+                                decision: "reject"
+                              })
+                            }
+                          >
+                            Reject
+                          </button>
+                          <button
+                            className="rounded-md border border-line px-3 py-2 text-xs font-semibold"
+                            onClick={() =>
+                              approvalMutation.mutate({
+                                stepId: step.step_id,
+                                decision: "request_information"
+                              })
+                            }
+                          >
+                            Need Info
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                : null}
             </div>
           </Panel>
         </aside>
