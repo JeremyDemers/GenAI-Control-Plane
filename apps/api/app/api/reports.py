@@ -1,5 +1,7 @@
+import csv
 from collections import Counter, defaultdict
 from decimal import Decimal
+from io import StringIO
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends
@@ -45,11 +47,7 @@ def delivery_out(job: LifecycleJob) -> CostAllocationDeliveryOut:
     )
 
 
-@router.get("/executive", response_model=ExecutiveReportOut)
-def executive_report(
-    db: Session = Depends(get_db),
-    _: User = Depends(require_permission("reports:executive")),
-) -> ExecutiveReportOut:
+def build_executive_report(db: Session) -> ExecutiveReportOut:
     requests = db.scalars(select(AccessRequest)).all()
     assignments = db.scalars(select(ProviderAssignment)).all()
     costs = db.scalars(select(CostRecord)).all()
@@ -119,6 +117,71 @@ def executive_report(
             )
             for cost_center in sorted(cost_centers)
         ],
+    )
+
+
+@router.get("/executive", response_model=ExecutiveReportOut)
+def executive_report(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("reports:executive")),
+) -> ExecutiveReportOut:
+    return build_executive_report(db)
+
+
+@router.get("/executive/export")
+def export_executive_report(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("reports:executive")),
+    correlation_id: str = Depends(get_correlation_id),
+) -> Response:
+    report = build_executive_report(db)
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["section", "name", "metric", "value"])
+    writer.writerow(["summary", "total_requests", "count", report.total_requests])
+    writer.writerow(["summary", "active_projects", "count", report.active_projects])
+    writer.writerow(["summary", "pending_approvals", "count", report.pending_approvals])
+    writer.writerow(["summary", "suspended_projects", "count", report.suspended_projects])
+    writer.writerow(["summary", "total_budget", "amount", report.total_budget])
+    writer.writerow(["summary", "total_spend", "amount", report.total_spend])
+    writer.writerow(["summary", "remaining_budget", "amount", report.remaining_budget])
+    for status, count in sorted(report.requests_by_status.items()):
+        writer.writerow(["request_status", status, "count", count])
+    for provider in report.spend_by_provider:
+        writer.writerow(["provider", provider.provider, "spend", provider.spend])
+        writer.writerow(["provider", provider.provider, "tokens", provider.tokens])
+        writer.writerow(
+            ["provider", provider.provider, "active_assignments", provider.active_assignments]
+        )
+    for cost_center in report.spend_by_cost_center:
+        writer.writerow(["cost_center", cost_center.cost_center, "budget", cost_center.budget])
+        writer.writerow(["cost_center", cost_center.cost_center, "spend", cost_center.spend])
+        writer.writerow(
+            [
+                "cost_center",
+                cost_center.cost_center,
+                "remaining_budget",
+                cost_center.remaining_budget,
+            ]
+        )
+    row_count = len(output.getvalue().splitlines()) - 1
+
+    record_audit_event(
+        db,
+        event_type="report.executive_exported",
+        actor_user_id=user.id,
+        target_type="executive_report",
+        target_id=None,
+        action="export",
+        result="success",
+        correlation_id=correlation_id,
+        metadata_json={"format": "csv", "row_count": row_count},
+    )
+    db.commit()
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="executive-report.csv"'},
     )
 
 

@@ -60,7 +60,9 @@ The export action writes an `audit.exported` audit event with row count and corr
 
 CTOs can review executive rollups at `/reports/executive`. The report summarizes request status,
 active and suspended projects, total budget, current spend, remaining budget, provider spend, token
-usage, and cost-center spend.
+usage, and cost-center spend. CTOs can export the same rollup as CSV at
+`/reports/executive/export`; the export writes `report.executive_exported` audit evidence with row
+count and correlation ID metadata.
 
 ## Extension Requests
 

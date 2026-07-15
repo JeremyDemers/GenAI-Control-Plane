@@ -2026,6 +2026,40 @@ def test_cto_can_view_executive_report_with_spend_rollups(client: TestClient) ->
     )
     assert denied_report.status_code == 403
 
+    export = client.get(
+        "/reports/executive/export",
+        headers={"x-dev-user": "cto@example.local", "x-correlation-id": "executive-export"},
+    )
+    assert export.status_code == 200
+    assert export.headers["content-type"].startswith("text/csv")
+    rows = list(csv.DictReader(export.text.splitlines()))
+    assert {"section", "name", "metric", "value"} <= set(rows[0])
+    assert any(
+        row["section"] == "summary"
+        and row["name"] == "total_spend"
+        and row["value"] == "25.00"
+        for row in rows
+    )
+    assert any(
+        row["section"] == "cost_center"
+        and row["name"] == "ENG-AI"
+        and row["metric"] == "remaining_budget"
+        and row["value"] == "75.00"
+        for row in rows
+    )
+
+    denied_export = client.get(
+        "/reports/executive/export", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert denied_export.status_code == 403
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    exported_event = next(
+        event for event in audit.json() if event["event_type"] == "report.executive_exported"
+    )
+    assert exported_event["correlation_id"] == "executive-export"
+    assert exported_event["metadata_json"]["row_count"] == len(rows)
+
 
 def test_cost_allocation_export_rolls_up_assignment_spend_and_is_audited(
     client: TestClient,

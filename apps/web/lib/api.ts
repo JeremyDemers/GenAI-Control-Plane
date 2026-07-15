@@ -733,6 +733,16 @@ export function getExecutiveReport(user: ApiIdentity) {
   return request<ExecutiveReport>("/reports/executive", user);
 }
 
+export async function exportExecutiveReport(user: ApiIdentity) {
+  const response = await fetch(`${apiBaseUrl()}/reports/executive/export`, {
+    headers: authHeaders(user)
+  });
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return response.text();
+}
+
 export function listCostAllocationDeliveries(user: ApiIdentity) {
   return request<CostAllocationDelivery[]>("/reports/cost-allocation/deliveries", user);
 }
