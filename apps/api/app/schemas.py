@@ -408,6 +408,10 @@ class NotificationOut(BaseModel):
     created_at: datetime
 
 
+class NotificationReadAllOut(BaseModel):
+    marked_read: int
+
+
 class ProviderSpendOut(BaseModel):
     provider: str
     spend: Decimal

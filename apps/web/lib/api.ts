@@ -275,6 +275,10 @@ export type Notification = {
   created_at: string;
 };
 
+export type NotificationReadAllResult = {
+  marked_read: number;
+};
+
 export type ExecutiveReport = {
   total_requests: number;
   active_projects: number;
@@ -676,6 +680,12 @@ export function listNotifications(user: ApiIdentity) {
 
 export function markNotificationRead(user: ApiIdentity, notificationId: string) {
   return request<Notification>(`/notifications/${notificationId}/read`, user, {
+    method: "POST"
+  });
+}
+
+export function markAllNotificationsRead(user: ApiIdentity) {
+  return request<NotificationReadAllResult>("/notifications/read-all", user, {
     method: "POST"
   });
 }
