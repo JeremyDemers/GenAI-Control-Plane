@@ -243,6 +243,20 @@ class AuditEventOut(BaseModel):
     created_at: datetime
 
 
+class AuditEventSummaryItem(BaseModel):
+    name: str
+    count: int
+
+
+class AuditEventSummaryOut(BaseModel):
+    total_events: int
+    unique_correlations: int
+    success_events: int
+    failure_events: int
+    by_event_type: list[AuditEventSummaryItem]
+    by_result: list[AuditEventSummaryItem]
+
+
 class RoleChangeOut(BaseModel):
     id: str
     project_id: str | None

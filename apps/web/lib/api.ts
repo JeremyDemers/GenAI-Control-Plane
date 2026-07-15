@@ -236,6 +236,15 @@ export type AuditEventFilters = {
   limit?: number;
 };
 
+export type AuditEventSummary = {
+  total_events: number;
+  unique_correlations: number;
+  success_events: number;
+  failure_events: number;
+  by_event_type: { name: string; count: number }[];
+  by_result: { name: string; count: number }[];
+};
+
 export type ArtifactArchive = {
   id: string;
   assignment_id: string | null;
@@ -658,6 +667,10 @@ function queryString(filters: Record<string, string | number | undefined>) {
 
 export function listAuditEvents(user: ApiIdentity, filters: AuditEventFilters = {}) {
   return request<AuditEvent[]>(`/audit-events${queryString(filters)}`, user);
+}
+
+export function getAuditEventSummary(user: ApiIdentity, filters: AuditEventFilters = {}) {
+  return request<AuditEventSummary>(`/audit-events/summary${queryString(filters)}`, user);
 }
 
 export async function exportAuditEvents(user: ApiIdentity, filters: AuditEventFilters = {}) {

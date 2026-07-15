@@ -425,6 +425,25 @@ def test_employee_can_submit_request_and_policy_records_cto_path(client: TestCli
     assert {row["event_type"] for row in rows} == {"notification.read"}
     assert {row["correlation_id"] for row in rows} == {"notification-read"}
 
+    filtered_summary = client.get(
+        "/audit-events/summary",
+        headers={"x-dev-user": "auditor@example.local"},
+        params={"event_type": "notification.read", "correlation_id": "notification-read"},
+    )
+    assert filtered_summary.status_code == 200
+    assert filtered_summary.json()["total_events"] == 1
+    assert filtered_summary.json()["unique_correlations"] == 1
+    assert filtered_summary.json()["success_events"] == 1
+    assert filtered_summary.json()["failure_events"] == 0
+    assert filtered_summary.json()["by_event_type"] == [
+        {"name": "notification.read", "count": 1}
+    ]
+
+    denied_summary = client.get(
+        "/audit-events/summary", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert denied_summary.status_code == 403
+
     denied_read = client.post(
         f"/notifications/{notification_id}/read",
         headers={"x-dev-user": "approver@example.local"},

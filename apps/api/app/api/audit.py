@@ -1,5 +1,6 @@
 import csv
 import json
+from collections import Counter
 from io import StringIO
 
 from fastapi import APIRouter, Depends, Query
@@ -10,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import get_correlation_id, require_permission
 from app.core.database import get_db
 from app.models.entities import AuditEvent, User
-from app.schemas import AuditEventOut
+from app.schemas import AuditEventOut, AuditEventSummaryItem, AuditEventSummaryOut
 from app.services.audit import record_audit_event
 
 router = APIRouter(prefix="/audit-events", tags=["audit events"])
@@ -90,6 +91,43 @@ def list_audit_events(
         )
         for event in events
     ]
+
+
+@router.get("/summary", response_model=AuditEventSummaryOut)
+def summarize_audit_events(
+    event_type: str | None = None,
+    correlation_id: str | None = None,
+    target_type: str | None = None,
+    result: str | None = None,
+    limit: int = Query(default=1000, ge=1, le=5000),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("audit:read_all")),
+) -> AuditEventSummaryOut:
+    events = db.scalars(
+        _audit_event_query(
+            event_type=event_type,
+            correlation_id=correlation_id,
+            target_type=target_type,
+            result=result,
+        ).limit(limit)
+    ).all()
+    event_type_counts = Counter(event.event_type for event in events)
+    result_counts = Counter(event.result for event in events)
+
+    return AuditEventSummaryOut(
+        total_events=len(events),
+        unique_correlations=len({event.correlation_id for event in events}),
+        success_events=result_counts["success"],
+        failure_events=sum(count for name, count in result_counts.items() if name != "success"),
+        by_event_type=[
+            AuditEventSummaryItem(name=name, count=count)
+            for name, count in event_type_counts.most_common(8)
+        ],
+        by_result=[
+            AuditEventSummaryItem(name=name, count=count)
+            for name, count in result_counts.most_common()
+        ],
+    )
 
 
 @router.get("/export")

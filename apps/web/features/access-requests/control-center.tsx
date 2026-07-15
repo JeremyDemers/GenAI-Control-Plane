@@ -50,6 +50,7 @@ import {
   expireAssignment,
   exportAuditEvents,
   exportCostAllocation,
+  getAuditEventSummary,
   getExecutiveReport,
   getMe,
   getOperationalHealth,
@@ -380,6 +381,12 @@ function ControlCenterExperience({
     enabled: isSecurityAuditor,
     retry: false
   });
+  const auditSummary = useQuery({
+    queryKey: ["audit-summary", identityKey, auditFilters.event_type, auditFilters.correlation_id],
+    queryFn: () => getAuditEventSummary(identity, auditFilters),
+    enabled: isSecurityAuditor,
+    retry: false
+  });
   const notifications = useQuery({
     queryKey: ["notifications", identityKey],
     queryFn: () => listNotifications(identity),
@@ -531,6 +538,7 @@ function ControlCenterExperience({
       void queryClient.invalidateQueries({ queryKey: ["lifecycle-jobs"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
     }
   });
   const informationResponseMutation = useMutation({
@@ -541,6 +549,7 @@ function ControlCenterExperience({
       void queryClient.invalidateQueries({ queryKey: ["approvals"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
     }
   });
   const cancelMutation = useMutation({
@@ -562,6 +571,7 @@ function ControlCenterExperience({
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
     }
   });
   const suspendProjectMutation = useMutation({
@@ -573,6 +583,7 @@ function ControlCenterExperience({
       void queryClient.invalidateQueries({ queryKey: ["assignments"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
       void queryClient.invalidateQueries({ queryKey: ["executive-report"] });
     }
   });
@@ -582,6 +593,7 @@ function ControlCenterExperience({
       void queryClient.invalidateQueries({ queryKey: ["reassignments"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
     }
   });
   const acceptReassignmentMutation = useMutation({
@@ -590,6 +602,7 @@ function ControlCenterExperience({
       void queryClient.invalidateQueries({ queryKey: ["reassignments"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
     }
   });
   const reassignmentDecisionMutation = useMutation({
@@ -607,6 +620,7 @@ function ControlCenterExperience({
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
     }
   });
 
@@ -637,6 +651,7 @@ function ControlCenterExperience({
       void queryClient.invalidateQueries({ queryKey: ["archives"] });
       void queryClient.invalidateQueries({ queryKey: ["lifecycle-jobs"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
       void queryClient.invalidateQueries({ queryKey: ["incidents"] });
     }
@@ -646,22 +661,31 @@ function ControlCenterExperience({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["lifecycle-jobs"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
     }
   });
   const readNotificationMutation = useMutation({
     mutationFn: (notificationId: string) => markNotificationRead(identity, notificationId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
     }
   });
   const readAllNotificationsMutation = useMutation({
     mutationFn: () => markAllNotificationsRead(identity),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
     }
   });
   const auditExportMutation = useMutation({
-    mutationFn: () => exportAuditEvents(identity, auditFilters)
+    mutationFn: () => exportAuditEvents(identity, auditFilters),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
+    }
   });
   const retentionEnforcementMutation = useMutation({
     mutationFn: () => enforceArchiveRetention(identity),
@@ -669,6 +693,7 @@ function ControlCenterExperience({
       void queryClient.invalidateQueries({ queryKey: ["archives"] });
       void queryClient.invalidateQueries({ queryKey: ["lifecycle-jobs"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
     }
   });
 
@@ -681,6 +706,7 @@ function ControlCenterExperience({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["cost-allocation-deliveries"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
     }
   });
   const extensionMutation = useMutation({
@@ -708,6 +734,7 @@ function ControlCenterExperience({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["incidents"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
     }
   });
   const policyPublishMutation = useMutation({
@@ -721,6 +748,7 @@ function ControlCenterExperience({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["policies"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
     }
   });
   const retentionPolicyMutation = useMutation({
@@ -729,6 +757,7 @@ function ControlCenterExperience({
       void queryClient.invalidateQueries({ queryKey: ["retention-policy"] });
       void queryClient.invalidateQueries({ queryKey: ["policies"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
     }
   });
   const credentialRotationMutation = useMutation({
@@ -736,6 +765,7 @@ function ControlCenterExperience({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["integration-credentials"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
     }
   });
 
@@ -1857,6 +1887,38 @@ function ControlCenterExperience({
                   <p className="rounded-md bg-panel p-2 text-xs text-slate-600">
                     CSV export ready · {auditExportMutation.data.trim().split("\n").length - 1} rows
                   </p>
+                ) : null}
+                {auditSummary.data ? (
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <div className="rounded-md border border-line p-3">
+                      <p className="text-xs font-medium text-slate-500">Events</p>
+                      <p className="mt-1 text-xl font-semibold text-ink">
+                        {auditSummary.data.total_events}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-line p-3">
+                      <p className="text-xs font-medium text-slate-500">Correlations</p>
+                      <p className="mt-1 text-xl font-semibold text-ink">
+                        {auditSummary.data.unique_correlations}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-line p-3">
+                      <p className="text-xs font-medium text-slate-500">Success / review</p>
+                      <p className="mt-1 text-xl font-semibold text-ink">
+                        {auditSummary.data.success_events} / {auditSummary.data.failure_events}
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
+                {auditSummary.data?.by_event_type.length ? (
+                  <div className="rounded-md bg-panel p-3 text-xs text-slate-600">
+                    <p className="font-semibold text-slate-700">Top event types</p>
+                    <p className="mt-1">
+                      {auditSummary.data.by_event_type
+                        .map((item) => `${item.name} (${item.count})`)
+                        .join(" · ")}
+                    </p>
+                  </div>
                 ) : null}
                 {auditTrailState === "loading" ? (
                   <p className="text-sm text-slate-500">Loading audit trail...</p>
