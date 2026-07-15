@@ -346,6 +346,10 @@ export type CostAllocationDelivery = {
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+export function apiDocsUrl() {
+  return `${apiBase}/docs`;
+}
+
 function authHeaders(identity: ApiIdentity): Record<string, string> {
   if (typeof identity === "string") {
     return { "x-dev-user": identity };

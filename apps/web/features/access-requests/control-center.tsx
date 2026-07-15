@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Clock3,
   CloudCog,
+  ExternalLink,
   FileClock,
   LineChart,
   RotateCcw,
@@ -36,6 +37,7 @@ import { notificationPanelState } from "@/lib/notification-state";
 import {
   acceptReassignment,
   addProjectMember,
+  apiDocsUrl,
   cancelAccessRequest,
   createAccessRequest,
   createExtensionRequest,
@@ -749,7 +751,16 @@ function ControlCenterExperience({
             </p>
           </div>
           {oidcSession ? (
-            <div className="flex items-center gap-3 text-sm font-medium text-slate-700">
+            <div className="flex flex-wrap items-center gap-3 text-sm font-medium text-slate-700">
+              <a
+                href={apiDocsUrl()}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-line bg-white px-3 shadow-quiet"
+              >
+                <ExternalLink className="h-4 w-4" aria-hidden />
+                API Docs
+              </a>
               <UserRound className="h-4 w-4" aria-hidden />
               <span>{oidcSession.email}</span>
               <button
@@ -761,21 +772,32 @@ function ControlCenterExperience({
               </button>
             </div>
           ) : (
-            <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-              <UserRound className="h-4 w-4" aria-hidden />
-              <select
-                data-testid="identity-switcher"
-                className="h-10 rounded-md border border-line bg-white px-3 shadow-quiet"
-                value={user}
-                onChange={(event) => setUser(event.target.value as DevUser)}
+            <div className="flex flex-wrap items-center gap-3 text-sm font-medium text-slate-700">
+              <a
+                href={apiDocsUrl()}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-line bg-white px-3 shadow-quiet"
               >
-                {users.map((identity) => (
-                  <option key={identity} value={identity}>
-                    {identity}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <ExternalLink className="h-4 w-4" aria-hidden />
+                API Docs
+              </a>
+              <label className="flex items-center gap-2">
+                <UserRound className="h-4 w-4" aria-hidden />
+                <select
+                  data-testid="identity-switcher"
+                  className="h-10 rounded-md border border-line bg-white px-3 shadow-quiet"
+                  value={user}
+                  onChange={(event) => setUser(event.target.value as DevUser)}
+                >
+                  {users.map((identity) => (
+                    <option key={identity} value={identity}>
+                      {identity}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           )}
         </div>
       </header>
