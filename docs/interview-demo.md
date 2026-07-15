@@ -43,9 +43,10 @@ workflow can be demonstrated safely.
 8. In Developer Controls, trigger 70%, 90%, and 100% budget thresholds.
 9. Show spend, remaining budget, fresh usage/cost evidence, automatic suspension, incident creation, and notifications.
 10. Resolve the incident and restore the assignment.
-11. Select `employee@example.local`, request a one-week extension, then approve it as `cto@example.local`.
-12. Select `admin@example.local`, force expiration, then show archive/deprovision evidence.
-13. Select `auditor@example.local`, show audit trail, role-change/provisioning evidence, and export CSV evidence.
+11. Run the expiration-warning scan and show the requester/admin notification plus audit evidence.
+12. Select `employee@example.local`, request a one-week extension, then approve it as `cto@example.local`.
+13. Select `admin@example.local`, force expiration, then show archive/deprovision evidence.
+14. Select `auditor@example.local`, show audit trail, role-change/provisioning evidence, and export CSV evidence.
 
 ## What To Emphasize
 
@@ -53,6 +54,7 @@ workflow can be demonstrated safely.
 - **RBAC and separation of duties:** employees request, approvers decide, admins operate, auditors read/export evidence.
 - **Policy governance:** requests retain the policy version used during evaluation.
 - **Temporary access:** assignments have expiration, extension workflow, forced expiration, archive, and deprovisioning.
+- **Expiration governance:** active assignments nearing their end date produce requester/admin notifications and audit evidence.
 - **Cost control:** usage/cost records drive 70%, 90%, and 100% threshold behavior, including suspension and incident evidence.
 - **Provider boundary:** mock and live adapters share the same contract; live mutating operations are feature-flagged and fail closed.
 - **Auditability:** lifecycle jobs, approvals, provider evidence, incident resolution, exports, and retention actions produce audit records.

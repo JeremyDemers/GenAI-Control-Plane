@@ -74,6 +74,10 @@ class Settings(BaseSettings):
         default=True,
         validation_alias="LIFECYCLE_INLINE_EXECUTION",
     )
+    access_expiration_warning_days: int = Field(
+        default=30,
+        validation_alias="ACCESS_EXPIRATION_WARNING_DAYS",
+    )
     rate_limit_requests_per_minute: int = Field(
         default=600,
         validation_alias="RATE_LIMIT_REQUESTS_PER_MINUTE",

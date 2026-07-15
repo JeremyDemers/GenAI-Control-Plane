@@ -41,6 +41,8 @@ test("interview demo lifecycle", async ({ page }) => {
   await page.getByTestId("resolve-incident").click();
   await page.getByTestId("restore-amazon_bedrock").click();
   await expect(page.getByTestId("status-ACTIVE")).toBeAttached();
+  await page.getByTestId("expiration-warning-scan").click();
+  await expect(page.getByText(/Warning job completed/)).toBeVisible();
   await page.getByTestId("identity-switcher").selectOption("cto@example.local");
   await expect(page.getByRole("heading", { name: "Executive Report" })).toBeVisible();
   await expect(page.getByText("Total spend", { exact: true })).toBeVisible();

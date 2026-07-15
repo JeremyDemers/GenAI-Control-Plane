@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { getAuditEventSummary } from "@/lib/api";
+import { getAuditEventSummary, scanExpirationWarnings } from "@/lib/api";
 import { apiBaseUrl, apiDocsUrl } from "@/lib/api-config";
 
 const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -52,6 +52,38 @@ describe("api helpers", () => {
       "http://localhost:8000/audit-events/summary?event_type=notification.read&correlation_id=notification-read",
       expect.objectContaining({
         headers: expect.objectContaining({ "x-dev-user": "auditor@example.local" })
+      })
+    );
+  });
+
+  it("requests expiration warning scans as an admin action", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          id: "job-1",
+          job_type: "access_expiration_scan",
+          status: "completed",
+          attempt_count: 1,
+          idempotency_key: "expiration-warning:test",
+          payload: { warned_count: 2 },
+          failure_information: {},
+          created_at: "2026-07-15T00:00:00Z",
+          updated_at: "2026-07-15T00:00:00Z"
+        })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(scanExpirationWarnings("admin@example.local")).resolves.toMatchObject({
+      job_type: "access_expiration_scan",
+      status: "completed"
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8000/developer/assignments/expiration-warnings",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "x-dev-user": "admin@example.local" })
       })
     );
   });

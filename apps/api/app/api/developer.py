@@ -17,6 +17,7 @@ from app.schemas import (
 )
 from app.services.lifecycle import assignment_totals
 from app.workers.jobs import (
+    enqueue_and_maybe_run_access_expiration_scan,
     enqueue_and_maybe_run_archive_retention,
     enqueue_and_maybe_run_lifecycle_action,
     enqueue_and_maybe_run_usage_processing,
@@ -204,6 +205,23 @@ async def enforce_retention(
 ) -> LifecycleJobOut:
     ensure_local_development()
     job = await enqueue_and_maybe_run_archive_retention(
+        db,
+        actor_user_id=user.id,
+        correlation_id=correlation_id,
+    )
+    db.commit()
+    db.refresh(job)
+    return job_out(job)
+
+
+@router.post("/assignments/expiration-warnings", response_model=LifecycleJobOut)
+async def scan_expiration_warnings(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("admin:*")),
+    correlation_id: str = Depends(get_correlation_id),
+) -> LifecycleJobOut:
+    ensure_local_development()
+    job = await enqueue_and_maybe_run_access_expiration_scan(
         db,
         actor_user_id=user.id,
         correlation_id=correlation_id,
