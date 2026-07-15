@@ -80,6 +80,7 @@ import {
   listRequests,
   listRoleChanges,
   listUsageRecords,
+  markAllNotificationsRead,
   markNotificationRead,
   overrideApproval,
   publishInternalSecurityReviewPolicy,
@@ -629,6 +630,12 @@ function ControlCenterExperience({
   });
   const readNotificationMutation = useMutation({
     mutationFn: (notificationId: string) => markNotificationRead(identity, notificationId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    }
+  });
+  const readAllNotificationsMutation = useMutation({
+    mutationFn: () => markAllNotificationsRead(identity),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
@@ -2015,6 +2022,17 @@ function ControlCenterExperience({
         <aside className="grid content-start gap-5">
           <Panel title="Notifications" icon={Bell}>
             <div className="grid gap-2">
+              {notificationsState === "ready" && unreadNotifications > 0 ? (
+                <div className="flex justify-end">
+                  <button
+                    className="rounded-md border border-line px-3 py-2 text-xs font-semibold text-ink transition hover:bg-panel"
+                    disabled={readAllNotificationsMutation.isPending}
+                    onClick={() => readAllNotificationsMutation.mutate()}
+                  >
+                    Mark all read
+                  </button>
+                </div>
+              ) : null}
               {notificationsState === "loading" ? (
                 <p className="text-sm text-slate-500">Loading notifications...</p>
               ) : null}

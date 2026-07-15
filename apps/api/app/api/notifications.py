@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import current_user
 from app.core.database import get_db
 from app.models.entities import Notification, User
-from app.schemas import NotificationOut
+from app.schemas import NotificationOut, NotificationReadAllOut
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -56,3 +56,18 @@ def mark_notification_read(
     db.commit()
     db.refresh(notification)
     return to_notification_out(notification)
+
+
+@router.post("/read-all", response_model=NotificationReadAllOut)
+def mark_all_notifications_read(
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> NotificationReadAllOut:
+    unread_notifications = db.scalars(
+        select(Notification).where(Notification.user_id == user.id, Notification.read_at.is_(None))
+    ).all()
+    now = datetime.now(UTC)
+    for notification in unread_notifications:
+        notification.read_at = now
+    db.commit()
+    return NotificationReadAllOut(marked_read=len(unread_notifications))

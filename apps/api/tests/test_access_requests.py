@@ -393,6 +393,47 @@ def test_employee_can_submit_request_and_policy_records_cto_path(client: TestCli
     assert denied_read.status_code == 404
 
 
+def test_employee_can_mark_all_own_notifications_read(client: TestClient) -> None:
+    client.post(
+        "/access-requests",
+        headers={"x-dev-user": "employee@example.local"},
+        json=request_payload(),
+    )
+
+    employee_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert employee_notifications.status_code == 200
+    assert any(notification["read_at"] is None for notification in employee_notifications.json())
+
+    approver_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "approver@example.local"}
+    )
+    assert approver_notifications.status_code == 200
+    assert any(notification["read_at"] is None for notification in approver_notifications.json())
+
+    read_all = client.post(
+        "/notifications/read-all", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert read_all.status_code == 200
+    assert read_all.json()["marked_read"] == len(employee_notifications.json())
+
+    updated_employee_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert all(
+        notification["read_at"] is not None
+        for notification in updated_employee_notifications.json()
+    )
+
+    updated_approver_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "approver@example.local"}
+    )
+    assert any(
+        notification["read_at"] is None for notification in updated_approver_notifications.json()
+    )
+
+
 def test_worker_delivers_pending_notifications(client: TestClient) -> None:
     client.post(
         "/access-requests",
