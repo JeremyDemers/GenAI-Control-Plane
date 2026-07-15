@@ -18,7 +18,7 @@ import {
   UserRound,
   Zap
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import {
   Area,
@@ -88,8 +88,18 @@ import {
   suspendProject,
   updateRetentionPolicy,
   type AccessRequest,
+  type ApiIdentity,
   type DevUser
 } from "@/lib/api";
+import {
+  authMode,
+  beginOidcLogin,
+  clearOidcSession,
+  completeOidcLogin,
+  loadOidcSession,
+  oidcConfig,
+  type OidcSession
+} from "@/lib/auth";
 import {
   accessRequestSchema,
   providerOptions,
@@ -174,162 +184,223 @@ const defaultValues: AccessRequestFormValues = {
 
 export function ControlCenter() {
   const [user, setUser] = useState<DevUser>("employee@example.local");
+  const [oidcSession, setOidcSession] = useState<OidcSession | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const mode = authMode();
+  const config = useMemo(() => oidcConfig(), []);
+
+  useEffect(() => {
+    if (mode !== "oidc" || !config) {
+      return;
+    }
+    const existing = loadOidcSession();
+    if (existing) {
+      setOidcSession(existing);
+      return;
+    }
+    void completeOidcLogin(window.location.search, config)
+      .then((session) => {
+        if (session) {
+          setOidcSession(session);
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      })
+      .catch((error: unknown) => {
+        setAuthError(error instanceof Error ? error.message : "OIDC login failed.");
+      });
+  }, [config, mode]);
+
+  if (mode === "oidc" && !config) {
+    return (
+      <AuthShell
+        title="OIDC is not configured"
+        detail="Set the public OIDC authorization endpoint, token endpoint, and client ID before using enterprise login."
+      />
+    );
+  }
+
+  if (mode === "oidc" && !oidcSession) {
+    return (
+      <AuthShell
+        title="AI Access Control Center"
+        detail={authError ?? "Sign in with your enterprise identity provider."}
+        actionLabel="Sign in"
+        onAction={() => config && void beginOidcLogin(config)}
+      />
+    );
+  }
+
+  return (
+    <ControlCenterExperience
+      identity={oidcSession ?? user}
+      oidcSession={oidcSession}
+      user={user}
+      setUser={setUser}
+      onLogout={() => {
+        clearOidcSession();
+        setOidcSession(null);
+      }}
+    />
+  );
+}
+
+function ControlCenterExperience({
+  identity,
+  oidcSession,
+  user,
+  setUser,
+  onLogout
+}: {
+  identity: ApiIdentity;
+  oidcSession: OidcSession | null;
+  user: DevUser;
+  setUser: (user: DevUser) => void;
+  onLogout: () => void;
+}) {
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const me = useQuery({ queryKey: ["me", user], queryFn: () => getMe(user) });
-  const requests = useQuery({ queryKey: ["requests", user], queryFn: () => listRequests(user) });
-  const projects = useQuery({ queryKey: ["projects", user], queryFn: () => listProjects(user) });
+  const identityKey = typeof identity === "string" ? identity : identity.email;
+  const me = useQuery({ queryKey: ["me", identityKey], queryFn: () => getMe(identity) });
+  const roles = me.data?.roles ?? [];
+  const isPlatformAdmin = roles.includes("platform_admin");
+  const isSecurityAuditor = roles.includes("security_auditor");
+  const isCto = roles.includes("cto");
+  const canReadPrivilegedEvidence = isPlatformAdmin || isSecurityAuditor || isCto;
+  const requests = useQuery({ queryKey: ["requests", identityKey], queryFn: () => listRequests(identity) });
+  const projects = useQuery({ queryKey: ["projects", identityKey], queryFn: () => listProjects(identity) });
   const approvals = useQuery({
-    queryKey: ["approvals", user],
-    queryFn: () => listPendingApprovals(user),
+    queryKey: ["approvals", identityKey],
+    queryFn: () => listPendingApprovals(identity),
     retry: false
   });
   const approvalHistory = useQuery({
-    queryKey: ["approval-history", user],
-    queryFn: () => listApprovalHistory(user),
-    enabled:
-      user === "admin@example.local" ||
-      user === "auditor@example.local" ||
-      user === "cto@example.local",
+    queryKey: ["approval-history", identityKey],
+    queryFn: () => listApprovalHistory(identity),
+    enabled: canReadPrivilegedEvidence,
     retry: false
   });
   const providerHealth = useQuery({
-    queryKey: ["provider-health", user],
-    queryFn: () => listProviderHealth(user),
+    queryKey: ["provider-health", identityKey],
+    queryFn: () => listProviderHealth(identity),
     retry: false
   });
   const providerConfiguration = useQuery({
-    queryKey: ["provider-configuration", user],
-    queryFn: () => listProviderConfiguration(user),
-    enabled: user === "admin@example.local" || user === "auditor@example.local" || user === "cto@example.local",
+    queryKey: ["provider-configuration", identityKey],
+    queryFn: () => listProviderConfiguration(identity),
+    enabled: canReadPrivilegedEvidence,
     retry: false
   });
   const integrationCredentials = useQuery({
-    queryKey: ["integration-credentials", user],
-    queryFn: () => listIntegrationCredentials(user),
-    enabled:
-      user === "admin@example.local" ||
-      user === "auditor@example.local" ||
-      user === "cto@example.local",
+    queryKey: ["integration-credentials", identityKey],
+    queryFn: () => listIntegrationCredentials(identity),
+    enabled: canReadPrivilegedEvidence,
     retry: false
   });
   const assignments = useQuery({
-    queryKey: ["assignments", user],
-    queryFn: () => listAssignments(user),
-    enabled: user === "admin@example.local",
+    queryKey: ["assignments", identityKey],
+    queryFn: () => listAssignments(identity),
+    enabled: isPlatformAdmin,
     retry: false
   });
   const providerAssignments = useQuery({
-    queryKey: ["provider-assignments", user],
-    queryFn: () => listProviderAssignments(user),
+    queryKey: ["provider-assignments", identityKey],
+    queryFn: () => listProviderAssignments(identity),
     retry: false
   });
   const usageRecords = useQuery({
-    queryKey: ["usage-records", user],
-    queryFn: () => listUsageRecords(user),
+    queryKey: ["usage-records", identityKey],
+    queryFn: () => listUsageRecords(identity),
     retry: false
   });
   const costRecords = useQuery({
-    queryKey: ["cost-records", user],
-    queryFn: () => listCostRecords(user),
+    queryKey: ["cost-records", identityKey],
+    queryFn: () => listCostRecords(identity),
     retry: false
   });
   const budgetSummaries = useQuery({
-    queryKey: ["budget-summaries", user],
-    queryFn: () => listBudgetSummaries(user),
+    queryKey: ["budget-summaries", identityKey],
+    queryFn: () => listBudgetSummaries(identity),
     retry: false
   });
   const archives = useQuery({
-    queryKey: ["archives", user],
-    queryFn: () => listArchives(user),
-    enabled: user === "admin@example.local",
+    queryKey: ["archives", identityKey],
+    queryFn: () => listArchives(identity),
+    enabled: isPlatformAdmin,
     retry: false
   });
   const lifecycleJobs = useQuery({
-    queryKey: ["lifecycle-jobs", user],
-    queryFn: () => listLifecycleJobs(user),
-    enabled: user === "admin@example.local",
+    queryKey: ["lifecycle-jobs", identityKey],
+    queryFn: () => listLifecycleJobs(identity),
+    enabled: isPlatformAdmin,
     retry: false
   });
   const auditEvents = useQuery({
-    queryKey: ["audit-events", user],
-    queryFn: () => listAuditEvents(user),
-    enabled: user === "auditor@example.local",
+    queryKey: ["audit-events", identityKey],
+    queryFn: () => listAuditEvents(identity),
+    enabled: isSecurityAuditor,
     retry: false
   });
   const notifications = useQuery({
-    queryKey: ["notifications", user],
-    queryFn: () => listNotifications(user),
+    queryKey: ["notifications", identityKey],
+    queryFn: () => listNotifications(identity),
     retry: false
   });
   const executiveReport = useQuery({
-    queryKey: ["executive-report", user],
-    queryFn: () => getExecutiveReport(user),
-    enabled: user === "cto@example.local",
+    queryKey: ["executive-report", identityKey],
+    queryFn: () => getExecutiveReport(identity),
+    enabled: isCto,
     retry: false
   });
   const costAllocationDeliveries = useQuery({
-    queryKey: ["cost-allocation-deliveries", user],
-    queryFn: () => listCostAllocationDeliveries(user),
-    enabled:
-      user === "admin@example.local" ||
-      user === "auditor@example.local" ||
-      user === "cto@example.local",
+    queryKey: ["cost-allocation-deliveries", identityKey],
+    queryFn: () => listCostAllocationDeliveries(identity),
+    enabled: canReadPrivilegedEvidence,
     retry: false
   });
   const incidents = useQuery({
-    queryKey: ["incidents", user],
-    queryFn: () => listIncidents(user),
-    enabled: user === "admin@example.local" || user === "auditor@example.local" || user === "cto@example.local",
+    queryKey: ["incidents", identityKey],
+    queryFn: () => listIncidents(identity),
+    enabled: canReadPrivilegedEvidence,
     retry: false
   });
   const operationalHealth = useQuery({
-    queryKey: ["operational-health", user],
-    queryFn: () => getOperationalHealth(user),
-    enabled:
-      user === "admin@example.local" ||
-      user === "auditor@example.local" ||
-      user === "cto@example.local",
+    queryKey: ["operational-health", identityKey],
+    queryFn: () => getOperationalHealth(identity),
+    enabled: canReadPrivilegedEvidence,
     retry: false
   });
   const provisioningEvidence = useQuery({
-    queryKey: ["provisioning-evidence", user],
-    queryFn: () => listProvisioningEvidence(user),
-    enabled:
-      user === "admin@example.local" ||
-      user === "auditor@example.local" ||
-      user === "cto@example.local",
+    queryKey: ["provisioning-evidence", identityKey],
+    queryFn: () => listProvisioningEvidence(identity),
+    enabled: canReadPrivilegedEvidence,
     retry: false
   });
   const policies = useQuery({
-    queryKey: ["policies", user],
-    queryFn: () => listPolicies(user),
-    enabled: user === "admin@example.local" || user === "auditor@example.local",
+    queryKey: ["policies", identityKey],
+    queryFn: () => listPolicies(identity),
+    enabled: isPlatformAdmin || isSecurityAuditor,
     retry: false
   });
   const retentionPolicy = useQuery({
-    queryKey: ["retention-policy", user],
-    queryFn: () => getRetentionPolicy(user),
-    enabled: user === "admin@example.local" || user === "auditor@example.local",
+    queryKey: ["retention-policy", identityKey],
+    queryFn: () => getRetentionPolicy(identity),
+    enabled: isPlatformAdmin || isSecurityAuditor,
     retry: false
   });
   const extensions = useQuery({
-    queryKey: ["extensions", user],
-    queryFn: () => listExtensions(user),
+    queryKey: ["extensions", identityKey],
+    queryFn: () => listExtensions(identity),
     retry: false
   });
   const reassignments = useQuery({
-    queryKey: ["reassignments", user],
-    queryFn: () => listReassignments(user),
+    queryKey: ["reassignments", identityKey],
+    queryFn: () => listReassignments(identity),
     retry: false
   });
   const roleChanges = useQuery({
-    queryKey: ["role-changes", user],
-    queryFn: () => listRoleChanges(user),
-    enabled:
-      user === "admin@example.local" ||
-      user === "auditor@example.local" ||
-      user === "cto@example.local",
+    queryKey: ["role-changes", identityKey],
+    queryFn: () => listRoleChanges(identity),
+    enabled: canReadPrivilegedEvidence,
     retry: false
   });
   const selectedRequest = useMemo(
@@ -340,22 +411,22 @@ export function ControlCenter() {
   const selectedProjectId = projects.data?.some((project) => project.id === selectedRequestProjectId)
     ? selectedRequestProjectId
     : projects.data?.[0]?.id;
-  const showProjectAudit = user !== "auditor@example.local";
+  const showProjectAudit = !isSecurityAuditor;
   const projectMembers = useQuery({
-    queryKey: ["project-members", user, selectedProjectId],
-    queryFn: () => listProjectMembers(user, selectedProjectId ?? ""),
+    queryKey: ["project-members", identityKey, selectedProjectId],
+    queryFn: () => listProjectMembers(identity, selectedProjectId ?? ""),
     enabled: Boolean(selectedProjectId),
     retry: false
   });
   const projectAuditEvents = useQuery({
-    queryKey: ["project-audit-events", user, selectedProjectId],
-    queryFn: () => listProjectAuditEvents(user, selectedProjectId ?? ""),
+    queryKey: ["project-audit-events", identityKey, selectedProjectId],
+    queryFn: () => listProjectAuditEvents(identity, selectedProjectId ?? ""),
     enabled: Boolean(selectedProjectId) && showProjectAudit,
     retry: false
   });
   const evaluation = useQuery({
-    queryKey: ["policy-evaluation", user, selectedRequest?.id],
-    queryFn: () => getPolicyEvaluation(user, selectedRequest?.id ?? ""),
+    queryKey: ["policy-evaluation", identityKey, selectedRequest?.id],
+    queryFn: () => getPolicyEvaluation(identity, selectedRequest?.id ?? ""),
     enabled: Boolean(selectedRequest?.id)
   });
 
@@ -366,7 +437,7 @@ export function ControlCenter() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (values: AccessRequestFormValues) => createAccessRequest(user, values),
+    mutationFn: (values: AccessRequestFormValues) => createAccessRequest(identity, values),
     onSuccess: (created) => {
       setSelectedRequestId(created.id);
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
@@ -389,7 +460,7 @@ export function ControlCenter() {
       stepId: string;
       decision: "approve" | "reject" | "request_information";
     }) =>
-      decideApproval(user, stepId, decision),
+      decideApproval(identity, stepId, decision),
     onSuccess: (updated) => {
       setSelectedRequestId(updated.id);
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
@@ -409,7 +480,7 @@ export function ControlCenter() {
     }: {
       requestId: string;
       decision: "approve" | "reject";
-    }) => overrideApproval(user, requestId, decision),
+    }) => overrideApproval(identity, requestId, decision),
     onSuccess: (updated) => {
       setSelectedRequestId(updated.id);
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
@@ -423,7 +494,7 @@ export function ControlCenter() {
     }
   });
   const informationResponseMutation = useMutation({
-    mutationFn: (requestId: string) => respondToInformationRequest(user, requestId),
+    mutationFn: (requestId: string) => respondToInformationRequest(identity, requestId),
     onSuccess: (updated) => {
       setSelectedRequestId(updated.id);
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
@@ -433,7 +504,7 @@ export function ControlCenter() {
     }
   });
   const cancelMutation = useMutation({
-    mutationFn: (requestId: string) => cancelAccessRequest(user, requestId),
+    mutationFn: (requestId: string) => cancelAccessRequest(identity, requestId),
     onSuccess: (updated) => {
       setSelectedRequestId(updated.id);
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
@@ -444,7 +515,7 @@ export function ControlCenter() {
     }
   });
   const addProjectMemberMutation = useMutation({
-    mutationFn: (projectId: string) => addProjectMember(user, projectId),
+    mutationFn: (projectId: string) => addProjectMember(identity, projectId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["projects"] });
       void queryClient.invalidateQueries({ queryKey: ["project-members"] });
@@ -454,7 +525,7 @@ export function ControlCenter() {
     }
   });
   const suspendProjectMutation = useMutation({
-    mutationFn: (projectId: string) => suspendProject(user, projectId),
+    mutationFn: (projectId: string) => suspendProject(identity, projectId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["projects"] });
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
@@ -466,7 +537,7 @@ export function ControlCenter() {
     }
   });
   const createReassignmentMutation = useMutation({
-    mutationFn: (projectId: string) => createReassignment(user, projectId),
+    mutationFn: (projectId: string) => createReassignment(identity, projectId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["reassignments"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
@@ -474,7 +545,7 @@ export function ControlCenter() {
     }
   });
   const acceptReassignmentMutation = useMutation({
-    mutationFn: (reassignmentId: string) => acceptReassignment(user, reassignmentId),
+    mutationFn: (reassignmentId: string) => acceptReassignment(identity, reassignmentId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["reassignments"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
@@ -488,7 +559,7 @@ export function ControlCenter() {
     }: {
       reassignmentId: string;
       decision: "approve" | "reject";
-    }) => decideReassignment(user, reassignmentId, decision),
+    }) => decideReassignment(identity, reassignmentId, decision),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["reassignments"] });
       void queryClient.invalidateQueries({ queryKey: ["projects"] });
@@ -508,12 +579,12 @@ export function ControlCenter() {
       action: "warning" | "critical" | "enforcement" | "restore" | "expire";
     }) => {
       if (action === "restore") {
-        return restoreAssignment(user, assignmentId);
+        return restoreAssignment(identity, assignmentId);
       }
       if (action === "expire") {
-        return expireAssignment(user, assignmentId);
+        return expireAssignment(identity, assignmentId);
       }
-      return simulateUsage(user, assignmentId, action);
+      return simulateUsage(identity, assignmentId, action);
     },
     onSuccess: (result) => {
       setSelectedRequestId(result.request_id);
@@ -531,28 +602,28 @@ export function ControlCenter() {
     }
   });
   const retryLifecycleJobMutation = useMutation({
-    mutationFn: (jobId: string) => retryLifecycleJob(user, jobId),
+    mutationFn: (jobId: string) => retryLifecycleJob(identity, jobId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["lifecycle-jobs"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
     }
   });
   const readNotificationMutation = useMutation({
-    mutationFn: (notificationId: string) => markNotificationRead(user, notificationId),
+    mutationFn: (notificationId: string) => markNotificationRead(identity, notificationId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
   });
   const auditExportMutation = useMutation({
-    mutationFn: () => exportAuditEvents(user)
+    mutationFn: () => exportAuditEvents(identity)
   });
 
   const costAllocationExportMutation = useMutation({
-    mutationFn: () => exportCostAllocation(user)
+    mutationFn: () => exportCostAllocation(identity)
   });
 
   const costAllocationDeliveryMutation = useMutation({
-    mutationFn: () => scheduleCostAllocationDelivery(user),
+    mutationFn: () => scheduleCostAllocationDelivery(identity),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["cost-allocation-deliveries"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
@@ -560,7 +631,7 @@ export function ControlCenter() {
   });
   const extensionMutation = useMutation({
     mutationFn: ({ requestId, currentEndAt }: { requestId: string; currentEndAt: string }) =>
-      createExtensionRequest(user, requestId, currentEndAt),
+      createExtensionRequest(identity, requestId, currentEndAt),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["extensions"] });
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
@@ -568,7 +639,7 @@ export function ControlCenter() {
   });
   const extensionDecisionMutation = useMutation({
     mutationFn: ({ extensionId, decision }: { extensionId: string; decision: "approve" | "reject" }) =>
-      decideExtension(user, extensionId, decision),
+      decideExtension(identity, extensionId, decision),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["extensions"] });
       void queryClient.invalidateQueries({ queryKey: ["requests"] });
@@ -579,7 +650,7 @@ export function ControlCenter() {
     }
   });
   const incidentResolveMutation = useMutation({
-    mutationFn: (incidentId: string) => resolveIncident(user, incidentId),
+    mutationFn: (incidentId: string) => resolveIncident(identity, incidentId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["incidents"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
@@ -591,7 +662,7 @@ export function ControlCenter() {
       if (!activePolicy) {
         throw new Error("No active policy version found.");
       }
-      return publishInternalSecurityReviewPolicy(user, activePolicy);
+      return publishInternalSecurityReviewPolicy(identity, activePolicy);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["policies"] });
@@ -599,7 +670,7 @@ export function ControlCenter() {
     }
   });
   const retentionPolicyMutation = useMutation({
-    mutationFn: () => updateRetentionPolicy(user),
+    mutationFn: () => updateRetentionPolicy(identity),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["retention-policy"] });
       void queryClient.invalidateQueries({ queryKey: ["policies"] });
@@ -607,7 +678,7 @@ export function ControlCenter() {
     }
   });
   const credentialRotationMutation = useMutation({
-    mutationFn: (credentialId: string) => rotateIntegrationCredential(user, credentialId),
+    mutationFn: (credentialId: string) => rotateIntegrationCredential(identity, credentialId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["integration-credentials"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
@@ -648,21 +719,35 @@ export function ControlCenter() {
               {me.data?.display_name ?? "Development user"} · {me.data?.roles.join(", ") ?? "loading"}
             </p>
           </div>
-          <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-            <UserRound className="h-4 w-4" aria-hidden />
-            <select
-              data-testid="identity-switcher"
-              className="h-10 rounded-md border border-line bg-white px-3 shadow-quiet"
-              value={user}
-              onChange={(event) => setUser(event.target.value as DevUser)}
-            >
-              {users.map((identity) => (
-                <option key={identity} value={identity}>
-                  {identity}
-                </option>
-              ))}
-            </select>
-          </label>
+          {oidcSession ? (
+            <div className="flex items-center gap-3 text-sm font-medium text-slate-700">
+              <UserRound className="h-4 w-4" aria-hidden />
+              <span>{oidcSession.email}</span>
+              <button
+                type="button"
+                className="h-10 rounded-md border border-line bg-white px-3 shadow-quiet"
+                onClick={onLogout}
+              >
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+              <UserRound className="h-4 w-4" aria-hidden />
+              <select
+                data-testid="identity-switcher"
+                className="h-10 rounded-md border border-line bg-white px-3 shadow-quiet"
+                value={user}
+                onChange={(event) => setUser(event.target.value as DevUser)}
+              >
+                {users.map((identity) => (
+                  <option key={identity} value={identity}>
+                    {identity}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
       </header>
 
@@ -1834,6 +1919,37 @@ function Metric({
       </div>
       <p className="mt-3 text-2xl font-semibold">{value}</p>
     </div>
+  );
+}
+
+function AuthShell({
+  title,
+  detail,
+  actionLabel,
+  onAction
+}: {
+  title: string;
+  detail: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <main className="grid min-h-screen place-items-center bg-panel px-5">
+      <section className="w-full max-w-md rounded-md border border-line bg-white p-6 shadow-quiet">
+        <ShieldCheck className="h-8 w-8 text-mint" aria-hidden />
+        <h1 className="mt-4 text-2xl font-semibold text-ink">{title}</h1>
+        <p className="mt-2 text-sm text-slate-600">{detail}</p>
+        {actionLabel && onAction ? (
+          <button
+            type="button"
+            className="mt-5 h-10 rounded-md bg-mint px-4 text-sm font-semibold text-white"
+            onClick={onAction}
+          >
+            {actionLabel}
+          </button>
+        ) : null}
+      </section>
+    </main>
   );
 }
 

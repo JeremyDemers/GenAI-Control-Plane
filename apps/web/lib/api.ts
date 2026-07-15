@@ -1,4 +1,5 @@
 import type { AccessRequestFormValues } from "@/lib/request-schema";
+import type { OidcSession } from "@/lib/auth";
 
 export type DevUser =
   | "employee@example.local"
@@ -9,6 +10,8 @@ export type DevUser =
   | "admin@example.local"
   | "auditor@example.local"
   | "cto@example.local";
+
+export type ApiIdentity = DevUser | OidcSession;
 
 export type AccessRequest = {
   id: string;
@@ -343,12 +346,19 @@ export type CostAllocationDelivery = {
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-async function request<T>(path: string, user: DevUser, init?: RequestInit): Promise<T> {
+function authHeaders(identity: ApiIdentity): Record<string, string> {
+  if (typeof identity === "string") {
+    return { "x-dev-user": identity };
+  }
+  return { Authorization: `Bearer ${identity.accessToken}` };
+}
+
+async function request<T>(path: string, identity: ApiIdentity, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, {
     ...init,
     headers: {
       "content-type": "application/json",
-      "x-dev-user": user,
+      ...authHeaders(identity),
       ...(init?.headers ?? {})
     }
   });
@@ -358,28 +368,28 @@ async function request<T>(path: string, user: DevUser, init?: RequestInit): Prom
   return (await response.json()) as T;
 }
 
-export function getMe(user: DevUser) {
+export function getMe(user: ApiIdentity) {
   return request<CurrentUser>("/auth/me", user);
 }
 
-export function listRequests(user: DevUser) {
+export function listRequests(user: ApiIdentity) {
   return request<AccessRequest[]>("/access-requests", user);
 }
 
-export function listProjects(user: DevUser) {
+export function listProjects(user: ApiIdentity) {
   return request<Project[]>("/projects", user);
 }
 
-export function listProjectMembers(user: DevUser, projectId: string) {
+export function listProjectMembers(user: ApiIdentity, projectId: string) {
   return request<ProjectMember[]>(`/projects/${projectId}/members`, user);
 }
 
-export function listProjectAuditEvents(user: DevUser, projectId: string) {
+export function listProjectAuditEvents(user: ApiIdentity, projectId: string) {
   return request<AuditEvent[]>(`/projects/${projectId}/audit-events`, user);
 }
 
 export function addProjectMember(
-  user: DevUser,
+  user: ApiIdentity,
   projectId: string,
   email = "security@example.local",
   memberRole = "collaborator"
@@ -390,22 +400,22 @@ export function addProjectMember(
   });
 }
 
-export function suspendProject(user: DevUser, projectId: string) {
+export function suspendProject(user: ApiIdentity, projectId: string) {
   return request<Project>(`/projects/${projectId}/suspend`, user, {
     method: "POST",
     body: JSON.stringify({ reason: "Executive risk review paused this project." })
   });
 }
 
-export function listReassignments(user: DevUser) {
+export function listReassignments(user: ApiIdentity) {
   return request<ReassignmentRequest[]>("/reassignments", user);
 }
 
-export function listRoleChanges(user: DevUser) {
+export function listRoleChanges(user: ApiIdentity) {
   return request<RoleChange[]>("/role-changes", user);
 }
 
-export function createReassignment(user: DevUser, projectId: string) {
+export function createReassignment(user: ApiIdentity, projectId: string) {
   return request<ReassignmentRequest>("/reassignments", user, {
     method: "POST",
     body: JSON.stringify({
@@ -416,14 +426,14 @@ export function createReassignment(user: DevUser, projectId: string) {
   });
 }
 
-export function acceptReassignment(user: DevUser, reassignmentId: string) {
+export function acceptReassignment(user: ApiIdentity, reassignmentId: string) {
   return request<ReassignmentRequest>(`/reassignments/${reassignmentId}/accept`, user, {
     method: "POST"
   });
 }
 
 export function decideReassignment(
-  user: DevUser,
+  user: ApiIdentity,
   reassignmentId: string,
   decision: "approve" | "reject"
 ) {
@@ -436,32 +446,32 @@ export function decideReassignment(
   });
 }
 
-export function createAccessRequest(user: DevUser, payload: AccessRequestFormValues) {
+export function createAccessRequest(user: ApiIdentity, payload: AccessRequestFormValues) {
   return request<AccessRequest>("/access-requests", user, {
     method: "POST",
     body: JSON.stringify(payload)
   });
 }
 
-export function cancelAccessRequest(user: DevUser, requestId: string) {
+export function cancelAccessRequest(user: ApiIdentity, requestId: string) {
   return request<AccessRequest>(`/access-requests/${requestId}/cancel`, user, {
     method: "POST"
   });
 }
 
-export function getPolicyEvaluation(user: DevUser, requestId: string) {
+export function getPolicyEvaluation(user: ApiIdentity, requestId: string) {
   return request<PolicyEvaluation>(`/access-requests/${requestId}/policy-evaluation`, user);
 }
 
-export function listPolicies(user: DevUser) {
+export function listPolicies(user: ApiIdentity) {
   return request<PolicyVersion[]>("/policies", user);
 }
 
-export function getRetentionPolicy(user: DevUser) {
+export function getRetentionPolicy(user: ApiIdentity) {
   return request<RetentionPolicy>("/policies/retention", user);
 }
 
-export function updateRetentionPolicy(user: DevUser) {
+export function updateRetentionPolicy(user: ApiIdentity) {
   return request<RetentionPolicy>("/policies/retention", user, {
     method: "POST",
     body: JSON.stringify({
@@ -471,7 +481,7 @@ export function updateRetentionPolicy(user: DevUser) {
   });
 }
 
-export function publishInternalSecurityReviewPolicy(user: DevUser, activePolicy: PolicyVersion) {
+export function publishInternalSecurityReviewPolicy(user: ApiIdentity, activePolicy: PolicyVersion) {
   const document = JSON.parse(JSON.stringify(activePolicy.document)) as {
     approval_rules?: { require_security_review_for?: string[] };
   } & Record<string, unknown>;
@@ -488,27 +498,27 @@ export function publishInternalSecurityReviewPolicy(user: DevUser, activePolicy:
   });
 }
 
-export function listPendingApprovals(user: DevUser) {
+export function listPendingApprovals(user: ApiIdentity) {
   return request<PendingApproval[]>("/approvals/pending", user);
 }
 
-export function listApprovalHistory(user: DevUser) {
+export function listApprovalHistory(user: ApiIdentity) {
   return request<ApprovalHistory[]>("/approvals/history", user);
 }
 
-export function listProviderHealth(user: DevUser) {
+export function listProviderHealth(user: ApiIdentity) {
   return request<ProviderHealth[]>("/providers/health", user);
 }
 
-export function listProviderConfiguration(user: DevUser) {
+export function listProviderConfiguration(user: ApiIdentity) {
   return request<ProviderConfiguration[]>("/providers/configuration", user);
 }
 
-export function listIntegrationCredentials(user: DevUser) {
+export function listIntegrationCredentials(user: ApiIdentity) {
   return request<IntegrationCredential[]>("/providers/credentials", user);
 }
 
-export function rotateIntegrationCredential(user: DevUser, credentialId: string) {
+export function rotateIntegrationCredential(user: ApiIdentity, credentialId: string) {
   return request<IntegrationCredential>(`/providers/credentials/${credentialId}/rotate`, user, {
     method: "POST",
     body: JSON.stringify({
@@ -518,7 +528,7 @@ export function rotateIntegrationCredential(user: DevUser, credentialId: string)
 }
 
 export function decideApproval(
-  user: DevUser,
+  user: ApiIdentity,
   stepId: string,
   decision: "approve" | "reject" | "request_information"
 ) {
@@ -534,7 +544,7 @@ export function decideApproval(
   });
 }
 
-export function overrideApproval(user: DevUser, requestId: string, decision: "approve" | "reject") {
+export function overrideApproval(user: ApiIdentity, requestId: string, decision: "approve" | "reject") {
   return request<AccessRequest>(`/approvals/override/${requestId}`, user, {
     method: "POST",
     body: JSON.stringify({
@@ -544,7 +554,7 @@ export function overrideApproval(user: DevUser, requestId: string, decision: "ap
   });
 }
 
-export function respondToInformationRequest(user: DevUser, requestId: string) {
+export function respondToInformationRequest(user: ApiIdentity, requestId: string) {
   return request<AccessRequest>(`/access-requests/${requestId}/information-response`, user, {
     method: "POST",
     body: JSON.stringify({
@@ -554,28 +564,28 @@ export function respondToInformationRequest(user: DevUser, requestId: string) {
   });
 }
 
-export function listAssignments(user: DevUser) {
+export function listAssignments(user: ApiIdentity) {
   return request<ProviderAssignment[]>("/developer/assignments", user);
 }
 
-export function listProviderAssignments(user: DevUser) {
+export function listProviderAssignments(user: ApiIdentity) {
   return request<ProviderAssignment[]>("/provider-assignments", user);
 }
 
-export function listUsageRecords(user: DevUser) {
+export function listUsageRecords(user: ApiIdentity) {
   return request<UsageRecord[]>("/usage", user);
 }
 
-export function listCostRecords(user: DevUser) {
+export function listCostRecords(user: ApiIdentity) {
   return request<CostRecord[]>("/costs", user);
 }
 
-export function listBudgetSummaries(user: DevUser) {
+export function listBudgetSummaries(user: ApiIdentity) {
   return request<BudgetSummary[]>("/budgets", user);
 }
 
 export function simulateUsage(
-  user: DevUser,
+  user: ApiIdentity,
   assignmentId: string,
   preset: "warning" | "critical" | "enforcement"
 ) {
@@ -590,14 +600,14 @@ export function simulateUsage(
   });
 }
 
-export function restoreAssignment(user: DevUser, assignmentId: string) {
+export function restoreAssignment(user: ApiIdentity, assignmentId: string) {
   return request<LifecycleAction>("/developer/restore", user, {
     method: "POST",
     body: JSON.stringify({ assignment_id: assignmentId, reason: "Administrator restored demo access." })
   });
 }
 
-export function expireAssignment(user: DevUser, assignmentId: string) {
+export function expireAssignment(user: ApiIdentity, assignmentId: string) {
   return request<LifecycleAction>("/developer/expire", user, {
     method: "POST",
     body: JSON.stringify({
@@ -607,29 +617,27 @@ export function expireAssignment(user: DevUser, assignmentId: string) {
   });
 }
 
-export function listLifecycleJobs(user: DevUser) {
+export function listLifecycleJobs(user: ApiIdentity) {
   return request<LifecycleJob[]>("/lifecycle-jobs", user);
 }
 
-export function getOperationalHealth(user: DevUser) {
+export function getOperationalHealth(user: ApiIdentity) {
   return request<OperationalHealth>("/health/observability", user);
 }
 
-export function retryLifecycleJob(user: DevUser, jobId: string) {
+export function retryLifecycleJob(user: ApiIdentity, jobId: string) {
   return request<LifecycleJob>(`/lifecycle-jobs/${jobId}/retry`, user, {
     method: "POST"
   });
 }
 
-export function listAuditEvents(user: DevUser) {
+export function listAuditEvents(user: ApiIdentity) {
   return request<AuditEvent[]>("/audit-events", user);
 }
 
-export async function exportAuditEvents(user: DevUser) {
+export async function exportAuditEvents(user: ApiIdentity) {
   const response = await fetch(`${apiBase}/audit-events/export`, {
-    headers: {
-      "x-dev-user": user
-    }
+    headers: authHeaders(user)
   });
   if (!response.ok) {
     throw new Error(`API ${response.status}: ${await response.text()}`);
@@ -637,11 +645,9 @@ export async function exportAuditEvents(user: DevUser) {
   return response.text();
 }
 
-export async function exportCostAllocation(user: DevUser) {
+export async function exportCostAllocation(user: ApiIdentity) {
   const response = await fetch(`${apiBase}/reports/cost-allocation/export`, {
-    headers: {
-      "x-dev-user": user
-    }
+    headers: authHeaders(user)
   });
   if (!response.ok) {
     throw new Error(`API ${response.status}: ${await response.text()}`);
@@ -649,55 +655,55 @@ export async function exportCostAllocation(user: DevUser) {
   return response.text();
 }
 
-export function listArchives(user: DevUser) {
+export function listArchives(user: ApiIdentity) {
   return request<ArtifactArchive[]>("/developer/archives", user);
 }
 
-export function listProvisioningEvidence(user: DevUser) {
+export function listProvisioningEvidence(user: ApiIdentity) {
   return request<ProvisioningEvidence[]>("/evidence/provisioning", user);
 }
 
-export function listNotifications(user: DevUser) {
+export function listNotifications(user: ApiIdentity) {
   return request<Notification[]>("/notifications", user);
 }
 
-export function markNotificationRead(user: DevUser, notificationId: string) {
+export function markNotificationRead(user: ApiIdentity, notificationId: string) {
   return request<Notification>(`/notifications/${notificationId}/read`, user, {
     method: "POST"
   });
 }
 
-export function getExecutiveReport(user: DevUser) {
+export function getExecutiveReport(user: ApiIdentity) {
   return request<ExecutiveReport>("/reports/executive", user);
 }
 
-export function listCostAllocationDeliveries(user: DevUser) {
+export function listCostAllocationDeliveries(user: ApiIdentity) {
   return request<CostAllocationDelivery[]>("/reports/cost-allocation/deliveries", user);
 }
 
-export function scheduleCostAllocationDelivery(user: DevUser) {
+export function scheduleCostAllocationDelivery(user: ApiIdentity) {
   return request<CostAllocationDelivery>("/reports/cost-allocation/deliveries", user, {
     method: "POST",
     body: JSON.stringify({ frequency: "weekly", recipients: ["finance@example.local"] })
   });
 }
 
-export function listIncidents(user: DevUser) {
+export function listIncidents(user: ApiIdentity) {
   return request<Incident[]>("/incidents", user);
 }
 
-export function resolveIncident(user: DevUser, incidentId: string) {
+export function resolveIncident(user: ApiIdentity, incidentId: string) {
   return request<Incident>(`/incidents/${incidentId}/resolve`, user, {
     method: "POST",
     body: JSON.stringify({ reason: "Reviewed and resolved in the local operations demo." })
   });
 }
 
-export function listExtensions(user: DevUser) {
+export function listExtensions(user: ApiIdentity) {
   return request<ExtensionRequest[]>("/extensions", user);
 }
 
-export function createExtensionRequest(user: DevUser, requestId: string, currentEndAt: string) {
+export function createExtensionRequest(user: ApiIdentity, requestId: string, currentEndAt: string) {
   const requestedEndAt = new Date(currentEndAt);
   requestedEndAt.setDate(requestedEndAt.getDate() + 7);
   return request<ExtensionRequest>("/extensions", user, {
@@ -710,7 +716,7 @@ export function createExtensionRequest(user: DevUser, requestId: string, current
   });
 }
 
-export function decideExtension(user: DevUser, extensionId: string, decision: "approve" | "reject") {
+export function decideExtension(user: ApiIdentity, extensionId: string, decision: "approve" | "reject") {
   return request<ExtensionRequest>(`/extensions/${extensionId}/decision`, user, {
     method: "POST",
     body: JSON.stringify({ decision, comments: "Reviewed in local demo." })
