@@ -17,10 +17,10 @@ If local ports are already busy, use the alternate-port command and open `http:/
 API_PORT=8010 WEB_PORT=3001 POSTGRES_PORT=55432 REDIS_PORT=56379 NEXT_PUBLIC_API_URL=http://localhost:8010 make dev
 ```
 
-If Podman is not reachable:
+If Compose is not available, install native Podman Compose support:
 
 ```bash
-systemctl --user start podman.socket
+sudo apt install podman-compose
 ```
 
 ## Opening Talk Track

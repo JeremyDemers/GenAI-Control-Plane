@@ -2,16 +2,17 @@
 
 PODMAN_ENV = case "$${XDG_DATA_HOME:-}" in "$$HOME"/snap/code/*/.local/share) unset XDG_DATA_HOME ;; esac;
 CONTAINER_ENGINE ?= podman
+COMPOSE ?= $(shell command -v podman-compose >/dev/null 2>&1 && printf podman-compose || printf '$(CONTAINER_ENGINE) compose')
 
 setup:
 	cd apps/api && uv sync --all-groups
 	npm install
 
 dev:
-	$(PODMAN_ENV) $(CONTAINER_ENGINE) compose up --build
+	$(PODMAN_ENV) $(COMPOSE) up --build
 
 stop:
-	$(PODMAN_ENV) $(CONTAINER_ENGINE) compose down
+	$(PODMAN_ENV) $(COMPOSE) down
 
 api:
 	cd apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -46,14 +47,14 @@ seed:
 	cd apps/api && uv run python -m scripts.seed
 
 reset:
-	$(PODMAN_ENV) $(CONTAINER_ENGINE) compose down -v
+	$(PODMAN_ENV) $(COMPOSE) down -v
 	rm -f apps/api/control_plane.db apps/api/tests/test_control_plane.db
 
 e2e:
 	npm --workspace apps/web run test:e2e
 
 docker-build:
-	$(PODMAN_ENV) $(CONTAINER_ENGINE) compose build
+	$(PODMAN_ENV) $(COMPOSE) build
 
 compose-config:
-	$(PODMAN_ENV) $(CONTAINER_ENGINE) compose config --quiet
+	$(PODMAN_ENV) $(COMPOSE) config --quiet
