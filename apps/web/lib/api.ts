@@ -1,5 +1,6 @@
 import type { AccessRequestFormValues } from "@/lib/request-schema";
 import type { OidcSession } from "@/lib/auth";
+import { apiBaseUrl, apiDocsUrl } from "@/lib/api-config";
 
 export type DevUser =
   | "employee@example.local"
@@ -344,11 +345,7 @@ export type CostAllocationDelivery = {
   created_at: string;
 };
 
-const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-export function apiDocsUrl() {
-  return `${apiBase}/docs`;
-}
+export { apiDocsUrl };
 
 function authHeaders(identity: ApiIdentity): Record<string, string> {
   if (typeof identity === "string") {
@@ -358,7 +355,7 @@ function authHeaders(identity: ApiIdentity): Record<string, string> {
 }
 
 async function request<T>(path: string, identity: ApiIdentity, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${apiBase}${path}`, {
+  const response = await fetch(`${apiBaseUrl()}${path}`, {
     ...init,
     headers: {
       "content-type": "application/json",
@@ -640,7 +637,7 @@ export function listAuditEvents(user: ApiIdentity) {
 }
 
 export async function exportAuditEvents(user: ApiIdentity) {
-  const response = await fetch(`${apiBase}/audit-events/export`, {
+  const response = await fetch(`${apiBaseUrl()}/audit-events/export`, {
     headers: authHeaders(user)
   });
   if (!response.ok) {
@@ -650,7 +647,7 @@ export async function exportAuditEvents(user: ApiIdentity) {
 }
 
 export async function exportCostAllocation(user: ApiIdentity) {
-  const response = await fetch(`${apiBase}/reports/cost-allocation/export`, {
+  const response = await fetch(`${apiBaseUrl()}/reports/cost-allocation/export`, {
     headers: authHeaders(user)
   });
   if (!response.ok) {

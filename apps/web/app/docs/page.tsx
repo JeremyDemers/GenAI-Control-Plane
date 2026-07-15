@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
-const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { apiDocsUrl } from "@/lib/api-config";
 
 export default function ApiDocsRedirect() {
-  redirect(`${apiBase}/docs`);
+  redirect(apiDocsUrl());
 }
