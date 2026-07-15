@@ -61,7 +61,7 @@
 
 - `cd apps/api && uv run pytest`
 - `cd apps/api && uv run ruff check .`
-- `cd apps/api && uv run mypy app`
+- `cd apps/api && uv run mypy .`
 - `npm --workspace apps/web run test`
 - `npm --workspace apps/web run typecheck`
 - `npm --workspace apps/web run lint`

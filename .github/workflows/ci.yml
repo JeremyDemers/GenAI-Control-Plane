@@ -19,7 +19,7 @@ jobs:
       - name: Ruff
         run: cd apps/api && uv run ruff check .
       - name: MyPy
-        run: cd apps/api && uv run mypy app
+        run: cd apps/api && uv run mypy .
       - name: Pytest
         run: cd apps/api && uv run pytest
       - name: Migration check
