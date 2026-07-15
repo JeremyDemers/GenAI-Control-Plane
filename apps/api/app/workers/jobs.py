@@ -11,6 +11,7 @@ from app.providers.base import ProviderOperationError
 from app.providers.registry import get_provider_adapter
 from app.services.audit import record_audit_event
 from app.services.lifecycle import (
+    enforce_archive_retention,
     expire_and_archive_assignment,
     record_usage_and_cost,
     restore_assignment,
@@ -40,6 +41,10 @@ def _archive_key(assignment_id: str) -> str:
 
 def _usage_key(assignment_id: str, correlation_id: str) -> str:
     return f"usage:{assignment_id}:{correlation_id}"
+
+
+def _retention_key(correlation_id: str) -> str:
+    return f"retention:{correlation_id}"
 
 
 def _start_job(job: LifecycleJob) -> None:
@@ -231,6 +236,42 @@ def enqueue_usage_processing_job(
     return job
 
 
+def enqueue_archive_retention_job(
+    db: Session,
+    *,
+    actor_user_id: str,
+    correlation_id: str,
+) -> LifecycleJob:
+    idempotency_key = _retention_key(correlation_id)
+    existing_job = db.scalar(
+        select(LifecycleJob).where(LifecycleJob.idempotency_key == idempotency_key)
+    )
+    if existing_job:
+        return existing_job
+
+    job = LifecycleJob(
+        job_type="enforce_archive_retention",
+        status="queued",
+        attempt_count=0,
+        idempotency_key=idempotency_key,
+        payload={"actor_user_id": actor_user_id, "correlation_id": correlation_id},
+    )
+    db.add(job)
+    db.flush()
+    record_audit_event(
+        db,
+        event_type="lifecycle_job.queued",
+        actor_user_id=actor_user_id,
+        target_type="lifecycle_job",
+        target_id=job.id,
+        action="enqueue_enforce_archive_retention",
+        result="queued",
+        correlation_id=correlation_id,
+    )
+    db.flush()
+    return job
+
+
 def _provision_jobs_for_request(db: Session, request: AccessRequest) -> list[LifecycleJob]:
     keys = [_provision_key(request.id, provider) for provider in request.provider_names]
     statement = select(LifecycleJob).where(LifecycleJob.idempotency_key.in_(keys))
@@ -365,6 +406,7 @@ async def run_queued_lifecycle_jobs(db: Session, limit: int = 10) -> int:
                     "restore_access",
                     "archive_and_deprovision",
                     "cost_allocation_delivery",
+                    "enforce_archive_retention",
                     "record_usage_and_cost",
                 }
             ),
@@ -381,6 +423,8 @@ async def run_queued_lifecycle_jobs(db: Session, limit: int = 10) -> int:
             await run_archive_and_deprovision_job(db, job)
         elif job.job_type == "cost_allocation_delivery":
             run_cost_allocation_delivery_job(db, job)
+        elif job.job_type == "enforce_archive_retention":
+            run_archive_retention_job(db, job)
         elif job.job_type == "record_usage_and_cost":
             run_usage_processing_job(db, job)
     return len(jobs)
@@ -393,6 +437,22 @@ async def enqueue_and_maybe_run_provisioning(
     if get_settings().lifecycle_inline_execution:
         await run_queued_lifecycle_jobs(db, limit=max(len(jobs), 1))
     return jobs
+
+
+async def enqueue_and_maybe_run_archive_retention(
+    db: Session,
+    *,
+    actor_user_id: str,
+    correlation_id: str,
+) -> LifecycleJob:
+    job = enqueue_archive_retention_job(
+        db,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+    )
+    if get_settings().lifecycle_inline_execution and job.status == "queued":
+        await run_queued_lifecycle_jobs(db, limit=1)
+    return job
 
 
 async def run_restore_job(db: Session, job: LifecycleJob) -> str | None:
@@ -438,6 +498,30 @@ async def run_restore_job(db: Session, job: LifecycleJob) -> str | None:
             message=f"Restore failed for {assignment.provider} assignment.",
         )
         return None
+
+
+def run_archive_retention_job(db: Session, job: LifecycleJob) -> str:
+    _start_job(job)
+    payload = job.payload or {}
+    actor_user_id = str(payload.get("actor_user_id", ""))
+    correlation_id = str(payload.get("correlation_id", "worker"))
+    if not actor_user_id:
+        _fail_job(
+            db,
+            job=job,
+            message="Archive retention job is missing actor context.",
+            operation="enforce_archive_retention",
+            retryable=False,
+            details={"code": "invalid_job_payload", "operation": "enforce_archive_retention"},
+        )
+        return "lifecycle_job.failed"
+    purged_count = enforce_archive_retention(
+        db,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        job=job,
+    )
+    return f"artifact.retention_purged:{purged_count}"
 
 
 async def run_archive_and_deprovision_job(db: Session, job: LifecycleJob) -> str | None:

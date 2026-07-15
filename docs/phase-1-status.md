@@ -50,6 +50,7 @@
 - Employees can cancel pending requests and request access extensions; CTOs and platform admins can approve or reject extension requests.
 - Platform administrators can publish new active standard-policy versions, and subsequent requests retain the policy version used during evaluation.
 - Platform administrators can update artifact retention policy versions, and archive expiration uses the active retention value.
+- Archive-retention lifecycle jobs purge expired archive locations while preserving checksum and audit evidence.
 - Root `.env` values are respected by local API settings and Docker Compose interpolation while remaining ignored by git.
 - Docker build paths use Node 24 for the web image, locked uv dependency sync for the API image, and a uv-backed worker command.
 - Docker Compose now healthchecks API and web services and waits for healthy API/Postgres/Redis dependencies before starting the worker and web service.

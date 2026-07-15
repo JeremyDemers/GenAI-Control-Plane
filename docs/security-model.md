@@ -44,4 +44,5 @@ placeholder local values.
 
 ## Data Retention
 
-Artifact archives include retention expiration. Future lifecycle jobs will enforce retention policies and preserve deprovisioning evidence.
+Artifact archives include retention expiration. The archive retention lifecycle job purges expired
+archive locations while preserving checksums and audit evidence for deprovisioning review.
