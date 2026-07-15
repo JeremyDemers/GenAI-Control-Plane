@@ -454,6 +454,40 @@ class ExecutiveReportOut(BaseModel):
     spend_by_cost_center: list[CostCenterSpendOut]
 
 
+class AdoptionDimensionOut(BaseModel):
+    name: str
+    request_count: int
+    active_assignments: int
+    total_tokens: int
+    total_request_events: int
+    total_spend: Decimal
+
+
+class ProjectAdoptionOut(BaseModel):
+    project_id: str | None
+    project_name: str
+    owner_email: str | None
+    cost_center: str
+    member_count: int
+    request_count: int
+    active_assignments: int
+    total_tokens: int
+    total_spend: Decimal
+
+
+class AdoptionReportOut(BaseModel):
+    total_users: int
+    users_with_requests: int
+    projects_with_usage: int
+    active_assignments: int
+    total_tokens: int
+    total_request_events: int
+    total_spend: Decimal
+    adoption_by_department: list[AdoptionDimensionOut]
+    adoption_by_provider: list[AdoptionDimensionOut]
+    project_activity: list[ProjectAdoptionOut]
+
+
 class CostAllocationDeliveryCreate(BaseModel):
     frequency: str = Field(pattern="^(daily|weekly|monthly)$")
     recipients: list[str] = Field(min_length=1, max_length=10)

@@ -33,6 +33,7 @@
 - CTOs and platform admins can schedule auditable cost allocation delivery jobs, visible to auditors.
 - Cost allocation delivery jobs now queue and complete through the lifecycle worker while preserving local inline execution for demos.
 - CTO executive report summarizes request volume, active/suspended projects, remaining budget, provider spend, and cost-center spend.
+- Adoption report summarizes users with requests, projects with usage, department/provider adoption, and project-level activity with export audit evidence.
 - Domain endpoints now expose visible provider assignments, usage records, cost records, and per-request budget summaries.
 - Frontend usage and budget evidence shows visible assignments, latest usage, latest cost, spend, remaining budget, and data freshness.
 - Provider health checks and privileged provider configuration validation are exposed in the dashboard.

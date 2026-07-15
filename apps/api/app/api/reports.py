@@ -16,16 +16,21 @@ from app.models.entities import (
     AccessRequest,
     CostRecord,
     LifecycleJob,
+    Project,
+    ProjectMember,
     ProviderAssignment,
     UsageRecord,
     User,
 )
 from app.models.enums import RequestStatus
 from app.schemas import (
+    AdoptionDimensionOut,
+    AdoptionReportOut,
     CostAllocationDeliveryCreate,
     CostAllocationDeliveryOut,
     CostCenterSpendOut,
     ExecutiveReportOut,
+    ProjectAdoptionOut,
     ProviderSpendOut,
 )
 from app.services.audit import record_audit_event
@@ -120,12 +125,220 @@ def build_executive_report(db: Session) -> ExecutiveReportOut:
     )
 
 
+def build_adoption_report(db: Session) -> AdoptionReportOut:
+    users = db.scalars(select(User)).all()
+    requests = db.scalars(select(AccessRequest)).all()
+    projects = db.scalars(select(Project)).all()
+    members = db.scalars(select(ProjectMember)).all()
+    assignments = db.scalars(select(ProviderAssignment)).all()
+    usage = db.scalars(select(UsageRecord)).all()
+    costs = db.scalars(select(CostRecord)).all()
+
+    users_by_id = {user.id: user for user in users}
+    requests_by_id = {request.id: request for request in requests}
+    projects_by_id = {project.id: project for project in projects}
+
+    usage_by_assignment: dict[str, tuple[int, int]] = defaultdict(lambda: (0, 0))
+    cost_by_assignment: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    for usage_record in usage:
+        tokens, request_events = usage_by_assignment[usage_record.assignment_id]
+        usage_by_assignment[usage_record.assignment_id] = (
+            tokens + usage_record.tokens,
+            request_events + usage_record.request_count,
+        )
+    for cost_record in costs:
+        cost_by_assignment[cost_record.assignment_id] += cost_record.amount
+
+    department_requests: Counter[str] = Counter()
+    department_active_assignments: Counter[str] = Counter()
+    department_tokens: Counter[str] = Counter()
+    department_request_events: Counter[str] = Counter()
+    department_spend: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    provider_requests: Counter[str] = Counter()
+    provider_active_assignments: Counter[str] = Counter()
+    provider_tokens: Counter[str] = Counter()
+    provider_request_events: Counter[str] = Counter()
+    provider_spend: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    project_request_count: Counter[str | None] = Counter()
+    project_active_assignments: Counter[str | None] = Counter()
+    project_tokens: Counter[str | None] = Counter()
+    project_spend: dict[str | None, Decimal] = defaultdict(lambda: Decimal("0"))
+    project_member_count: Counter[str] = Counter(member.project_id for member in members)
+
+    for request in requests:
+        requester = users_by_id.get(request.requester_id)
+        department = requester.department if requester else "Unknown"
+        department_requests[department] += 1
+        project_request_count[request.project_id] += 1
+        for provider in request.provider_names:
+            provider_requests[provider] += 1
+
+    for assignment in assignments:
+        assignment_request = requests_by_id.get(assignment.request_id)
+        requester = users_by_id.get(assignment_request.requester_id) if assignment_request else None
+        department = requester.department if requester else "Unknown"
+        project_id = assignment.project_id or (
+            assignment_request.project_id if assignment_request else None
+        )
+        tokens, request_events = usage_by_assignment[assignment.id]
+        spend = cost_by_assignment[assignment.id]
+
+        if assignment.status == "active":
+            department_active_assignments[department] += 1
+            provider_active_assignments[assignment.provider] += 1
+            project_active_assignments[project_id] += 1
+        department_tokens[department] += tokens
+        department_request_events[department] += request_events
+        department_spend[department] += spend
+        provider_tokens[assignment.provider] += tokens
+        provider_request_events[assignment.provider] += request_events
+        provider_spend[assignment.provider] += spend
+        project_tokens[project_id] += tokens
+        project_spend[project_id] += spend
+
+    departments = set(department_requests) | set(department_tokens) | set(department_spend)
+    providers = set(provider_requests) | set(provider_tokens) | set(provider_spend)
+    project_ids = set(project_request_count) | set(project_tokens) | set(project_spend)
+
+    projects_with_usage: set[str | None] = set()
+    for assignment in assignments:
+        if usage_by_assignment[assignment.id][0] <= 0:
+            continue
+        assignment_request = requests_by_id.get(assignment.request_id)
+        projects_with_usage.add(
+            assignment.project_id or (assignment_request.project_id if assignment_request else None)
+        )
+
+    project_activity: list[ProjectAdoptionOut] = []
+    for project_id in sorted(project_ids, key=lambda value: value or ""):
+        project = projects_by_id.get(project_id) if project_id else None
+        owner_email = None
+        if project and project.owner_user_id:
+            owner = users_by_id.get(project.owner_user_id)
+            owner_email = owner.email if owner else None
+        project_activity.append(
+            ProjectAdoptionOut(
+                project_id=project_id,
+                project_name=project.name if project else "Unassigned",
+                owner_email=owner_email,
+                cost_center=project.cost_center if project else "Unassigned",
+                member_count=project_member_count[project_id] if project_id else 0,
+                request_count=project_request_count[project_id],
+                active_assignments=project_active_assignments[project_id],
+                total_tokens=project_tokens[project_id],
+                total_spend=project_spend[project_id],
+            )
+        )
+
+    return AdoptionReportOut(
+        total_users=len(users),
+        users_with_requests=len({request.requester_id for request in requests}),
+        projects_with_usage=len(projects_with_usage),
+        active_assignments=sum(1 for assignment in assignments if assignment.status == "active"),
+        total_tokens=sum(record.tokens for record in usage),
+        total_request_events=sum(record.request_count for record in usage),
+        total_spend=sum((record.amount for record in costs), Decimal("0")),
+        adoption_by_department=[
+            AdoptionDimensionOut(
+                name=department,
+                request_count=department_requests[department],
+                active_assignments=department_active_assignments[department],
+                total_tokens=department_tokens[department],
+                total_request_events=department_request_events[department],
+                total_spend=department_spend[department],
+            )
+            for department in sorted(departments)
+        ],
+        adoption_by_provider=[
+            AdoptionDimensionOut(
+                name=provider,
+                request_count=provider_requests[provider],
+                active_assignments=provider_active_assignments[provider],
+                total_tokens=provider_tokens[provider],
+                total_request_events=provider_request_events[provider],
+                total_spend=provider_spend[provider],
+            )
+            for provider in sorted(providers)
+        ],
+        project_activity=project_activity,
+    )
+
+
 @router.get("/executive", response_model=ExecutiveReportOut)
 def executive_report(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("reports:executive")),
 ) -> ExecutiveReportOut:
     return build_executive_report(db)
+
+
+@router.get("/adoption", response_model=AdoptionReportOut)
+def adoption_report(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("reports:adoption")),
+) -> AdoptionReportOut:
+    return build_adoption_report(db)
+
+
+@router.get("/adoption/export")
+def export_adoption_report(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("reports:adoption")),
+    correlation_id: str = Depends(get_correlation_id),
+) -> Response:
+    report = build_adoption_report(db)
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["section", "name", "metric", "value"])
+    writer.writerow(["summary", "total_users", "count", report.total_users])
+    writer.writerow(["summary", "users_with_requests", "count", report.users_with_requests])
+    writer.writerow(["summary", "projects_with_usage", "count", report.projects_with_usage])
+    writer.writerow(["summary", "active_assignments", "count", report.active_assignments])
+    writer.writerow(["summary", "total_tokens", "count", report.total_tokens])
+    writer.writerow(["summary", "total_request_events", "count", report.total_request_events])
+    writer.writerow(["summary", "total_spend", "amount", report.total_spend])
+    for department in report.adoption_by_department:
+        writer.writerow(["department", department.name, "request_count", department.request_count])
+        writer.writerow(
+            ["department", department.name, "active_assignments", department.active_assignments]
+        )
+        writer.writerow(["department", department.name, "total_tokens", department.total_tokens])
+        writer.writerow(["department", department.name, "total_spend", department.total_spend])
+    for provider in report.adoption_by_provider:
+        writer.writerow(["provider", provider.name, "request_count", provider.request_count])
+        writer.writerow(
+            ["provider", provider.name, "active_assignments", provider.active_assignments]
+        )
+        writer.writerow(["provider", provider.name, "total_tokens", provider.total_tokens])
+        writer.writerow(["provider", provider.name, "total_spend", provider.total_spend])
+    for project in report.project_activity:
+        writer.writerow(["project", project.project_name, "cost_center", project.cost_center])
+        writer.writerow(["project", project.project_name, "member_count", project.member_count])
+        writer.writerow(["project", project.project_name, "request_count", project.request_count])
+        writer.writerow(
+            ["project", project.project_name, "active_assignments", project.active_assignments]
+        )
+        writer.writerow(["project", project.project_name, "total_tokens", project.total_tokens])
+        writer.writerow(["project", project.project_name, "total_spend", project.total_spend])
+    row_count = len(output.getvalue().splitlines()) - 1
+
+    record_audit_event(
+        db,
+        event_type="report.adoption_exported",
+        actor_user_id=user.id,
+        target_type="adoption_report",
+        target_id=None,
+        action="export",
+        result="success",
+        correlation_id=correlation_id,
+        metadata_json={"format": "csv", "row_count": row_count},
+    )
+    db.commit()
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="adoption-report.csv"'},
+    )
 
 
 @router.get("/executive/export")

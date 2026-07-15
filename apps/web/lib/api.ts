@@ -320,6 +320,43 @@ export type ExecutiveReport = {
   }[];
 };
 
+export type AdoptionReport = {
+  total_users: number;
+  users_with_requests: number;
+  projects_with_usage: number;
+  active_assignments: number;
+  total_tokens: number;
+  total_request_events: number;
+  total_spend: string;
+  adoption_by_department: {
+    name: string;
+    request_count: number;
+    active_assignments: number;
+    total_tokens: number;
+    total_request_events: number;
+    total_spend: string;
+  }[];
+  adoption_by_provider: {
+    name: string;
+    request_count: number;
+    active_assignments: number;
+    total_tokens: number;
+    total_request_events: number;
+    total_spend: string;
+  }[];
+  project_activity: {
+    project_id: string | null;
+    project_name: string;
+    owner_email: string | null;
+    cost_center: string;
+    member_count: number;
+    request_count: number;
+    active_assignments: number;
+    total_tokens: number;
+    total_spend: string;
+  }[];
+};
+
 export type ExtensionRequest = {
   id: string;
   request_id: string;
@@ -733,8 +770,22 @@ export function getExecutiveReport(user: ApiIdentity) {
   return request<ExecutiveReport>("/reports/executive", user);
 }
 
+export function getAdoptionReport(user: ApiIdentity) {
+  return request<AdoptionReport>("/reports/adoption", user);
+}
+
 export async function exportExecutiveReport(user: ApiIdentity) {
   const response = await fetch(`${apiBaseUrl()}/reports/executive/export`, {
+    headers: authHeaders(user)
+  });
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return response.text();
+}
+
+export async function exportAdoptionReport(user: ApiIdentity) {
+  const response = await fetch(`${apiBaseUrl()}/reports/adoption/export`, {
     headers: authHeaders(user)
   });
   if (!response.ok) {

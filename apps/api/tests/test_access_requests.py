@@ -2061,6 +2061,86 @@ def test_cto_can_view_executive_report_with_spend_rollups(client: TestClient) ->
     assert exported_event["metadata_json"]["row_count"] == len(rows)
 
 
+def test_privileged_users_can_view_adoption_report_and_export_evidence(
+    client: TestClient,
+) -> None:
+    provision_demo_request(client)
+    assignments = client.get(
+        "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+    ).json()
+    assignment_id = assignments[0]["id"]
+
+    client.post(
+        "/developer/simulate-usage",
+        headers={"x-dev-user": "admin@example.local"},
+        json={
+            "assignment_id": assignment_id,
+            "tokens": 5000,
+            "request_count": 10,
+            "cost_amount": "25",
+        },
+    )
+
+    report = client.get("/reports/adoption", headers={"x-dev-user": "auditor@example.local"})
+    assert report.status_code == 200
+    body = report.json()
+    assert body["total_users"] == 8
+    assert body["users_with_requests"] == 1
+    assert body["projects_with_usage"] == 1
+    assert body["active_assignments"] == 2
+    assert body["total_tokens"] == 5000
+    assert body["total_request_events"] == 10
+    assert body["total_spend"] == "25.00"
+    assert body["adoption_by_department"][0]["name"] == "Engineering"
+    assert body["adoption_by_department"][0]["request_count"] == 1
+    assert any(
+        provider["name"] == assignments[0]["provider"]
+        and provider["active_assignments"] == 1
+        and provider["total_tokens"] == 5000
+        for provider in body["adoption_by_provider"]
+    )
+    assert body["project_activity"][0]["project_name"] == "Interview Demo Sandbox"
+    assert body["project_activity"][0]["member_count"] == 2
+
+    admin_report = client.get("/reports/adoption", headers={"x-dev-user": "admin@example.local"})
+    cto_report = client.get("/reports/adoption", headers={"x-dev-user": "cto@example.local"})
+    denied_report = client.get(
+        "/reports/adoption", headers={"x-dev-user": "employee@example.local"}
+    )
+    assert admin_report.status_code == 200
+    assert cto_report.status_code == 200
+    assert denied_report.status_code == 403
+
+    export = client.get(
+        "/reports/adoption/export",
+        headers={"x-dev-user": "auditor@example.local", "x-correlation-id": "adoption-export"},
+    )
+    assert export.status_code == 200
+    assert export.headers["content-type"].startswith("text/csv")
+    rows = list(csv.DictReader(export.text.splitlines()))
+    assert {"section", "name", "metric", "value"} <= set(rows[0])
+    assert any(
+        row["section"] == "summary"
+        and row["name"] == "total_tokens"
+        and row["value"] == "5000"
+        for row in rows
+    )
+    assert any(
+        row["section"] == "project"
+        and row["name"] == "Interview Demo Sandbox"
+        and row["metric"] == "member_count"
+        and row["value"] == "2"
+        for row in rows
+    )
+
+    audit = client.get("/audit-events", headers={"x-dev-user": "auditor@example.local"})
+    exported_event = next(
+        event for event in audit.json() if event["event_type"] == "report.adoption_exported"
+    )
+    assert exported_event["correlation_id"] == "adoption-export"
+    assert exported_event["metadata_json"]["row_count"] == len(rows)
+
+
 def test_cost_allocation_export_rolls_up_assignment_spend_and_is_audited(
     client: TestClient,
 ) -> None:

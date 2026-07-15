@@ -48,9 +48,11 @@ import {
   decideApproval,
   enforceArchiveRetention,
   expireAssignment,
+  exportAdoptionReport,
   exportAuditEvents,
   exportCostAllocation,
   exportExecutiveReport,
+  getAdoptionReport,
   getAuditEventSummary,
   getExecutiveReport,
   getMe,
@@ -400,6 +402,12 @@ function ControlCenterExperience({
     enabled: isCto,
     retry: false
   });
+  const adoptionReport = useQuery({
+    queryKey: ["adoption-report", identityKey],
+    queryFn: () => getAdoptionReport(identity),
+    enabled: canReadPrivilegedEvidence,
+    retry: false
+  });
   const costAllocationDeliveries = useQuery({
     queryKey: ["cost-allocation-deliveries", identityKey],
     queryFn: () => listCostAllocationDeliveries(identity),
@@ -718,6 +726,13 @@ function ControlCenterExperience({
       void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
     }
   });
+  const adoptionReportExportMutation = useMutation({
+    mutationFn: () => exportAdoptionReport(identity),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
+    }
+  });
 
   const costAllocationDeliveryMutation = useMutation({
     mutationFn: () => scheduleCostAllocationDelivery(identity),
@@ -884,6 +899,21 @@ function ControlCenterExperience({
         remaining: Number(center.remaining_budget)
       })),
     [executiveReport.data?.spend_by_cost_center]
+  );
+  const adoptionReportState = evidencePanelState({
+    count: adoptionReport.data ? 1 : 0,
+    isError: adoptionReport.isError,
+    isLoading: adoptionReport.isLoading
+  });
+  const adoptionProviderChartData = useMemo(
+    () =>
+      (adoptionReport.data?.adoption_by_provider ?? []).map((provider) => ({
+        provider: provider.name.replaceAll("_", " "),
+        activeAssignments: provider.active_assignments,
+        requestCount: provider.request_count,
+        tokens: provider.total_tokens
+      })),
+    [adoptionReport.data?.adoption_by_provider]
   );
   const extensionQueueState = evidencePanelState({
     count: extensions.data?.length,
@@ -2179,6 +2209,122 @@ function ControlCenterExperience({
                       </div>
                     </div>
                   ) : null}
+                </div>
+              ) : null}
+            </Panel>
+          ) : null}
+
+          {canReadPrivilegedEvidence ? (
+            <Panel title="Adoption Report" icon={LineChart}>
+              {adoptionReportState === "loading" ? (
+                <p className="text-sm text-slate-500">Loading adoption report...</p>
+              ) : null}
+              {adoptionReportState === "error" ? (
+                <p className="text-sm text-coral">
+                  Adoption report could not be loaded. Check that the API is running for this
+                  dashboard session.
+                </p>
+              ) : null}
+              {adoptionReportState === "empty" ? (
+                <p className="text-sm text-slate-500">
+                  Adoption reporting will populate after governed access activity.
+                </p>
+              ) : null}
+              {adoptionReportState === "ready" && adoptionReport.data ? (
+                <div className="grid gap-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm text-slate-600">Usage adoption and project activity</p>
+                    <button
+                      className="h-10 rounded-md border border-line px-3 text-sm font-semibold"
+                      onClick={() => adoptionReportExportMutation.mutate()}
+                    >
+                      Export Adoption
+                    </button>
+                  </div>
+                  {adoptionReportExportMutation.data ? (
+                    <p className="rounded-md bg-panel p-2 text-xs text-slate-600">
+                      Adoption export ready ·{" "}
+                      {adoptionReportExportMutation.data.trim().split("\n").length - 1} rows
+                    </p>
+                  ) : null}
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    <Detail
+                      label="Users with requests"
+                      value={`${adoptionReport.data.users_with_requests}/${adoptionReport.data.total_users}`}
+                    />
+                    <Detail
+                      label="Projects with usage"
+                      value={adoptionReport.data.projects_with_usage.toString()}
+                    />
+                    <Detail
+                      label="Active assignments"
+                      value={adoptionReport.data.active_assignments.toString()}
+                    />
+                    <Detail
+                      label="Request events"
+                      value={adoptionReport.data.total_request_events.toLocaleString()}
+                    />
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <div className="rounded-md border border-line p-3">
+                      <p className="text-sm font-semibold">Provider adoption</p>
+                      <div className="mt-3 h-56">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={adoptionProviderChartData}>
+                            <CartesianGrid stroke="#d8dee8" strokeDasharray="3 3" />
+                            <XAxis dataKey="provider" tick={{ fontSize: 11 }} />
+                            <YAxis tick={{ fontSize: 11 }} />
+                            <Tooltip />
+                            <Bar
+                              dataKey="activeAssignments"
+                              fill="#1f8f75"
+                              radius={[4, 4, 0, 0]}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                    <div className="rounded-md border border-line p-3">
+                      <p className="text-sm font-semibold">Department adoption</p>
+                      <div className="mt-2 grid gap-2">
+                        {adoptionReport.data.adoption_by_department.map((department) => (
+                          <div
+                            key={department.name}
+                            className="flex items-center justify-between gap-3 text-sm"
+                          >
+                            <span>{department.name}</span>
+                            <span className="font-semibold">
+                              {department.request_count} requests · $
+                              {department.total_spend}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-line p-3">
+                    <p className="text-sm font-semibold">Project activity</p>
+                    <div className="mt-2 grid gap-2">
+                      {adoptionReport.data.project_activity.slice(0, 5).map((project) => (
+                        <div
+                          key={project.project_id ?? project.project_name}
+                          className="grid gap-1 rounded-md border border-line bg-panel p-2 text-sm md:grid-cols-[minmax(0,1fr)_auto]"
+                        >
+                          <div>
+                            <p className="font-semibold">{project.project_name}</p>
+                            <p className="text-xs text-slate-500">
+                              {project.cost_center} · {project.member_count} members
+                              {project.owner_email ? ` · ${project.owner_email}` : ""}
+                            </p>
+                          </div>
+                          <p className="text-sm font-semibold">
+                            {project.active_assignments} active ·{" "}
+                            {project.total_tokens.toLocaleString()} tokens
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               ) : null}
             </Panel>

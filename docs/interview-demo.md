@@ -46,7 +46,7 @@ workflow can be demonstrated safely.
 11. Run the expiration-warning scan and show the requester/admin notification plus audit evidence.
 12. Select `employee@example.local`, request a one-week extension, then approve it as `cto@example.local`.
 13. Select `admin@example.local`, force expiration, then show archive/deprovision evidence.
-14. Select `auditor@example.local`, show audit trail, role-change/provisioning evidence, and export CSV evidence.
+14. Select `auditor@example.local`, show audit trail, role-change/provisioning evidence, adoption reporting, and export CSV evidence.
 
 ## What To Emphasize
 
@@ -56,6 +56,7 @@ workflow can be demonstrated safely.
 - **Temporary access:** assignments have expiration, extension workflow, forced expiration, archive, and deprovisioning.
 - **Expiration governance:** active assignments nearing their end date produce requester/admin notifications and audit evidence.
 - **Cost control:** usage/cost records drive 70%, 90%, and 100% threshold behavior, including suspension and incident evidence.
+- **Adoption governance:** privileged users can review adoption by department, provider, and project activity, then export the report with audit evidence.
 - **Provider boundary:** mock and live adapters share the same contract; live mutating operations are feature-flagged and fail closed.
 - **Auditability:** lifecycle jobs, approvals, provider evidence, incident resolution, exports, and retention actions produce audit records.
 - **Delivery readiness:** Docker Compose, health checks, Alembic, CI, backend/frontend tests, Playwright demo flow, and Terraform validation are wired.
