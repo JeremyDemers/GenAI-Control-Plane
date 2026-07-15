@@ -34,6 +34,7 @@ import {
 } from "recharts";
 
 import { evidencePanelState } from "@/lib/evidence-state";
+import { approvalQueuePanelState } from "@/lib/approval-queue-state";
 import { notificationPanelState } from "@/lib/notification-state";
 import {
   acceptReassignment,
@@ -310,12 +311,15 @@ function ControlCenterExperience({
   const isPlatformAdmin = roles.includes("platform_admin");
   const isSecurityAuditor = roles.includes("security_auditor");
   const isCto = roles.includes("cto");
+  const canReviewApprovals =
+    roles.includes("approver") || roles.includes("security_reviewer") || isCto;
   const canReadPrivilegedEvidence = isPlatformAdmin || isSecurityAuditor || isCto;
   const requests = useQuery({ queryKey: ["requests", identityKey], queryFn: () => listRequests(identity) });
   const projects = useQuery({ queryKey: ["projects", identityKey], queryFn: () => listProjects(identity) });
   const approvals = useQuery({
     queryKey: ["approvals", identityKey],
     queryFn: () => listPendingApprovals(identity),
+    enabled: canReviewApprovals,
     retry: false
   });
   const approvalHistory = useQuery({
@@ -829,7 +833,8 @@ function ControlCenterExperience({
     isError: providerHealth.isError,
     isLoading: providerHealth.isLoading
   });
-  const approvalQueueState = evidencePanelState({
+  const approvalQueueState = approvalQueuePanelState({
+    canReviewApprovals,
     count: approvals.data?.length,
     isError: approvals.isError,
     isLoading: approvals.isLoading
@@ -2520,22 +2525,22 @@ function ControlCenterExperience({
             </form>
           </Panel>
 
-          <Panel title="Approval Queue" icon={CheckCircle2}>
-            <div className="grid gap-3">
-              {approvalQueueState === "loading" ? (
-                <p className="text-sm text-slate-500">Loading approval queue...</p>
-              ) : null}
-              {approvalQueueState === "error" ? (
-                <p className="text-sm text-coral">
-                  Approval queue could not be loaded. Check that the API is running for this
-                  dashboard session.
-                </p>
-              ) : null}
-              {approvalQueueState === "empty" ? (
-                <p className="text-sm text-slate-500">No pending approvals.</p>
-              ) : null}
-              {approvalQueueState === "ready"
-                ? (approvals.data ?? []).map((step) => (
+          {canReviewApprovals ? (
+            <Panel title="Approval Queue" icon={CheckCircle2}>
+              <div className="grid gap-3">
+                {approvalQueueState === "loading" ? (
+                  <p className="text-sm text-slate-500">Loading approval queue...</p>
+                ) : null}
+                {approvalQueueState === "error" ? (
+                  <p className="text-sm text-coral">
+                    Approval queue is unavailable for this reviewer session.
+                  </p>
+                ) : null}
+                {approvalQueueState === "empty" ? (
+                  <p className="text-sm text-slate-500">No pending approvals.</p>
+                ) : null}
+                {approvalQueueState === "ready"
+                  ? (approvals.data ?? []).map((step) => (
                     <div key={step.step_id} className="rounded-md border border-line p-3">
                       <div className="flex items-center justify-between gap-3">
                         <div>
@@ -2580,10 +2585,11 @@ function ControlCenterExperience({
                         </div>
                       </div>
                     </div>
-                  ))
-                : null}
-            </div>
-          </Panel>
+                    ))
+                  : null}
+              </div>
+            </Panel>
+          ) : null}
         </aside>
       </div>
     </main>
