@@ -74,6 +74,9 @@ export type PendingApproval = {
   request_id: string;
   step_type: string;
   assigned_role: string;
+  project_name: string;
+  requester_email: string;
+  requester_display_name: string;
 };
 
 export type ApprovalHistory = {
