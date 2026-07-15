@@ -37,6 +37,7 @@
 - Frontend usage and budget evidence shows visible assignments, latest usage, latest cost, spend, remaining budget, and data freshness.
 - Provider health checks and privileged provider configuration validation are exposed in the dashboard.
 - Live provider readiness checks now include installed AWS, Azure, Azure OpenAI, Microsoft Graph, Google Cloud, and GitHub SDK modules.
+- Provider adapter tests now cover every declared live provider profile and registry mock/live selection.
 - Provider credential inventory exposes safe vault-style references, admin-only rotation, due dates, and audit evidence without returning secrets.
 - Retryable provider provisioning failures now create failed lifecycle jobs, sanitized failure metadata, requester notifications, and provider failure audit evidence.
 - Access request submission creates project membership records, and project owners can review project requests, members, scoped audit history, evidence, and add existing users to a project with audit and notification evidence.
