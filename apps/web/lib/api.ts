@@ -703,6 +703,12 @@ export function enforceArchiveRetention(user: ApiIdentity) {
   });
 }
 
+export function scanExpirationWarnings(user: ApiIdentity) {
+  return request<LifecycleJob>("/developer/assignments/expiration-warnings", user, {
+    method: "POST"
+  });
+}
+
 export function listProvisioningEvidence(user: ApiIdentity) {
   return request<ProvisioningEvidence[]>("/evidence/provisioning", user);
 }

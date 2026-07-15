@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.models.entities import (
     AccessRequest,
     ArtifactArchive,
+    AuditEvent,
     CostRecord,
     Incident,
     LifecycleJob,
@@ -141,6 +142,97 @@ def record_usage_and_cost(
         },
     )
     return event.event_type
+
+
+def warn_expiring_access(
+    db: Session,
+    *,
+    actor_user_id: str | None,
+    correlation_id: str,
+    job: LifecycleJob,
+    warning_days: int,
+) -> int:
+    now = datetime.now(UTC)
+    warning_cutoff = now + timedelta(days=warning_days)
+    assignments = db.scalars(
+        select(ProviderAssignment)
+        .join(AccessRequest, AccessRequest.id == ProviderAssignment.request_id)
+        .where(
+            ProviderAssignment.status == "active",
+            ProviderAssignment.expires_at.is_not(None),
+            ProviderAssignment.expires_at > now,
+            ProviderAssignment.expires_at <= warning_cutoff,
+            AccessRequest.status == RequestStatus.ACTIVE,
+        )
+        .order_by(ProviderAssignment.expires_at.asc())
+    ).all()
+
+    warned_count = 0
+    for assignment in assignments:
+        request = db.get(AccessRequest, assignment.request_id)
+        if not request or not assignment.expires_at:
+            continue
+        existing_warning = db.scalar(
+            select(AuditEvent.id).where(
+                AuditEvent.event_type == "lifecycle.expiration_warning",
+                AuditEvent.target_id == assignment.id,
+            )
+        )
+        if existing_warning:
+            continue
+
+        record_audit_event(
+            db,
+            event_type="lifecycle.expiration_warning",
+            actor_user_id=actor_user_id,
+            target_type="provider_assignment",
+            target_id=assignment.id,
+            request_id=assignment.request_id,
+            project_id=assignment.project_id,
+            provider=assignment.provider,
+            action="warn_expiring_access",
+            result="success",
+            correlation_id=correlation_id,
+            metadata_json={
+                "project_name": request.project_name,
+                "expires_at": assignment.expires_at.isoformat(),
+                "warning_days": warning_days,
+            },
+        )
+        notify_user(
+            db,
+            user_id=request.requester_id,
+            event_type="access_expiration_warning",
+            message=f"{request.project_name} {assignment.provider} access expires soon.",
+        )
+        notify_roles(
+            db,
+            role_names={"platform_admin"},
+            event_type="access_expiration_warning",
+            message=(
+                f"{request.project_name} {assignment.provider} "
+                f"expires within {warning_days} days."
+            ),
+        )
+        warned_count += 1
+
+    job.status = "completed"
+    job.payload = {
+        **(job.payload or {}),
+        "warning_days": warning_days,
+        "warned_count": warned_count,
+        "warned_assignment_ids": [
+            event.target_id
+            for event in db.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.event_type == "lifecycle.expiration_warning",
+                    AuditEvent.correlation_id == correlation_id,
+                )
+            ).all()
+            if event.target_id
+        ],
+    }
+    return warned_count
 
 
 def enforce_archive_retention(

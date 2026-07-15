@@ -91,6 +91,7 @@ import {
   retryLifecycleJob,
   resolveIncident,
   scheduleCostAllocationDelivery,
+  scanExpirationWarnings,
   simulateUsage,
   suspendProject,
   updateRetentionPolicy,
@@ -660,6 +661,15 @@ function ControlCenterExperience({
     mutationFn: (jobId: string) => retryLifecycleJob(identity, jobId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["lifecycle-jobs"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
+      void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
+    }
+  });
+  const expirationWarningMutation = useMutation({
+    mutationFn: () => scanExpirationWarnings(identity),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["lifecycle-jobs"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-events"] });
       void queryClient.invalidateQueries({ queryKey: ["audit-summary"] });
     }
@@ -1507,6 +1517,30 @@ function ControlCenterExperience({
                   <p className="text-sm text-slate-500">
                     Approve a request through the manager and CTO steps to create assignments.
                   </p>
+                ) : null}
+                {assignments.data && assignments.data.length > 0 ? (
+                  <div className="rounded-md border border-line bg-panel p-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="font-semibold">Expiration warnings</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Scan active assignments inside the warning window.
+                        </p>
+                      </div>
+                      <ActionButton
+                        icon={FileClock}
+                        label="Scan"
+                        testId="expiration-warning-scan"
+                        onClick={() => expirationWarningMutation.mutate()}
+                      />
+                    </div>
+                    {expirationWarningMutation.data ? (
+                      <p className="mt-2 text-xs text-slate-500">
+                        Warning job {expirationWarningMutation.data.status} · notified{" "}
+                        {String(expirationWarningMutation.data.payload.warned_count ?? 0)}
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
                 {archives.data && archives.data.length > 0 ? (
                   <div className="rounded-md border border-line bg-panel p-3 text-sm">

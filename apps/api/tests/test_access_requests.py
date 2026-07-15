@@ -1373,6 +1373,46 @@ def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -
         "access_restored"
     }
 
+    active_assignments = client.get(
+        "/developer/assignments", headers={"x-dev-user": "admin@example.local"}
+    ).json()
+    expiration_scan = client.post(
+        "/developer/assignments/expiration-warnings",
+        headers={
+            "x-dev-user": "admin@example.local",
+            "x-correlation-id": "expiration-warning-scan",
+        },
+    )
+    assert expiration_scan.status_code == 200
+    assert expiration_scan.json()["status"] == "completed"
+    assert expiration_scan.json()["payload"]["warned_count"] == len(active_assignments)
+    assert set(expiration_scan.json()["payload"]["warned_assignment_ids"]) == {
+        assignment["id"] for assignment in active_assignments
+    }
+
+    duplicate_scan = client.post(
+        "/developer/assignments/expiration-warnings",
+        headers={
+            "x-dev-user": "admin@example.local",
+            "x-correlation-id": "expiration-warning-repeat",
+        },
+    )
+    assert duplicate_scan.status_code == 200
+    assert duplicate_scan.json()["payload"]["warned_count"] == 0
+
+    employee_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "employee@example.local"}
+    ).json()
+    admin_notifications = client.get(
+        "/notifications", headers={"x-dev-user": "admin@example.local"}
+    ).json()
+    assert {notification["event_type"] for notification in employee_notifications} >= {
+        "access_expiration_warning"
+    }
+    assert {notification["event_type"] for notification in admin_notifications} >= {
+        "access_expiration_warning"
+    }
+
     expired = client.post(
         "/developer/expire",
         headers={"x-dev-user": "admin@example.local"},
@@ -1430,6 +1470,7 @@ def test_developer_lifecycle_demo_controls_create_evidence(client: TestClient) -
         "budget.critical",
         "budget.enforcement",
         "incident.resolved",
+        "lifecycle.expiration_warning",
         "lifecycle.closed",
     } <= event_types
 

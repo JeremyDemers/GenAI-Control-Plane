@@ -15,6 +15,7 @@ from app.services.lifecycle import (
     expire_and_archive_assignment,
     record_usage_and_cost,
     restore_assignment,
+    warn_expiring_access,
 )
 from app.services.notifications import notify_roles, notify_user
 from app.services.reports import cost_allocation_csv
@@ -45,6 +46,10 @@ def _usage_key(assignment_id: str, correlation_id: str) -> str:
 
 def _retention_key(correlation_id: str) -> str:
     return f"retention:{correlation_id}"
+
+
+def _expiration_warning_key(correlation_id: str) -> str:
+    return f"expiration-warning:{correlation_id}"
 
 
 def _start_job(job: LifecycleJob) -> None:
@@ -272,6 +277,48 @@ def enqueue_archive_retention_job(
     return job
 
 
+def enqueue_access_expiration_scan_job(
+    db: Session,
+    *,
+    actor_user_id: str,
+    correlation_id: str,
+    warning_days: int,
+) -> LifecycleJob:
+    idempotency_key = _expiration_warning_key(correlation_id)
+    existing_job = db.scalar(
+        select(LifecycleJob).where(LifecycleJob.idempotency_key == idempotency_key)
+    )
+    if existing_job:
+        return existing_job
+
+    job = LifecycleJob(
+        job_type="access_expiration_scan",
+        status="queued",
+        attempt_count=0,
+        idempotency_key=idempotency_key,
+        payload={
+            "actor_user_id": actor_user_id,
+            "correlation_id": correlation_id,
+            "warning_days": warning_days,
+        },
+    )
+    db.add(job)
+    db.flush()
+    record_audit_event(
+        db,
+        event_type="lifecycle_job.queued",
+        actor_user_id=actor_user_id,
+        target_type="lifecycle_job",
+        target_id=job.id,
+        action="enqueue_access_expiration_scan",
+        result="queued",
+        correlation_id=correlation_id,
+        metadata_json={"warning_days": warning_days},
+    )
+    db.flush()
+    return job
+
+
 def _provision_jobs_for_request(db: Session, request: AccessRequest) -> list[LifecycleJob]:
     keys = [_provision_key(request.id, provider) for provider in request.provider_names]
     statement = select(LifecycleJob).where(LifecycleJob.idempotency_key.in_(keys))
@@ -408,6 +455,7 @@ async def run_queued_lifecycle_jobs(db: Session, limit: int = 10) -> int:
                     "cost_allocation_delivery",
                     "enforce_archive_retention",
                     "record_usage_and_cost",
+                    "access_expiration_scan",
                 }
             ),
         )
@@ -427,6 +475,8 @@ async def run_queued_lifecycle_jobs(db: Session, limit: int = 10) -> int:
             run_archive_retention_job(db, job)
         elif job.job_type == "record_usage_and_cost":
             run_usage_processing_job(db, job)
+        elif job.job_type == "access_expiration_scan":
+            run_access_expiration_scan_job(db, job)
     return len(jobs)
 
 
@@ -449,6 +499,25 @@ async def enqueue_and_maybe_run_archive_retention(
         db,
         actor_user_id=actor_user_id,
         correlation_id=correlation_id,
+    )
+    if get_settings().lifecycle_inline_execution and job.status == "queued":
+        await run_queued_lifecycle_jobs(db, limit=1)
+    return job
+
+
+async def enqueue_and_maybe_run_access_expiration_scan(
+    db: Session,
+    *,
+    actor_user_id: str,
+    correlation_id: str,
+    warning_days: int | None = None,
+) -> LifecycleJob:
+    effective_warning_days = warning_days or get_settings().access_expiration_warning_days
+    job = enqueue_access_expiration_scan_job(
+        db,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        warning_days=effective_warning_days,
     )
     if get_settings().lifecycle_inline_execution and job.status == "queued":
         await run_queued_lifecycle_jobs(db, limit=1)
@@ -633,6 +702,32 @@ def run_usage_processing_job(db: Session, job: LifecycleJob) -> str | None:
     job.status = "completed"
     db.flush()
     return event_type
+
+
+def run_access_expiration_scan_job(db: Session, job: LifecycleJob) -> str:
+    _start_job(job)
+    payload = job.payload or {}
+    actor_user_id = str(payload.get("actor_user_id", ""))
+    correlation_id = str(payload.get("correlation_id", "worker"))
+    warning_days = int(payload.get("warning_days", get_settings().access_expiration_warning_days))
+    if not actor_user_id:
+        _fail_job(
+            db,
+            job=job,
+            message="Expiration scan job is missing actor context.",
+            operation="warn_expiring_access",
+            retryable=False,
+            details={"code": "invalid_job_payload", "operation": "warn_expiring_access"},
+        )
+        return "lifecycle_job.failed"
+    warned_count = warn_expiring_access(
+        db,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        job=job,
+        warning_days=warning_days,
+    )
+    return f"lifecycle.expiration_warning:{warned_count}"
 
 
 async def enqueue_and_maybe_run_usage_processing(
