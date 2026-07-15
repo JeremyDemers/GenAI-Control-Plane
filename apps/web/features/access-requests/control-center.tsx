@@ -32,6 +32,7 @@ import {
   YAxis
 } from "recharts";
 
+import { notificationPanelState } from "@/lib/notification-state";
 import {
   acceptReassignment,
   addProjectMember,
@@ -713,6 +714,11 @@ function ControlCenterExperience({
     requests.data?.filter((request) => request.status.includes("AWAITING")).length ?? 0;
   const unreadNotifications =
     notifications.data?.filter((notification) => !notification.read_at).length ?? 0;
+  const notificationsState = notificationPanelState({
+    count: notifications.data?.length,
+    isError: notifications.isError,
+    isLoading: notifications.isLoading
+  });
   const latestUsage = usageRecords.data?.[0];
   const latestCost = costRecords.data?.[0];
   const visibleAssignments = providerAssignments.data?.length ?? 0;
@@ -1777,32 +1783,40 @@ function ControlCenterExperience({
         <aside className="grid content-start gap-5">
           <Panel title="Notifications" icon={Bell}>
             <div className="grid gap-2">
-              {(notifications.data ?? []).slice(0, 6).map((notification) => (
-                <button
-                  key={notification.id}
-                  className={`rounded-md border border-line p-3 text-left text-sm transition hover:bg-panel ${
-                    notification.read_at ? "bg-white text-slate-500" : "bg-panel text-ink"
-                  }`}
-                  onClick={() => readNotificationMutation.mutate(notification.id)}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="font-semibold">
-                      {notification.event_type.replaceAll("_", " ")}
-                    </span>
-                    <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-slate-500">
-                      <span>{notification.delivery_status}</span>
-                      <span>{new Date(notification.created_at).toLocaleTimeString()}</span>
-                    </div>
-                  </div>
-                  <p className="mt-1 text-slate-600">{notification.message}</p>
-                </button>
-              ))}
-              {notifications.data?.length === 0 ? (
+              {notificationsState === "loading" ? (
+                <p className="text-sm text-slate-500">Loading notifications...</p>
+              ) : null}
+              {notificationsState === "error" ? (
+                <p className="text-sm text-coral">
+                  Notifications could not be loaded. Check that the API is running for this
+                  dashboard session.
+                </p>
+              ) : null}
+              {notificationsState === "empty" ? (
                 <p className="text-sm text-slate-500">No notifications for this identity.</p>
               ) : null}
-              {notifications.isError ? (
-                <p className="text-sm text-coral">Notifications unavailable.</p>
-              ) : null}
+              {notificationsState === "ready"
+                ? (notifications.data ?? []).slice(0, 6).map((notification) => (
+                    <button
+                      key={notification.id}
+                      className={`rounded-md border border-line p-3 text-left text-sm transition hover:bg-panel ${
+                        notification.read_at ? "bg-white text-slate-500" : "bg-panel text-ink"
+                      }`}
+                      onClick={() => readNotificationMutation.mutate(notification.id)}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-semibold">
+                          {notification.event_type.replaceAll("_", " ")}
+                        </span>
+                        <div className="flex flex-wrap items-center justify-end gap-2 text-xs text-slate-500">
+                          <span>{notification.delivery_status}</span>
+                          <span>{new Date(notification.created_at).toLocaleTimeString()}</span>
+                        </div>
+                      </div>
+                      <p className="mt-1 text-slate-600">{notification.message}</p>
+                    </button>
+                  ))
+                : null}
             </div>
           </Panel>
 
