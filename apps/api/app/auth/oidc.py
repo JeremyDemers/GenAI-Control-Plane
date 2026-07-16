@@ -76,15 +76,18 @@ async def _post_oidc_token_request(
     settings: Settings,
     form_data: dict[str, str],
 ) -> dict[str, Any]:
-    if not settings.oidc_token_endpoint or not settings.oidc_client_id:
-        raise OIDCConfigurationError("OIDC_TOKEN_ENDPOINT and OIDC_CLIENT_ID must be configured.")
+    token_endpoint = effective_oidc_token_endpoint(settings)
+    if not token_endpoint or not settings.oidc_client_id:
+        raise OIDCConfigurationError(
+            "OIDC_TOKEN_ENDPOINT or MICROSOFT_TENANT_ID, and OIDC_CLIENT_ID must be configured."
+        )
 
     if settings.oidc_client_secret:
         form_data["client_secret"] = settings.oidc_client_secret
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(settings.oidc_token_endpoint, data=form_data)
+            response = await client.post(token_endpoint, data=form_data)
             response.raise_for_status()
             payload = response.json()
     except (httpx.HTTPError, ValueError) as exc:
@@ -96,8 +99,13 @@ async def _post_oidc_token_request(
 
 
 def decode_oidc_claims(token: str, settings: Settings) -> dict[str, Any]:
-    if not settings.oidc_issuer or not settings.oidc_audience:
-        raise OIDCConfigurationError("OIDC_ISSUER and OIDC_AUDIENCE must be configured.")
+    issuer = effective_oidc_issuer(settings)
+    audience = effective_oidc_audience(settings)
+    if not issuer or not audience:
+        raise OIDCConfigurationError(
+            "OIDC_ISSUER or MICROSOFT_TENANT_ID, and OIDC_AUDIENCE or OIDC_CLIENT_ID "
+            "must be configured."
+        )
 
     try:
         header = jwt.get_unverified_header(token)
@@ -114,8 +122,8 @@ def decode_oidc_claims(token: str, settings: Settings) -> dict[str, Any]:
             token,
             key=key,
             algorithms=[algorithm],
-            audience=settings.oidc_audience,
-            issuer=settings.oidc_issuer,
+            audience=audience,
+            issuer=issuer,
             options={"require": ["exp", "iss", "aud"]},
         )
     except InvalidTokenError as exc:
@@ -154,13 +162,53 @@ def _verification_key(token: str, algorithm: str, settings: Settings) -> Any:
 
     if settings.oidc_jwks_json:
         return _key_from_static_jwks(token, settings.oidc_jwks_json)
-    if settings.oidc_jwks_url:
+    jwks_url = effective_oidc_jwks_url(settings)
+    if jwks_url:
         try:
-            return _jwks_client(settings.oidc_jwks_url).get_signing_key_from_jwt(token).key
+            return _jwks_client(jwks_url).get_signing_key_from_jwt(token).key
         except PyJWKClientError as exc:
             raise OIDCAuthenticationError("Unable to resolve token signing key.") from exc
 
     raise OIDCConfigurationError("OIDC_JWKS_URL or OIDC_JWKS_JSON must be configured.")
+
+
+def effective_oidc_issuer(settings: Settings) -> str:
+    if settings.oidc_issuer.strip():
+        return settings.oidc_issuer.strip()
+    tenant_id = _microsoft_tenant_id(settings)
+    return f"https://login.microsoftonline.com/{tenant_id}/v2.0" if tenant_id else ""
+
+
+def effective_oidc_audience(settings: Settings) -> str:
+    if settings.oidc_audience.strip():
+        return settings.oidc_audience.strip()
+    return settings.oidc_client_id.strip() if _microsoft_tenant_id(settings) else ""
+
+
+def effective_oidc_jwks_url(settings: Settings) -> str:
+    if settings.oidc_jwks_url.strip():
+        return settings.oidc_jwks_url.strip()
+    tenant_id = _microsoft_tenant_id(settings)
+    return (
+        f"https://login.microsoftonline.com/{tenant_id}/discovery/v2.0/keys"
+        if tenant_id
+        else ""
+    )
+
+
+def effective_oidc_token_endpoint(settings: Settings) -> str:
+    if settings.oidc_token_endpoint.strip():
+        return settings.oidc_token_endpoint.strip()
+    tenant_id = _microsoft_tenant_id(settings)
+    return (
+        f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+        if tenant_id
+        else ""
+    )
+
+
+def _microsoft_tenant_id(settings: Settings) -> str:
+    return settings.microsoft_tenant_id.strip()
 
 
 def _key_from_static_jwks(token: str, jwks_json: str) -> Any:

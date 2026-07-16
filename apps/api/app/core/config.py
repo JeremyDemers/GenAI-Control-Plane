@@ -33,9 +33,18 @@ class Settings(BaseSettings):
         default="",
         validation_alias="OIDC_GROUP_ROLE_MAP_JSON",
     )
+    oidc_auto_provision_users: bool = Field(
+        default=False,
+        validation_alias="OIDC_AUTO_PROVISION_USERS",
+    )
+    oidc_auto_provision_default_role: str = Field(
+        default="employee",
+        validation_alias="OIDC_AUTO_PROVISION_DEFAULT_ROLE",
+    )
     oidc_token_endpoint: str = Field(default="", validation_alias="OIDC_TOKEN_ENDPOINT")
     oidc_client_id: str = Field(default="", validation_alias="OIDC_CLIENT_ID")
     oidc_client_secret: str = Field(default="", validation_alias="OIDC_CLIENT_SECRET")
+    microsoft_tenant_id: str = Field(default="", validation_alias="MICROSOFT_TENANT_ID")
     auth_session_cookie_name: str = Field(
         default="genai_cp_session",
         validation_alias="AUTH_SESSION_COOKIE_NAME",

@@ -36,6 +36,10 @@ server-side roles. Local development uses seeded identities passed through `x-de
 exchanges the code through `OIDC_TOKEN_ENDPOINT`, stores refresh tokens server-side, and issues an
 HttpOnly session cookie for access-token refresh.
 
+For Microsoft Entra ID, `MICROSOFT_TENANT_ID` and `NEXT_PUBLIC_MICROSOFT_TENANT_ID` derive the
+issuer, authorization endpoint, token endpoint, and JWKS URL from `login.microsoftonline.com`.
+Explicit generic OIDC endpoint settings still override the Microsoft preset when needed.
+
 ## Failure Handling
 
 State transitions are explicit. Provider operations use idempotency keys. Lifecycle jobs store payload, attempt count, and failure details. Privileged authorization failures produce audit events.

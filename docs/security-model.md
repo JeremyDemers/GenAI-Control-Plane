@@ -16,6 +16,12 @@ identity is deterministic and limited to seeded demo users while `DEV_AUTH_ENABL
 `OIDC_GROUP_ROLE_MAP_JSON` is configured, mapped OIDC group claims replace the user's application
 roles and produce `identity.roles_synchronized` audit evidence.
 
+Microsoft login uses authorization-code flow with PKCE in the browser, server-side code exchange,
+and HttpOnly refresh-token session cookies. The browser stores only short-lived access tokens; client
+secrets remain on the API side.
+Optional OIDC auto-provisioning is disabled by default; when enabled, new Microsoft-authenticated
+users are created with a configured default role before group mapping is applied.
+
 ## Authorization
 
 The API denies by default. Route dependencies require permissions, and service-level checks are used for workflow ownership and assignment. Auditor roles can read audit data but cannot mutate operational records.
