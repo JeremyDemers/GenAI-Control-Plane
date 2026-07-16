@@ -53,3 +53,17 @@ To synchronize Entra groups or app roles to local roles, set `OIDC_GROUP_ROLE_MA
 ```
 
 With no group mapping configured, users keep the roles seeded in the database.
+
+## Troubleshooting
+
+- `AADSTS50011` means the Azure redirect URI does not exactly match
+  `NEXT_PUBLIC_OIDC_REDIRECT_URI`. For local demos, both should usually be
+  `http://localhost:3001`.
+- `OIDC session exchange failed: OIDC authorization code exchange failed.` usually means the
+  client secret, redirect URI, tenant ID, or requested scope does not match the Azure app
+  registration.
+- `OIDC session exchange failed: Unknown identity.` means the Microsoft account signed in
+  successfully but does not map to a local user. Keep `OIDC_AUTO_PROVISION_USERS=true` for a
+  personal demo, or seed the user in the database before signing in.
+- Restart `make dev` after changing `NEXT_PUBLIC_*` values. Next.js reads those values when the
+  web app starts and builds.

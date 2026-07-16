@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  authErrorMessage,
   clearOidcSession,
   decodeJwtClaims,
   emailFromClaims,
@@ -67,5 +68,32 @@ describe("OIDC auth helpers", () => {
 
     vi.useRealTimers();
     clearOidcSession();
+  });
+
+  it("surfaces structured API auth errors from failed OIDC exchanges", async () => {
+    const response = new Response(
+      JSON.stringify({
+        detail: {
+          code: "UNAUTHENTICATED",
+          message: "OIDC authorization code exchange failed."
+        }
+      }),
+      {
+        status: 401,
+        headers: { "content-type": "application/json" }
+      }
+    );
+
+    await expect(authErrorMessage(response, "OIDC session exchange failed")).resolves.toBe(
+      "OIDC session exchange failed: OIDC authorization code exchange failed."
+    );
+  });
+
+  it("falls back to the response status when auth errors are empty", async () => {
+    const response = new Response("", { status: 503 });
+
+    await expect(authErrorMessage(response, "OIDC session exchange failed")).resolves.toBe(
+      "OIDC session exchange failed: 503"
+    );
   });
 });
