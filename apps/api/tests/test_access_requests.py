@@ -13,7 +13,10 @@ from fastapi.testclient import TestClient
 
 from app.api.webhooks import webhook_signature
 from app.auth.oidc import (
+    OIDCAuthenticationError,
+    decode_oidc_claims,
     effective_oidc_audience,
+    effective_oidc_audiences,
     effective_oidc_issuer,
     effective_oidc_jwks_url,
     effective_oidc_token_endpoint,
@@ -216,6 +219,7 @@ def test_microsoft_tenant_derives_oidc_endpoints() -> None:
             == "https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0"
         )
         assert effective_oidc_audience(settings) == "api-client-id"
+        assert effective_oidc_audiences(settings) == ["api-client-id", "api://api-client-id"]
         assert effective_oidc_jwks_url(settings) == (
             "https://login.microsoftonline.com/"
             "00000000-0000-0000-0000-000000000000/discovery/v2.0/keys"
@@ -316,6 +320,53 @@ def test_oidc_bearer_token_rejects_wrong_audience(client: TestClient) -> None:
 
     assert response.status_code == 401
     assert response.json()["detail"]["code"] == "UNAUTHENTICATED"
+
+
+def test_microsoft_tenant_accepts_client_id_audience_when_api_uri_configured() -> None:
+    settings = get_settings()
+    original = {
+        "microsoft_tenant_id": settings.microsoft_tenant_id,
+        "oidc_issuer": settings.oidc_issuer,
+        "oidc_audience": settings.oidc_audience,
+        "oidc_client_id": settings.oidc_client_id,
+        "oidc_hs256_secret": settings.oidc_hs256_secret,
+        "oidc_allowed_algorithms": list(settings.oidc_allowed_algorithms),
+    }
+    try:
+        settings.microsoft_tenant_id = "00000000-0000-0000-0000-000000000000"
+        settings.oidc_issuer = ""
+        settings.oidc_audience = "api://api-client-id"
+        settings.oidc_client_id = "api-client-id"
+        settings.oidc_hs256_secret = OIDC_TEST_SECRET
+        settings.oidc_allowed_algorithms = ["HS256"]
+        now = int(time.time())
+        token = jwt.encode(
+            {
+                "iss": (
+                    "https://login.microsoftonline.com/"
+                    "00000000-0000-0000-0000-000000000000/v2.0"
+                ),
+                "aud": "api-client-id",
+                "email": "employee@example.local",
+                "iat": now,
+                "exp": now + 300,
+            },
+            OIDC_TEST_SECRET,
+            algorithm="HS256",
+        )
+
+        claims = decode_oidc_claims(token, settings)
+    finally:
+        settings.microsoft_tenant_id = str(original["microsoft_tenant_id"])
+        settings.oidc_issuer = str(original["oidc_issuer"])
+        settings.oidc_audience = str(original["oidc_audience"])
+        settings.oidc_client_id = str(original["oidc_client_id"])
+        settings.oidc_hs256_secret = str(original["oidc_hs256_secret"])
+        settings.oidc_allowed_algorithms = cast(
+            list[str], original["oidc_allowed_algorithms"]
+        )
+
+    assert claims["email"] == "employee@example.local"
 
 
 def test_oidc_callback_refresh_and_logout_use_server_session(
@@ -427,6 +478,41 @@ def test_oidc_callback_can_auto_provision_microsoft_user(
     assert exchange.json()["user"]["roles"] == ["employee"]
     assert me.status_code == 200
     assert me.json()["email"] == "jeremy@example.local"
+
+
+def test_oidc_callback_surfaces_provider_error_detail(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = configure_oidc_auth_for_test()
+
+    async def fake_exchange_oidc_code(**kwargs: object) -> dict[str, object]:
+        del kwargs
+        raise OIDCAuthenticationError(
+            "invalid_grant: AADSTS50011 The redirect URI does not match the registered URI."
+        )
+
+    monkeypatch.setattr("app.api.auth.exchange_oidc_code", fake_exchange_oidc_code)
+    try:
+        exchange = client.post(
+            "/auth/oidc/callback",
+            json={
+                "code": "authorization-code",
+                "code_verifier": "v" * 43,
+                "redirect_uri": "http://localhost:3001",
+            },
+        )
+    finally:
+        restore_auth_settings(original)
+
+    assert exchange.status_code == 401
+    assert exchange.json()["detail"] == {
+        "code": "UNAUTHENTICATED",
+        "message": (
+            "OIDC authorization code exchange failed: invalid_grant: AADSTS50011 "
+            "The redirect URI does not match the registered URI."
+        ),
+    }
 
 
 def test_employee_can_submit_request_and_policy_records_cto_path(client: TestClient) -> None:

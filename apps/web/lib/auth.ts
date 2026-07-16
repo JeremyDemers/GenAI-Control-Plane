@@ -95,7 +95,7 @@ export async function completeOidcLogin(search: string, config: OidcConfig): Pro
     })
   });
   if (!response.ok) {
-    throw new Error(`OIDC session exchange failed: ${response.status}`);
+    throw new Error(await authErrorMessage(response, "OIDC session exchange failed"));
   }
 
   const payload = (await response.json()) as {
@@ -171,6 +171,34 @@ export function saveOidcSession(session: OidcSession) {
 
 export function clearOidcSession() {
   sessionStorage.removeItem(sessionKey);
+}
+
+export async function authErrorMessage(response: Response, fallback: string) {
+  const fallbackMessage = `${fallback}: ${response.status}`;
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (contentType.includes("application/json")) {
+    try {
+      const payload = (await response.json()) as {
+        detail?: string | { message?: string; code?: string };
+        message?: string;
+      };
+      const detail = payload.detail;
+      const message =
+        typeof detail === "string" ? detail : detail?.message ?? payload.message;
+
+      return message?.trim() ? `${fallback}: ${message.trim()}` : fallbackMessage;
+    } catch {
+      return fallbackMessage;
+    }
+  }
+
+  try {
+    const text = await response.text();
+    return text.trim() ? `${fallback}: ${text.trim()}` : fallbackMessage;
+  } catch {
+    return fallbackMessage;
+  }
 }
 
 export async function logoutOidcSession(config: OidcConfig) {
