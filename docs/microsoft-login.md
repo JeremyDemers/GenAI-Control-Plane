@@ -26,6 +26,7 @@ NEXT_PUBLIC_OIDC_CLIENT_ID=<application-client-id>
 OIDC_CLIENT_SECRET=<client-secret-value>
 OIDC_AUDIENCE=api://<application-client-id>
 OIDC_AUTO_PROVISION_USERS=true
+OIDC_AUTO_PROVISION_ROLES=
 NEXT_PUBLIC_OIDC_REDIRECT_URI=http://localhost:3001
 NEXT_PUBLIC_OIDC_SCOPE="openid profile email offline_access api://<application-client-id>/access_as_user"
 ```
@@ -40,8 +41,16 @@ The Microsoft preset derives these endpoints automatically:
 ## Role Mapping
 
 For a personal Azure account demo, `OIDC_AUTO_PROVISION_USERS=true` creates a local user on first
-successful Microsoft sign-in with the `employee` role. In stricter environments, leave auto
-provisioning disabled and seed approved users explicitly.
+successful Microsoft sign-in with the `employee` role. To let a freshly provisioned personal demo
+account exercise reviewer or executive panels without configuring Entra group claims, set
+`OIDC_AUTO_PROVISION_ROLES` to a comma-separated list such as:
+
+```bash
+OIDC_AUTO_PROVISION_ROLES=employee,approver,cto,platform_admin
+```
+
+Leave `OIDC_AUTO_PROVISION_ROLES` empty to use `OIDC_AUTO_PROVISION_DEFAULT_ROLE`. In stricter
+environments, leave auto provisioning disabled and seed approved users explicitly.
 
 To synchronize Entra groups or app roles to local roles, set `OIDC_GROUP_ROLE_MAP_JSON`:
 
@@ -53,6 +62,8 @@ To synchronize Entra groups or app roles to local roles, set `OIDC_GROUP_ROLE_MA
 ```
 
 With no group mapping configured, users keep the roles seeded in the database.
+Changing auto-provision roles only affects users created after the change. For an already-created
+local demo user, either reset the local database or use Entra group/app-role mapping.
 
 ## Troubleshooting
 
