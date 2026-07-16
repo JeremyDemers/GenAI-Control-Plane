@@ -48,7 +48,9 @@ async def oidc_callback(
     except OIDCConfigurationError as exc:
         raise _auth_configuration_error() from exc
     except OIDCAuthenticationError as exc:
-        raise _unauthenticated("OIDC authorization code exchange failed.") from exc
+        raise _unauthenticated(
+            _oidc_error_message("OIDC authorization code exchange failed.", exc)
+        ) from exc
 
     refresh_token = token_response.get("refresh_token")
     if not isinstance(refresh_token, str) or not refresh_token:
@@ -111,7 +113,7 @@ async def oidc_refresh(
         session.revoked_at = datetime.now(UTC)
         db.commit()
         _clear_session_cookie(response)
-        raise _unauthenticated("OIDC refresh failed.") from exc
+        raise _unauthenticated(_oidc_error_message("OIDC refresh failed.", exc)) from exc
 
     user = _user_from_claims(db, claims)
     if user.id != session.user_id:
@@ -250,6 +252,13 @@ def _unauthenticated(message: str) -> HTTPException:
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail={"code": "UNAUTHENTICATED", "message": message},
     )
+
+
+def _oidc_error_message(default: str, exc: OIDCAuthenticationError) -> str:
+    detail = " ".join(str(exc).split())
+    if not detail or detail == default:
+        return default
+    return f"{default.rstrip('.')}: {detail}"
 
 
 def _user_out(user: User) -> UserOut:

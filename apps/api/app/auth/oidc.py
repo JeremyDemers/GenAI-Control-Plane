@@ -90,6 +90,8 @@ async def _post_oidc_token_request(
             response = await client.post(token_endpoint, data=form_data)
             response.raise_for_status()
             payload = response.json()
+    except httpx.HTTPStatusError as exc:
+        raise OIDCAuthenticationError(_token_endpoint_error_message(exc.response)) from exc
     except (httpx.HTTPError, ValueError) as exc:
         raise OIDCAuthenticationError("OIDC token endpoint request failed.") from exc
 
@@ -209,6 +211,33 @@ def effective_oidc_token_endpoint(settings: Settings) -> str:
 
 def _microsoft_tenant_id(settings: Settings) -> str:
     return settings.microsoft_tenant_id.strip()
+
+
+def _token_endpoint_error_message(response: httpx.Response) -> str:
+    default = "OIDC token endpoint request failed."
+    try:
+        payload = response.json()
+    except ValueError:
+        return default
+
+    if not isinstance(payload, dict):
+        return default
+
+    provider_error = _safe_token_error_field(payload.get("error"))
+    provider_description = _safe_token_error_field(payload.get("error_description"))
+    if provider_error and provider_description:
+        return f"{provider_error}: {provider_description}"
+    if provider_description:
+        return provider_description
+    if provider_error:
+        return provider_error
+    return default
+
+
+def _safe_token_error_field(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    return " ".join(value.split())[:600]
 
 
 def _key_from_static_jwks(token: str, jwks_json: str) -> Any:

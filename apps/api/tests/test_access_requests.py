@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from app.api.webhooks import webhook_signature
 from app.auth.oidc import (
+    OIDCAuthenticationError,
     effective_oidc_audience,
     effective_oidc_issuer,
     effective_oidc_jwks_url,
@@ -427,6 +428,41 @@ def test_oidc_callback_can_auto_provision_microsoft_user(
     assert exchange.json()["user"]["roles"] == ["employee"]
     assert me.status_code == 200
     assert me.json()["email"] == "jeremy@example.local"
+
+
+def test_oidc_callback_surfaces_provider_error_detail(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = configure_oidc_auth_for_test()
+
+    async def fake_exchange_oidc_code(**kwargs: object) -> dict[str, object]:
+        del kwargs
+        raise OIDCAuthenticationError(
+            "invalid_grant: AADSTS50011 The redirect URI does not match the registered URI."
+        )
+
+    monkeypatch.setattr("app.api.auth.exchange_oidc_code", fake_exchange_oidc_code)
+    try:
+        exchange = client.post(
+            "/auth/oidc/callback",
+            json={
+                "code": "authorization-code",
+                "code_verifier": "v" * 43,
+                "redirect_uri": "http://localhost:3001",
+            },
+        )
+    finally:
+        restore_auth_settings(original)
+
+    assert exchange.status_code == 401
+    assert exchange.json()["detail"] == {
+        "code": "UNAUTHENTICATED",
+        "message": (
+            "OIDC authorization code exchange failed: invalid_grant: AADSTS50011 "
+            "The redirect URI does not match the registered URI."
+        ),
+    }
 
 
 def test_employee_can_submit_request_and_policy_records_cto_path(client: TestClient) -> None:
