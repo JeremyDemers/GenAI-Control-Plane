@@ -131,6 +131,16 @@ const users: DevUser[] = [
   "auditor@example.local"
 ];
 
+const roleLabels: Record<string, string> = {
+  employee: "Employee",
+  project_owner: "Project Owner",
+  approver: "Approver",
+  security_reviewer: "Security Reviewer",
+  platform_admin: "Platform Admin",
+  security_auditor: "Security Auditor",
+  cto: "CTO"
+};
+
 const costTrend = [
   { day: "Mon", cost: 12 },
   { day: "Tue", cost: 28 },
@@ -951,9 +961,12 @@ function ControlCenterExperience({
             <h1 className="text-2xl font-semibold tracking-normal text-ink">
               AI Access Control Center
             </h1>
-            <p className="text-sm text-slate-600">
-              {me.data?.display_name ?? "Development user"} · {me.data?.roles.join(", ") ?? "loading"}
-            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span className="text-sm text-slate-600">
+                {me.data?.display_name ?? "Development user"}
+              </span>
+              <RoleBadges roles={me.data?.roles ?? []} isLoading={me.isLoading} />
+            </div>
           </div>
           {oidcSession ? (
             <div className="flex flex-wrap items-center gap-3 text-sm font-medium text-slate-700">
@@ -2701,6 +2714,27 @@ function StatusPill({ status }: { status: AccessRequest["status"] | string }) {
     <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${className}`}>
       <span className="sr-only" data-testid={`status-${status}`} />
       {status.replaceAll("_", " ")}
+    </span>
+  );
+}
+
+function RoleBadges({ roles, isLoading }: { roles: string[]; isLoading: boolean }) {
+  if (isLoading) {
+    return <span className="text-xs font-medium text-slate-500">Loading roles...</span>;
+  }
+  if (!roles.length) {
+    return <span className="text-xs font-medium text-slate-500">No roles assigned</span>;
+  }
+  return (
+    <span className="flex flex-wrap gap-1" aria-label="Assigned roles">
+      {roles.map((role) => (
+        <span
+          key={role}
+          className="rounded-full border border-line bg-panel px-2 py-0.5 text-xs font-semibold text-slate-700"
+        >
+          {roleLabels[role] ?? role.replaceAll("_", " ")}
+        </span>
+      ))}
     </span>
   );
 }
