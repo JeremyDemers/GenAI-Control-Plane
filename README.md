@@ -80,6 +80,7 @@ NEXT_PUBLIC_OIDC_CLIENT_ID=<application-client-id>
 OIDC_CLIENT_SECRET=<client-secret-value>
 OIDC_AUDIENCE=api://<application-client-id>
 OIDC_AUTO_PROVISION_USERS=true
+OIDC_AUTO_PROVISION_ROLES=
 NEXT_PUBLIC_OIDC_SCOPE="openid profile email offline_access api://<application-client-id>/access_as_user"
 ```
 
@@ -87,7 +88,10 @@ If you expose Entra groups or app roles in tokens, map them to local roles with
 `OIDC_GROUP_ROLE_MAP_JSON`, for example
 `{"<entra-group-object-id>":["platform_admin"],"<auditor-group-object-id>":["security_auditor"]}`.
 Set `OIDC_AUTO_PROVISION_USERS=true` for a personal Azure account demo, or keep it disabled and add
-approved users to the seed data manually.
+approved users to the seed data manually. For a local portfolio walkthrough with one Microsoft
+account, `OIDC_AUTO_PROVISION_ROLES=employee,approver,cto,platform_admin` gives newly provisioned
+users access to the employee, approval, executive, and administrator panels without configuring
+Entra group claims.
 
 ## Implemented Features
 

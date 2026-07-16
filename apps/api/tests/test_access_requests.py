@@ -134,6 +134,7 @@ def configure_oidc_auth_for_test() -> dict[str, object]:
         "oidc_group_role_map_json": settings.oidc_group_role_map_json,
         "oidc_auto_provision_users": settings.oidc_auto_provision_users,
         "oidc_auto_provision_default_role": settings.oidc_auto_provision_default_role,
+        "oidc_auto_provision_roles": settings.oidc_auto_provision_roles,
         "oidc_token_endpoint": settings.oidc_token_endpoint,
         "oidc_client_id": settings.oidc_client_id,
         "oidc_client_secret": settings.oidc_client_secret,
@@ -152,6 +153,7 @@ def configure_oidc_auth_for_test() -> dict[str, object]:
     settings.oidc_group_role_map_json = ""
     settings.oidc_auto_provision_users = False
     settings.oidc_auto_provision_default_role = "employee"
+    settings.oidc_auto_provision_roles = ""
     settings.oidc_token_endpoint = "https://login.example.test/token"
     settings.oidc_client_id = "genai-control-plane-test"
     settings.oidc_client_secret = ""
@@ -176,6 +178,7 @@ def restore_auth_settings(original: dict[str, object]) -> None:
     settings.oidc_auto_provision_default_role = str(
         original["oidc_auto_provision_default_role"]
     )
+    settings.oidc_auto_provision_roles = str(original["oidc_auto_provision_roles"])
     settings.oidc_token_endpoint = str(original["oidc_token_endpoint"])
     settings.oidc_client_id = str(original["oidc_client_id"])
     settings.oidc_client_secret = str(original["oidc_client_secret"])
@@ -478,6 +481,53 @@ def test_oidc_callback_can_auto_provision_microsoft_user(
     assert exchange.json()["user"]["roles"] == ["employee"]
     assert me.status_code == 200
     assert me.json()["email"] == "jeremy@example.local"
+
+
+def test_oidc_callback_can_auto_provision_multiple_demo_roles(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = configure_oidc_auth_for_test()
+    settings = get_settings()
+    settings.oidc_auto_provision_users = True
+    settings.oidc_auto_provision_roles = "employee, approver, cto"
+
+    async def fake_exchange_oidc_code(**kwargs: object) -> dict[str, object]:
+        del kwargs
+        now = int(time.time())
+        access_token = jwt.encode(
+            {
+                "iss": OIDC_TEST_ISSUER,
+                "aud": OIDC_TEST_AUDIENCE,
+                "email": "demo-admin@example.local",
+                "name": "Demo Admin",
+                "iat": now,
+                "exp": now + 300,
+            },
+            OIDC_TEST_SECRET,
+            algorithm="HS256",
+        )
+        return {
+            "access_token": access_token,
+            "refresh_token": "refresh-token-demo-admin",
+            "expires_in": 300,
+        }
+
+    monkeypatch.setattr("app.api.auth.exchange_oidc_code", fake_exchange_oidc_code)
+    try:
+        exchange = client.post(
+            "/auth/oidc/callback",
+            json={
+                "code": "authorization-code",
+                "code_verifier": "v" * 43,
+                "redirect_uri": "http://localhost:3001",
+            },
+        )
+    finally:
+        restore_auth_settings(original)
+
+    assert exchange.status_code == 200
+    assert set(exchange.json()["user"]["roles"]) == {"employee", "approver", "cto"}
 
 
 def test_oidc_callback_surfaces_provider_error_detail(

@@ -41,6 +41,10 @@ class Settings(BaseSettings):
         default="employee",
         validation_alias="OIDC_AUTO_PROVISION_DEFAULT_ROLE",
     )
+    oidc_auto_provision_roles: str = Field(
+        default="",
+        validation_alias="OIDC_AUTO_PROVISION_ROLES",
+    )
     oidc_token_endpoint: str = Field(default="", validation_alias="OIDC_TOKEN_ENDPOINT")
     oidc_client_id: str = Field(default="", validation_alias="OIDC_CLIENT_ID")
     oidc_client_secret: str = Field(default="", validation_alias="OIDC_CLIENT_SECRET")

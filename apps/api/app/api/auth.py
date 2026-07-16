@@ -181,16 +181,18 @@ def _user_from_claims(db: Session, claims: dict[str, Any]) -> User:
     user = db.scalar(select(User).where(User.email == email))
     settings = get_settings()
     if not user and settings.oidc_auto_provision_users:
-        role = db.scalar(
-            select(Role).where(Role.name == settings.oidc_auto_provision_default_role)
+        configured_role_names = _auto_provision_role_names()
+        roles = list(
+            db.scalars(select(Role).where(Role.name.in_(configured_role_names))).all()
         )
-        if not role:
+        roles_by_name = {role.name: role for role in roles}
+        if set(roles_by_name) != set(configured_role_names):
             raise _auth_configuration_error()
         user = User(
             email=email,
             display_name=_display_name_from_claims(claims, email),
         )
-        user.roles.append(role)
+        user.roles.extend(roles_by_name[role_name] for role_name in configured_role_names)
         db.add(user)
         db.flush()
 
@@ -205,6 +207,18 @@ def _display_name_from_claims(claims: dict[str, Any], email: str) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return email
+
+
+def _auto_provision_role_names() -> list[str]:
+    settings = get_settings()
+    configured_roles = [
+        role_name.strip()
+        for role_name in settings.oidc_auto_provision_roles.split(",")
+        if role_name.strip()
+    ]
+    if configured_roles:
+        return list(dict.fromkeys(configured_roles))
+    return [settings.oidc_auto_provision_default_role]
 
 
 def _active_session_from_cookie(request: Request, db: Session) -> AuthSession:
