@@ -102,8 +102,8 @@ async def _post_oidc_token_request(
 
 def decode_oidc_claims(token: str, settings: Settings) -> dict[str, Any]:
     issuer = effective_oidc_issuer(settings)
-    audience = effective_oidc_audience(settings)
-    if not issuer or not audience:
+    audiences = effective_oidc_audiences(settings)
+    if not issuer or not audiences:
         raise OIDCConfigurationError(
             "OIDC_ISSUER or MICROSOFT_TENANT_ID, and OIDC_AUDIENCE or OIDC_CLIENT_ID "
             "must be configured."
@@ -124,12 +124,12 @@ def decode_oidc_claims(token: str, settings: Settings) -> dict[str, Any]:
             token,
             key=key,
             algorithms=[algorithm],
-            audience=audience,
+            audience=audiences,
             issuer=issuer,
             options={"require": ["exp", "iss", "aud"]},
         )
     except InvalidTokenError as exc:
-        raise OIDCAuthenticationError("Bearer token failed validation.") from exc
+        raise OIDCAuthenticationError(_token_validation_error_message(exc)) from exc
     return claims
 
 
@@ -187,6 +187,14 @@ def effective_oidc_audience(settings: Settings) -> str:
     return settings.oidc_client_id.strip() if _microsoft_tenant_id(settings) else ""
 
 
+def effective_oidc_audiences(settings: Settings) -> list[str]:
+    audiences = _comma_separated_values(effective_oidc_audience(settings))
+    client_id = settings.oidc_client_id.strip()
+    if _microsoft_tenant_id(settings) and client_id:
+        audiences.extend([client_id, f"api://{client_id}"])
+    return list(dict.fromkeys(audiences))
+
+
 def effective_oidc_jwks_url(settings: Settings) -> str:
     if settings.oidc_jwks_url.strip():
         return settings.oidc_jwks_url.strip()
@@ -238,6 +246,18 @@ def _safe_token_error_field(value: object) -> str:
     if not isinstance(value, str):
         return ""
     return " ".join(value.split())[:600]
+
+
+def _token_validation_error_message(exc: InvalidTokenError) -> str:
+    detail = " ".join(str(exc).split())
+    error_name = exc.__class__.__name__
+    if detail:
+        return f"Bearer token failed validation: {error_name}: {detail}"
+    return f"Bearer token failed validation: {error_name}"
+
+
+def _comma_separated_values(value: str) -> list[str]:
+    return [part.strip() for part in value.split(",") if part.strip()]
 
 
 def _key_from_static_jwks(token: str, jwks_json: str) -> Any:
