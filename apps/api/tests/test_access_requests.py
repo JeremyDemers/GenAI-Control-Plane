@@ -12,6 +12,12 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 
 from app.api.webhooks import webhook_signature
+from app.auth.oidc import (
+    effective_oidc_audience,
+    effective_oidc_issuer,
+    effective_oidc_jwks_url,
+    effective_oidc_token_endpoint,
+)
 from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.models.entities import ArtifactArchive
@@ -123,6 +129,8 @@ def configure_oidc_auth_for_test() -> dict[str, object]:
         "oidc_allowed_algorithms": list(settings.oidc_allowed_algorithms),
         "oidc_group_claims": list(settings.oidc_group_claims),
         "oidc_group_role_map_json": settings.oidc_group_role_map_json,
+        "oidc_auto_provision_users": settings.oidc_auto_provision_users,
+        "oidc_auto_provision_default_role": settings.oidc_auto_provision_default_role,
         "oidc_token_endpoint": settings.oidc_token_endpoint,
         "oidc_client_id": settings.oidc_client_id,
         "oidc_client_secret": settings.oidc_client_secret,
@@ -139,6 +147,8 @@ def configure_oidc_auth_for_test() -> dict[str, object]:
     settings.oidc_allowed_algorithms = ["HS256"]
     settings.oidc_group_claims = ["groups", "roles"]
     settings.oidc_group_role_map_json = ""
+    settings.oidc_auto_provision_users = False
+    settings.oidc_auto_provision_default_role = "employee"
     settings.oidc_token_endpoint = "https://login.example.test/token"
     settings.oidc_client_id = "genai-control-plane-test"
     settings.oidc_client_secret = ""
@@ -159,6 +169,10 @@ def restore_auth_settings(original: dict[str, object]) -> None:
     settings.oidc_allowed_algorithms = cast(list[str], original["oidc_allowed_algorithms"])
     settings.oidc_group_claims = cast(list[str], original["oidc_group_claims"])
     settings.oidc_group_role_map_json = str(original["oidc_group_role_map_json"])
+    settings.oidc_auto_provision_users = bool(original["oidc_auto_provision_users"])
+    settings.oidc_auto_provision_default_role = str(
+        original["oidc_auto_provision_default_role"]
+    )
     settings.oidc_token_endpoint = str(original["oidc_token_endpoint"])
     settings.oidc_client_id = str(original["oidc_client_id"])
     settings.oidc_client_secret = str(original["oidc_client_secret"])
@@ -177,6 +191,46 @@ def test_oidc_bearer_token_authenticates_seeded_user(client: TestClient) -> None
     assert response.status_code == 200
     assert response.json()["email"] == "employee@example.local"
     assert "employee" in response.json()["roles"]
+
+
+def test_microsoft_tenant_derives_oidc_endpoints() -> None:
+    settings = get_settings()
+    original = {
+        "microsoft_tenant_id": settings.microsoft_tenant_id,
+        "oidc_issuer": settings.oidc_issuer,
+        "oidc_audience": settings.oidc_audience,
+        "oidc_jwks_url": settings.oidc_jwks_url,
+        "oidc_token_endpoint": settings.oidc_token_endpoint,
+        "oidc_client_id": settings.oidc_client_id,
+    }
+    try:
+        settings.microsoft_tenant_id = "00000000-0000-0000-0000-000000000000"
+        settings.oidc_issuer = ""
+        settings.oidc_audience = ""
+        settings.oidc_jwks_url = ""
+        settings.oidc_token_endpoint = ""
+        settings.oidc_client_id = "api-client-id"
+
+        assert (
+            effective_oidc_issuer(settings)
+            == "https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0"
+        )
+        assert effective_oidc_audience(settings) == "api-client-id"
+        assert effective_oidc_jwks_url(settings) == (
+            "https://login.microsoftonline.com/"
+            "00000000-0000-0000-0000-000000000000/discovery/v2.0/keys"
+        )
+        assert effective_oidc_token_endpoint(settings) == (
+            "https://login.microsoftonline.com/"
+            "00000000-0000-0000-0000-000000000000/oauth2/v2.0/token"
+        )
+    finally:
+        settings.microsoft_tenant_id = str(original["microsoft_tenant_id"])
+        settings.oidc_issuer = str(original["oidc_issuer"])
+        settings.oidc_audience = str(original["oidc_audience"])
+        settings.oidc_jwks_url = str(original["oidc_jwks_url"])
+        settings.oidc_token_endpoint = str(original["oidc_token_endpoint"])
+        settings.oidc_client_id = str(original["oidc_client_id"])
 
 
 def test_oidc_static_jwks_authenticates_rs256_token(client: TestClient) -> None:
@@ -319,6 +373,60 @@ def test_oidc_callback_refresh_and_logout_use_server_session(
     assert {"auth.session_created", "auth.session_revoked"} <= {
         event["event_type"] for event in audit.json()
     }
+
+
+def test_oidc_callback_can_auto_provision_microsoft_user(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = configure_oidc_auth_for_test()
+    settings = get_settings()
+    settings.oidc_auto_provision_users = True
+
+    async def fake_exchange_oidc_code(**kwargs: object) -> dict[str, object]:
+        del kwargs
+        now = int(time.time())
+        access_token = jwt.encode(
+            {
+                "iss": OIDC_TEST_ISSUER,
+                "aud": OIDC_TEST_AUDIENCE,
+                "email": "jeremy@example.local",
+                "name": "Jeremy Azure",
+                "iat": now,
+                "exp": now + 300,
+            },
+            OIDC_TEST_SECRET,
+            algorithm="HS256",
+        )
+        return {
+            "access_token": access_token,
+            "refresh_token": "refresh-token-new-user",
+            "expires_in": 300,
+        }
+
+    monkeypatch.setattr("app.api.auth.exchange_oidc_code", fake_exchange_oidc_code)
+    try:
+        exchange = client.post(
+            "/auth/oidc/callback",
+            json={
+                "code": "authorization-code",
+                "code_verifier": "v" * 43,
+                "redirect_uri": "http://localhost:3001",
+            },
+        )
+        me = client.get(
+            "/auth/me",
+            headers=oidc_auth_header("jeremy@example.local"),
+        )
+    finally:
+        restore_auth_settings(original)
+
+    assert exchange.status_code == 200
+    assert exchange.json()["user"]["email"] == "jeremy@example.local"
+    assert exchange.json()["user"]["display_name"] == "Jeremy Azure"
+    assert exchange.json()["user"]["roles"] == ["employee"]
+    assert me.status_code == 200
+    assert me.json()["email"] == "jeremy@example.local"
 
 
 def test_employee_can_submit_request_and_policy_records_cto_path(client: TestClient) -> None:

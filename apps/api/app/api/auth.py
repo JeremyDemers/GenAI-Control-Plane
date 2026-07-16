@@ -17,7 +17,7 @@ from app.auth.oidc import (
 )
 from app.core.config import get_settings
 from app.core.database import get_db
-from app.models.entities import AuthSession, User
+from app.models.entities import AuthSession, Role, User
 from app.schemas import OidcCodeExchangeIn, OidcTokenOut, UserOut
 from app.services.audit import record_audit_event
 
@@ -177,9 +177,32 @@ def _user_from_claims(db: Session, claims: dict[str, Any]) -> User:
         raise _unauthenticated("OIDC token does not map to a known identity.") from exc
 
     user = db.scalar(select(User).where(User.email == email))
+    settings = get_settings()
+    if not user and settings.oidc_auto_provision_users:
+        role = db.scalar(
+            select(Role).where(Role.name == settings.oidc_auto_provision_default_role)
+        )
+        if not role:
+            raise _auth_configuration_error()
+        user = User(
+            email=email,
+            display_name=_display_name_from_claims(claims, email),
+        )
+        user.roles.append(role)
+        db.add(user)
+        db.flush()
+
     if not user or not user.is_active:
         raise _unauthenticated("Unknown identity.")
     return user
+
+
+def _display_name_from_claims(claims: dict[str, Any], email: str) -> str:
+    for claim_name in ("name", "preferred_username", "upn", "email"):
+        value = claims.get(claim_name)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return email
 
 
 def _active_session_from_cookie(request: Request, db: Session) -> AuthSession:

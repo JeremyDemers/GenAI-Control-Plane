@@ -8,6 +8,7 @@ export type OidcConfig = {
   redirectUri: string;
   scope: string;
   apiBaseUrl: string;
+  providerLabel: string;
 };
 
 export type OidcSession = {
@@ -25,7 +26,12 @@ export function authMode(): AuthMode {
 }
 
 export function oidcConfig(): OidcConfig | null {
-  const authorizationEndpoint = process.env.NEXT_PUBLIC_OIDC_AUTHORIZATION_ENDPOINT;
+  const microsoftTenantId = process.env.NEXT_PUBLIC_MICROSOFT_TENANT_ID?.trim();
+  const authorizationEndpoint =
+    process.env.NEXT_PUBLIC_OIDC_AUTHORIZATION_ENDPOINT ||
+    (microsoftTenantId
+      ? `https://login.microsoftonline.com/${microsoftTenantId}/oauth2/v2.0/authorize`
+      : undefined);
   const clientId = process.env.NEXT_PUBLIC_OIDC_CLIENT_ID;
   if (!authorizationEndpoint || !clientId) {
     return null;
@@ -37,7 +43,10 @@ export function oidcConfig(): OidcConfig | null {
       process.env.NEXT_PUBLIC_OIDC_REDIRECT_URI ??
       (typeof window === "undefined" ? "" : window.location.origin),
     scope: process.env.NEXT_PUBLIC_OIDC_SCOPE ?? "openid profile email offline_access",
-    apiBaseUrl: apiBaseUrl()
+    apiBaseUrl: apiBaseUrl(),
+    providerLabel: authorizationEndpoint.includes("login.microsoftonline.com")
+      ? "Microsoft"
+      : "enterprise identity provider"
   };
 }
 

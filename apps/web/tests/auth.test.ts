@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   clearOidcSession,
   decodeJwtClaims,
   emailFromClaims,
   loadOidcSession,
+  oidcConfig,
   saveOidcSession,
   type OidcSession
 } from "@/lib/auth";
@@ -18,6 +19,29 @@ function tokenWithClaims(claims: Record<string, unknown>) {
 }
 
 describe("OIDC auth helpers", () => {
+  const originalAuthEndpoint = process.env.NEXT_PUBLIC_OIDC_AUTHORIZATION_ENDPOINT;
+  const originalClientId = process.env.NEXT_PUBLIC_OIDC_CLIENT_ID;
+  const originalMicrosoftTenantId = process.env.NEXT_PUBLIC_MICROSOFT_TENANT_ID;
+
+  afterEach(() => {
+    process.env.NEXT_PUBLIC_OIDC_AUTHORIZATION_ENDPOINT = originalAuthEndpoint;
+    process.env.NEXT_PUBLIC_OIDC_CLIENT_ID = originalClientId;
+    process.env.NEXT_PUBLIC_MICROSOFT_TENANT_ID = originalMicrosoftTenantId;
+  });
+
+  it("derives Microsoft Entra authorization settings from a tenant id", () => {
+    delete process.env.NEXT_PUBLIC_OIDC_AUTHORIZATION_ENDPOINT;
+    process.env.NEXT_PUBLIC_OIDC_CLIENT_ID = "client-id";
+    process.env.NEXT_PUBLIC_MICROSOFT_TENANT_ID = "tenant-id";
+
+    expect(oidcConfig()).toMatchObject({
+      authorizationEndpoint:
+        "https://login.microsoftonline.com/tenant-id/oauth2/v2.0/authorize",
+      clientId: "client-id",
+      providerLabel: "Microsoft"
+    });
+  });
+
   it("decodes JWT claims and selects a supported email claim", () => {
     const claims = decodeJwtClaims(
       tokenWithClaims({ preferred_username: "Employee@Example.Local" })

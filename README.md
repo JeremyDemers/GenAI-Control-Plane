@@ -67,6 +67,28 @@ server-side behind an HttpOnly session cookie, and calls the API with short-live
 API validates signed OIDC-compatible tokens with matching issuer and audience claims. Optional OIDC
 group-to-role mapping can synchronize enterprise group claims to application roles.
 
+Microsoft Entra ID can be enabled with the first-class Microsoft preset. Register an app in Azure
+Portal with a redirect URI matching `NEXT_PUBLIC_OIDC_REDIRECT_URI`, then set:
+
+```bash
+DEV_AUTH_ENABLED=false
+NEXT_PUBLIC_AUTH_MODE=oidc
+MICROSOFT_TENANT_ID=<your-tenant-id>
+NEXT_PUBLIC_MICROSOFT_TENANT_ID=<your-tenant-id>
+OIDC_CLIENT_ID=<application-client-id>
+NEXT_PUBLIC_OIDC_CLIENT_ID=<application-client-id>
+OIDC_CLIENT_SECRET=<client-secret-value>
+OIDC_AUDIENCE=api://<application-client-id>
+OIDC_AUTO_PROVISION_USERS=true
+NEXT_PUBLIC_OIDC_SCOPE="openid profile email offline_access api://<application-client-id>/access_as_user"
+```
+
+If you expose Entra groups or app roles in tokens, map them to local roles with
+`OIDC_GROUP_ROLE_MAP_JSON`, for example
+`{"<entra-group-object-id>":["platform_admin"],"<auditor-group-object-id>":["security_auditor"]}`.
+Set `OIDC_AUTO_PROVISION_USERS=true` for a personal Azure account demo, or keep it disabled and add
+approved users to the seed data manually.
+
 ## Implemented Features
 
 - FastAPI application with health, observability, and OpenAPI docs.

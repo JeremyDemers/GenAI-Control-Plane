@@ -256,12 +256,16 @@ export function ControlCenter() {
   }
 
   if (mode === "oidc" && !oidcSession) {
+    const oidcLoginConfig = config;
+    if (!oidcLoginConfig) {
+      return null;
+    }
     return (
       <AuthShell
         title="AI Access Control Center"
         detail={authError ?? "Sign in with your enterprise identity provider."}
-        actionLabel="Sign in"
-        onAction={() => config && void beginOidcLogin(config)}
+        actionLabel={`Sign in with ${oidcLoginConfig.providerLabel}`}
+        onAction={() => void beginOidcLogin(oidcLoginConfig)}
       />
     );
   }
