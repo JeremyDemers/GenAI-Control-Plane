@@ -8,7 +8,7 @@ AI Access Control Center is a production-style internal portal for governed, tem
 
 ## Current Phase
 
-Phase 1 foundation is implemented with a working FastAPI API, Next.js portal, development users, mock provider provisioning, baseline tests, Docker Compose, and documentation. Live AWS, Azure, Google Cloud, Microsoft Graph, and GitHub integrations expose SDK/config readiness checks and guarded least-privilege operation profiles behind a feature flag.
+Phase 1 foundation is implemented with a working FastAPI API, Next.js portal, development users, mock provider provisioning, baseline tests, Docker Compose, and documentation. Live AWS, Azure, Google Cloud, Microsoft Graph, and GitHub integrations expose SDK/config readiness checks and guarded least-privilege operation profiles behind a feature flag, including distinct profiles for Gemini Enterprise app access and Gemini Enterprise Agent Platform project IAM.
 
 ## Local Setup
 

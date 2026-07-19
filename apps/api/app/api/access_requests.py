@@ -14,7 +14,7 @@ from app.models.entities import (
     ProjectMember,
     User,
 )
-from app.models.enums import RequestStatus
+from app.models.enums import RequestStatus, canonical_provider_values
 from app.schemas import (
     AccessRequestCreate,
     AccessRequestOut,
@@ -41,7 +41,7 @@ def to_request_out(request: AccessRequest) -> AccessRequestOut:
         data_classification=request.data_classification,
         requested_budget=request.requested_budget,
         currency=request.currency,
-        provider_names=request.provider_names,
+        provider_names=canonical_provider_values(request.provider_names),
         requested_start_at=request.requested_start_at,
         requested_end_at=request.requested_end_at,
         submitted_at=request.submitted_at,
@@ -102,7 +102,9 @@ def create_request(
         currency=payload.currency.upper(),
         expected_users=payload.expected_users,
         requested_collaborators=payload.requested_collaborators,
-        provider_names=[provider.value for provider in payload.requested_providers],
+        provider_names=canonical_provider_values(
+            [provider.value for provider in payload.requested_providers]
+        ),
         requested_services=payload.requested_services,
         uses_pii=payload.uses_pii,
         uses_confidential_data=payload.uses_confidential_data,

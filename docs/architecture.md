@@ -26,6 +26,27 @@ AI Access Control Center separates the application control plane from provider-s
 
 Cloud-specific behavior is hidden behind `AIProviderAdapter`. Mock adapters are fully functional for demos. Live adapters will use safe feature flags and externally managed credentials.
 
+## Google Product Boundaries
+
+The control plane supports two related but separate Google AI access targets.
+
+### Gemini Enterprise app
+
+The employee-facing subscription experience for enterprise search, AI assistance, no-code or
+low-code agents, and access to approved published agents. Provisioning evidence is modeled as an app
+assignment to a Google group, with seat/subscription-oriented attribution.
+
+### Gemini Enterprise Agent Platform
+
+The developer and platform-engineering environment formerly known as Vertex AI Platform. It supports
+building, deploying, governing, and monitoring agents and model-based applications. Provisioning
+evidence is modeled as Google Cloud project IAM with consumption-oriented cost attribution.
+
+Google renamed Vertex AI Platform to Gemini Enterprise Agent Platform on April 22, 2026. Some
+underlying SDK packages, IAM roles, API paths, or resource identifiers may continue to contain
+`aiplatform` or other legacy names. The application uses current product terminology while
+preserving technically correct provider identifiers.
+
 ## Authentication Flow
 
 Production uses an OIDC-compatible API boundary: with `DEV_AUTH_ENABLED=false`, requests must carry a

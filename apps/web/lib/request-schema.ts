@@ -3,12 +3,39 @@ import { z } from "zod";
 export const providerOptions = [
   "amazon_bedrock",
   "amazon_sagemaker",
-  "google_gemini_enterprise",
-  "google_vertex_ai",
+  "google_gemini_enterprise_app",
+  "google_gemini_enterprise_agent_platform",
   "microsoft_foundry",
   "azure_openai",
   "github_copilot"
 ] as const;
+
+export const providerLabels: Record<string, string> = {
+  amazon_bedrock: "Amazon Bedrock",
+  amazon_sagemaker: "Amazon SageMaker",
+  google_gemini_enterprise: "Gemini Enterprise app",
+  google_gemini_enterprise_app: "Gemini Enterprise app",
+  google_vertex_ai: "Gemini Enterprise Agent Platform",
+  google_gemini_enterprise_agent_platform: "Gemini Enterprise Agent Platform",
+  microsoft_foundry: "Microsoft Foundry",
+  azure_openai: "Azure OpenAI",
+  github_copilot: "GitHub Copilot"
+};
+
+export const providerDescriptions: Record<string, string> = {
+  google_gemini_enterprise_app:
+    "Employee-facing enterprise search, AI assistance, and access to published organizational agents.",
+  google_gemini_enterprise_agent_platform:
+    "Developer platform for building, deploying, governing, and monitoring enterprise agents and model-based applications."
+};
+
+export function providerLabel(provider: string) {
+  return providerLabels[provider] ?? provider.replaceAll("_", " ");
+}
+
+export function providerDescription(provider: string) {
+  return providerDescriptions[provider];
+}
 
 export const accessRequestSchema = z
   .object({
@@ -40,4 +67,3 @@ export const accessRequestSchema = z
   });
 
 export type AccessRequestFormValues = z.infer<typeof accessRequestSchema>;
-

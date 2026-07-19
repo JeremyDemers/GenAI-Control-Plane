@@ -4,13 +4,15 @@ from importlib.util import find_spec
 from typing import Any
 
 from app.core.config import get_settings
+from app.models.enums import canonical_provider_value
 from app.providers.base import ProviderOperationError
+from app.providers.profiles import PROVIDER_OPERATION_PROFILES, provider_operation_profile
 
 PROVIDER_REQUIREMENTS: dict[str, tuple[str, ...]] = {
     "amazon_bedrock": ("aws_region",),
     "amazon_sagemaker": ("aws_region",),
-    "google_gemini_enterprise": ("google_cloud_project",),
-    "google_vertex_ai": ("google_cloud_project",),
+    "google_gemini_enterprise_app": ("google_cloud_project",),
+    "google_gemini_enterprise_agent_platform": ("google_cloud_project",),
     "microsoft_foundry": ("azure_tenant_id",),
     "azure_openai": ("azure_tenant_id",),
     "github_copilot": ("github_org",),
@@ -19,55 +21,19 @@ PROVIDER_REQUIREMENTS: dict[str, tuple[str, ...]] = {
 PROVIDER_SDKS: dict[str, tuple[str, ...]] = {
     "amazon_bedrock": ("boto3",),
     "amazon_sagemaker": ("boto3",),
-    "google_gemini_enterprise": ("google.cloud.resourcemanager_v3",),
-    "google_vertex_ai": ("google.cloud.resourcemanager_v3",),
+    "google_gemini_enterprise_app": ("google.cloud.resourcemanager_v3",),
+    "google_gemini_enterprise_agent_platform": (
+        "google.cloud.resourcemanager_v3",
+        "google.cloud.aiplatform",
+    ),
     "microsoft_foundry": ("azure.identity", "msgraph"),
     "azure_openai": ("azure.identity", "openai"),
     "github_copilot": ("github",),
 }
 
-PROVIDER_OPERATION_PROFILES: dict[str, dict[str, str]] = {
-    "amazon_bedrock": {
-        "resource_type": "aws_iam_identity_center_permission_set",
-        "scope": "bedrock:InvokeModel,bedrock:InvokeModelWithResponseStream",
-        "subject_type": "identity-center-group",
-    },
-    "amazon_sagemaker": {
-        "resource_type": "aws_iam_role_policy_attachment",
-        "scope": "sagemaker:InvokeEndpoint",
-        "subject_type": "iam-role",
-    },
-    "google_gemini_enterprise": {
-        "resource_type": "google_project_iam_member",
-        "scope": "roles/aiplatform.user",
-        "subject_type": "google-group",
-    },
-    "google_vertex_ai": {
-        "resource_type": "google_project_iam_member",
-        "scope": "roles/aiplatform.user",
-        "subject_type": "google-group",
-    },
-    "microsoft_foundry": {
-        "resource_type": "azure_role_assignment",
-        "scope": "Azure AI Developer",
-        "subject_type": "entra-group",
-    },
-    "azure_openai": {
-        "resource_type": "azure_role_assignment",
-        "scope": "Cognitive Services OpenAI User",
-        "subject_type": "entra-group",
-    },
-    "github_copilot": {
-        "resource_type": "github_copilot_seat_assignment",
-        "scope": "copilot-business-seat",
-        "subject_type": "github-team",
-    },
-}
-
-
 class LiveProviderAdapter:
     def __init__(self, name: str) -> None:
-        self.name = name
+        self.name = canonical_provider_value(name)
 
     def _configuration(self) -> dict[str, Any]:
         settings = get_settings()
@@ -217,14 +183,7 @@ class LiveProviderAdapter:
         idempotency_key: str,
         status: str,
     ) -> dict[str, Any]:
-        profile = PROVIDER_OPERATION_PROFILES.get(
-            self.name,
-            {
-                "resource_type": "provider_access_grant",
-                "scope": "least-privilege-genai-access",
-                "subject_type": "provider-group",
-            },
-        )
+        profile = provider_operation_profile(self.name)
         digest = _digest(self.name, operation, target_id, idempotency_key)
         return {
             "provider": self.name,
@@ -235,6 +194,17 @@ class LiveProviderAdapter:
             "resource_type": profile["resource_type"],
             "least_privilege_scope": profile["scope"],
             "subject_type": profile["subject_type"],
+            "billing_model": profile.get("billing_model", "provider_managed"),
+            "access_model": profile.get("access_model", "provider_access_assignment"),
+            "attribution_strategy": profile.get(
+                "attribution_strategy", "principal_plus_provider_assignment"
+            ),
+            "usage_reporting_model": profile.get(
+                "usage_reporting_model", "provider_activity_estimate"
+            ),
+            "cost_reporting_model": profile.get(
+                "cost_reporting_model", "estimated_or_provider_reported_cost"
+            ),
             "execution_mode": "live_control_plane_guarded",
         }
 

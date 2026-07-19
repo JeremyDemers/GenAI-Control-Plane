@@ -3,6 +3,8 @@ from hashlib import sha256
 from random import Random
 from typing import Any
 
+from app.providers.profiles import provider_operation_profile
+
 
 class MockProviderAdapter:
     def __init__(self, name: str) -> None:
@@ -11,11 +13,28 @@ class MockProviderAdapter:
 
     async def provision_access(self, request_id: str, idempotency_key: str) -> dict[str, Any]:
         digest = sha256(f"{self.name}:{request_id}:{idempotency_key}".encode()).hexdigest()[:12]
+        profile = provider_operation_profile(self.name)
         return {
             "provider": self.name,
             "status": "active",
             "resource_id": f"{self.name}-assignment-{digest}",
             "idempotency_key": idempotency_key,
+            "operation": "provision_access",
+            "resource_type": profile["resource_type"],
+            "least_privilege_scope": profile["scope"],
+            "subject_type": profile["subject_type"],
+            "billing_model": profile.get("billing_model", "provider_managed"),
+            "access_model": profile.get("access_model", "provider_access_assignment"),
+            "attribution_strategy": profile.get(
+                "attribution_strategy", "principal_plus_provider_assignment"
+            ),
+            "usage_reporting_model": profile.get(
+                "usage_reporting_model", "provider_activity_estimate"
+            ),
+            "cost_reporting_model": profile.get(
+                "cost_reporting_model", "estimated_or_provider_reported_cost"
+            ),
+            "execution_mode": "mock_control_plane",
         }
 
     async def suspend_access(self, assignment_id: str, idempotency_key: str) -> dict[str, Any]:

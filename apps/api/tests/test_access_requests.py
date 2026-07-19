@@ -10,6 +10,7 @@ import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from app.api.webhooks import webhook_signature
 from app.auth.oidc import (
@@ -23,7 +24,7 @@ from app.auth.oidc import (
 )
 from app.core.config import get_settings
 from app.core.database import SessionLocal
-from app.models.entities import ArtifactArchive
+from app.models.entities import ArtifactArchive, ProviderResource
 from app.observability.middleware import rate_limiter
 from app.providers.base import ProviderOperationError
 from app.workers.scheduler import drain_once
@@ -693,6 +694,101 @@ def test_employee_can_submit_request_and_policy_records_cto_path(client: TestCli
         headers={"x-dev-user": "approver@example.local"},
     )
     assert denied_read.status_code == 404
+
+
+def test_employee_can_submit_request_with_legacy_google_provider_aliases(
+    client: TestClient,
+) -> None:
+    payload = request_payload()
+    payload["requested_providers"] = ["google_gemini_enterprise", "google_vertex_ai"]
+
+    response = client.post(
+        "/access-requests",
+        headers={"x-dev-user": "employee@example.local"},
+        json=payload,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["provider_names"] == [
+        "google_gemini_enterprise_app",
+        "google_gemini_enterprise_agent_platform",
+    ]
+
+
+def test_google_provisioning_records_attribution_metadata(client: TestClient) -> None:
+    payload = request_payload()
+    payload["requested_providers"] = [
+        "google_gemini_enterprise_app",
+        "google_gemini_enterprise_agent_platform",
+    ]
+    payload["cost_center"] = "CC-1042"
+
+    created = client.post(
+        "/access-requests",
+        headers={"x-dev-user": "employee@example.local"},
+        json=payload,
+    ).json()
+    manager_step = client.get(
+        "/approvals/pending", headers={"x-dev-user": "approver@example.local"}
+    ).json()[0]
+    client.post(
+        f"/approvals/{manager_step['step_id']}",
+        headers={"x-dev-user": "approver@example.local"},
+        json={"decision": "approve", "comments": "Approved."},
+    )
+    cto_steps = client.get(
+        "/approvals/pending", headers={"x-dev-user": "cto@example.local"}
+    ).json()
+    if cto_steps:
+        client.post(
+            f"/approvals/{cto_steps[0]['step_id']}",
+            headers={"x-dev-user": "cto@example.local"},
+            json={"decision": "approve", "comments": "Approved."},
+        )
+
+    with SessionLocal() as db:
+        resources = db.scalars(
+            select(ProviderResource).where(
+                ProviderResource.provider.in_(
+                    [
+                        "google_gemini_enterprise_app",
+                        "google_gemini_enterprise_agent_platform",
+                    ]
+                )
+            )
+        ).all()
+
+    metadata_by_provider = {resource.provider: resource.metadata_json for resource in resources}
+    app_attribution = metadata_by_provider["google_gemini_enterprise_app"]["attribution"]
+    agent_platform_attribution = metadata_by_provider[
+        "google_gemini_enterprise_agent_platform"
+    ]["attribution"]
+
+    assert created["provider_names"] == [
+        "google_gemini_enterprise_app",
+        "google_gemini_enterprise_agent_platform",
+    ]
+    assert metadata_by_provider["google_gemini_enterprise_app"][
+        "least_privilege_scope"
+    ] == "gemini-enterprise-user-access"
+    assert app_attribution["external_principal_id"] == "employee@example.local"
+    assert app_attribution["external_group_id"].endswith("-users")
+    assert app_attribution["external_application_id"].endswith("-assistant")
+    assert app_attribution["cost_center"] == "CC-1042"
+    assert app_attribution["attribution_strategy"] == "principal_plus_app_assignment"
+    assert "assigned_seat_cost" in app_attribution["activity_metrics"]
+    assert metadata_by_provider["google_gemini_enterprise_agent_platform"][
+        "least_privilege_scope"
+    ] == "roles/aiplatform.user"
+    assert agent_platform_attribution["external_principal_id"] == "employee@example.local"
+    assert agent_platform_attribution["external_group_id"].endswith("-developers")
+    assert agent_platform_attribution["external_project_id"].startswith("agent-platform-")
+    assert agent_platform_attribution["cost_center"] == "CC-1042"
+    assert (
+        agent_platform_attribution["attribution_strategy"]
+        == "principal_plus_gcp_project"
+    )
+    assert "provider_reported_cost" in agent_platform_attribution["activity_metrics"]
 
 
 def test_employee_can_mark_all_own_notifications_read(client: TestClient) -> None:

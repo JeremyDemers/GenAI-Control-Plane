@@ -5,7 +5,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.models.entities import AccessRequest, LifecycleJob, ProviderAssignment
+from app.models.entities import (
+    AccessRequest,
+    LifecycleJob,
+    ProviderAssignment,
+    ProviderResource,
+    User,
+)
 from app.models.enums import RequestStatus
 from app.providers.base import ProviderOperationError
 from app.providers.registry import get_provider_adapter
@@ -22,6 +28,9 @@ from app.services.reports import cost_allocation_csv
 from app.services.state_machine import transition
 
 SAFE_PROVIDER_ERROR_KEYS = {"code", "message", "operation", "provider_status", "retry_after"}
+
+GOOGLE_GEMINI_ENTERPRISE_APP = "google_gemini_enterprise_app"
+GOOGLE_GEMINI_AGENT_PLATFORM = "google_gemini_enterprise_agent_platform"
 
 
 def safe_provider_error_details(details: dict[str, object]) -> dict[str, object]:
@@ -50,6 +59,67 @@ def _retention_key(correlation_id: str) -> str:
 
 def _expiration_warning_key(correlation_id: str) -> str:
     return f"expiration-warning:{correlation_id}"
+
+
+def _slug(value: str) -> str:
+    normalized = "".join(character.lower() if character.isalnum() else "-" for character in value)
+    return "-".join(part for part in normalized.split("-") if part)[:60] or "ai-project"
+
+
+def _provider_attribution_metadata(
+    db: Session,
+    *,
+    request: AccessRequest,
+    provider: str,
+    result: dict[str, object],
+) -> dict[str, object]:
+    requester = db.get(User, request.requester_id)
+    principal_id = requester.email if requester else request.requester_id
+    project_slug = _slug(request.project_name)
+    base: dict[str, object] = {
+        "external_principal_id": principal_id,
+        "external_project_id": request.project_id or "",
+        "cost_center": request.cost_center,
+        "provider_resource_id": str(result.get("resource_id", "")),
+        "attribution_strategy": str(
+            result.get("attribution_strategy", "principal_plus_provider_assignment")
+        ),
+        "access_model": str(result.get("access_model", "provider_access_assignment")),
+        "billing_model": str(result.get("billing_model", "provider_managed")),
+        "usage_reporting_model": str(
+            result.get("usage_reporting_model", "provider_activity_estimate")
+        ),
+        "cost_reporting_model": str(
+            result.get("cost_reporting_model", "estimated_or_provider_reported_cost")
+        ),
+        "metadata_source": "control_plane_attribution_profile",
+    }
+    if provider == GOOGLE_GEMINI_ENTERPRISE_APP:
+        return {
+            **base,
+            "external_group_id": f"gemini-enterprise-{project_slug}-users",
+            "external_application_id": f"{project_slug}-assistant",
+            "activity_metrics": [
+                "assigned_seat_cost",
+                "internally_allocated_cost",
+                "provider_reported_subscription_cost",
+                "activity_count",
+                "agent_invocation_count",
+            ],
+        }
+    if provider == GOOGLE_GEMINI_AGENT_PLATFORM:
+        return {
+            **base,
+            "external_group_id": f"agent-platform-{project_slug}-developers",
+            "external_project_id": f"agent-platform-{project_slug}",
+            "activity_metrics": [
+                "estimated_cost",
+                "provider_reported_cost",
+                "reconciled_cost",
+                "data_freshness",
+            ],
+        }
+    return base
 
 
 def _start_job(job: LifecycleJob) -> None:
@@ -407,15 +477,38 @@ async def run_provisioning_job(db: Session, job: LifecycleJob) -> ProviderAssign
         db.flush()
         return None
 
+    attribution_metadata = _provider_attribution_metadata(
+        db,
+        request=request,
+        provider=provider,
+        result=result,
+    )
     assignment = ProviderAssignment(
         request_id=request.id,
         project_id=request.project_id,
         provider=provider,
         status="active",
+        provider_subject_id=str(attribution_metadata.get("external_group_id", "")),
         external_resource_id=result["resource_id"],
         expires_at=request.requested_end_at,
     )
     db.add(assignment)
+    db.flush()
+    db.add(
+        ProviderResource(
+            assignment_id=assignment.id,
+            provider=provider,
+            resource_type=str(result.get("resource_type", "provider_access_grant")),
+            resource_identifier=str(result["resource_id"]),
+            metadata_json={
+                "operation": result.get("operation", "provision_access"),
+                "least_privilege_scope": result.get("least_privilege_scope", ""),
+                "subject_type": result.get("subject_type", ""),
+                "execution_mode": result.get("execution_mode", ""),
+                "attribution": attribution_metadata,
+            },
+        )
+    )
     job.status = "completed"
     record_audit_event(
         db,
@@ -435,6 +528,9 @@ async def run_provisioning_job(db: Session, job: LifecycleJob) -> ProviderAssign
             "least_privilege_scope": result.get("least_privilege_scope", ""),
             "subject_type": result.get("subject_type", ""),
             "execution_mode": result.get("execution_mode", ""),
+            "attribution_strategy": attribution_metadata.get("attribution_strategy", ""),
+            "usage_reporting_model": attribution_metadata.get("usage_reporting_model", ""),
+            "cost_reporting_model": attribution_metadata.get("cost_reporting_model", ""),
         },
     )
     _complete_request_if_ready(db, request)

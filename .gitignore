@@ -20,3 +20,4 @@ apps/api/tests/test_control_plane.db
 .DS_Store
 .notes
 genai-control-plane-codex-prompt.md
+Gemini_Enterprise_Agent_Platform.md

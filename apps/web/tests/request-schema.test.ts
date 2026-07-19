@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { accessRequestSchema } from "@/lib/request-schema";
+import {
+  accessRequestSchema,
+  providerDescription,
+  providerLabel,
+  providerOptions
+} from "@/lib/request-schema";
 
 describe("accessRequestSchema", () => {
   it("accepts the seeded interview demo request", () => {
@@ -50,5 +55,22 @@ describe("accessRequestSchema", () => {
 
     expect(result.success).toBe(false);
   });
-});
 
+  it("uses current Google provider options and labels", () => {
+    expect(providerOptions).toContain("google_gemini_enterprise_app");
+    expect(providerOptions).toContain("google_gemini_enterprise_agent_platform");
+    expect(providerOptions).not.toContain("google_gemini_enterprise");
+    expect(providerOptions).not.toContain("google_vertex_ai");
+    expect(providerLabel("google_gemini_enterprise_app")).toBe("Gemini Enterprise app");
+    expect(providerLabel("google_gemini_enterprise_agent_platform")).toBe(
+      "Gemini Enterprise Agent Platform"
+    );
+    expect(providerLabel("google_vertex_ai")).toBe("Gemini Enterprise Agent Platform");
+    expect(providerDescription("google_gemini_enterprise_app")).toContain(
+      "Employee-facing enterprise search"
+    );
+    expect(providerDescription("google_gemini_enterprise_agent_platform")).toContain(
+      "Developer platform"
+    );
+  });
+});

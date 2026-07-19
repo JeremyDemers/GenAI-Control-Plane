@@ -27,6 +27,17 @@ policy at `/policies/standard-ai-sandbox/versions`. Existing requests retain the
 
 Show data freshness timestamps, distinguish estimated and provider-reported cost, and reconcile delayed records before final closure.
 
+For Gemini Enterprise app assignments, treat seat/subscription allocation and user activity as the
+primary evidence. Use labels such as `assigned_seat_cost`, `internally_allocated_cost`,
+`provider_reported_subscription_cost`, `activity_count`, and `agent_invocation_count` when those
+signals are available. Do not imply exact real-time per-user billing when the provider only supplies
+subscription-level data.
+
+For Gemini Enterprise Agent Platform assignments, tie usage and cost evidence to the governed
+Google Cloud project and cost center. Continue distinguishing `estimated_cost`,
+`provider_reported_cost`, `reconciled_cost`, and `data_freshness`; cloud billing exports may lag
+operational activity.
+
 ## Usage, Cost, and Budget Evidence
 
 Employees can review evidence for their own requests at `/provider-assignments`, `/usage`, `/costs`,

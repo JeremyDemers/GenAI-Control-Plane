@@ -48,6 +48,15 @@ Real provider credentials and webhook signing secrets must be stored outside sou
 preferably in a cloud secret manager. `.env.example` contains only non-secret defaults and
 placeholder local values.
 
+## Provider Attribution
+
+Provider assignments store external resource identifiers and non-secret attribution metadata for
+audit and cost allocation. Google attribution distinguishes Gemini Enterprise app seat/subscription
+assignment evidence from Gemini Enterprise Agent Platform project IAM evidence. These fields may
+include external group, project, application, cost-center, and attribution-strategy identifiers, but
+must not include OAuth tokens, service-account keys, client secrets, webhook secrets, or raw provider
+credential material.
+
 ## Data Retention
 
 Artifact archives include retention expiration. The archive retention lifecycle job purges expired
