@@ -116,6 +116,8 @@ import {
 } from "@/lib/auth";
 import {
   accessRequestSchema,
+  providerDescription,
+  providerLabel,
   providerOptions,
   type AccessRequestFormValues
 } from "@/lib/request-schema";
@@ -906,7 +908,7 @@ function ControlCenterExperience({
   const executiveProviderChartData = useMemo(
     () =>
       (executiveReport.data?.spend_by_provider ?? []).map((provider) => ({
-        provider: provider.provider.replaceAll("_", " "),
+        provider: providerLabel(provider.provider),
         spend: Number(provider.spend),
         tokens: provider.tokens,
         activeAssignments: provider.active_assignments
@@ -931,7 +933,7 @@ function ControlCenterExperience({
   const adoptionProviderChartData = useMemo(
     () =>
       (adoptionReport.data?.adoption_by_provider ?? []).map((provider) => ({
-        provider: provider.name.replaceAll("_", " "),
+        provider: providerLabel(provider.name),
         activeAssignments: provider.active_assignments,
         requestCount: provider.request_count,
         tokens: provider.total_tokens
@@ -1088,7 +1090,7 @@ function ControlCenterExperience({
                       className="rounded-md border border-line p-3 text-sm"
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <p className="font-semibold">{provider.provider.replaceAll("_", " ")}</p>
+                        <p className="font-semibold">{providerLabel(provider.provider)}</p>
                         <StatusPill status={provider.status} />
                       </div>
                       <p className="mt-2 text-xs text-slate-500">
@@ -1105,7 +1107,7 @@ function ControlCenterExperience({
                     key={provider.provider}
                     className="flex items-center justify-between gap-3 text-sm"
                   >
-                    <span>{provider.provider.replaceAll("_", " ")}</span>
+                    <span>{providerLabel(provider.provider)}</span>
                     <span className="font-semibold">
                       {provider.configured ? "configured" : "missing"} · {provider.mode}
                     </span>
@@ -1122,7 +1124,7 @@ function ControlCenterExperience({
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="font-semibold">
-                        {credential.provider.replaceAll("_", " ")}
+                        {providerLabel(credential.provider)}
                       </span>
                       {user === "admin@example.local" ? (
                         <button
@@ -1365,7 +1367,7 @@ function ControlCenterExperience({
                         <StatusPill status={request.status} />
                       </td>
                       <td className="py-3 pr-3 text-slate-600">
-                        {request.provider_names.join(", ")}
+                        {request.provider_names.map(providerLabel).join(", ")}
                       </td>
                       <td className="py-3 pr-3">
                         {request.currency} {request.requested_budget}
@@ -1527,7 +1529,7 @@ function ControlCenterExperience({
                     <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-semibold">{assignment.provider.replaceAll("_", " ")}</p>
+                          <p className="font-semibold">{providerLabel(assignment.provider)}</p>
                           <StatusPill status={assignment.status} />
                         </div>
                         <p className="mt-1 break-all text-xs text-slate-500">
@@ -1961,7 +1963,7 @@ function ControlCenterExperience({
                           <div>
                             <p className="font-semibold">{evidence.project_name}</p>
                             <p className="mt-1 text-xs text-slate-500">
-                              {evidence.provider.replaceAll("_", " ")} · provision{" "}
+                              {providerLabel(evidence.provider)} · provision{" "}
                               {evidence.provision_job_status ?? "pending"} · archive{" "}
                               {evidence.archive_job_status ?? "pending"}
                             </p>
@@ -2192,7 +2194,7 @@ function ControlCenterExperience({
                             key={provider.provider}
                             className="flex items-center justify-between gap-3 text-sm"
                           >
-                            <span>{provider.provider.replaceAll("_", " ")}</span>
+                            <span>{providerLabel(provider.provider)}</span>
                             <span className="font-semibold">
                               ${provider.spend} · {provider.tokens.toLocaleString()} tokens
                             </span>
@@ -2500,9 +2502,16 @@ function ControlCenterExperience({
                 <span className="text-sm font-medium">Providers</span>
                 <div className="grid grid-cols-2 gap-2">
                   {providerOptions.map((provider) => (
-                    <label key={provider} className="flex items-center gap-2 text-sm">
+                    <label key={provider} className="flex items-start gap-2 text-sm">
                       <input type="checkbox" value={provider} {...form.register("requested_providers")} />
-                      <span>{provider.replaceAll("_", " ")}</span>
+                      <span className="grid gap-1">
+                        <span>{providerLabel(provider)}</span>
+                        {providerDescription(provider) ? (
+                          <span className="text-xs font-normal leading-5 text-slate-500">
+                            {providerDescription(provider)}
+                          </span>
+                        ) : null}
+                      </span>
                     </label>
                   ))}
                 </div>
@@ -2578,7 +2587,7 @@ function ControlCenterExperience({
                               </p>
                               {approvalRequest ? (
                                 <p className="mt-1 text-xs text-slate-500">
-                                  {approvalRequest.provider_names.join(", ")} ·{" "}
+                                  {approvalRequest.provider_names.map(providerLabel).join(", ")} ·{" "}
                                   {approvalRequest.currency} {approvalRequest.requested_budget} ·{" "}
                                   {approvalRequest.data_classification}
                                 </p>

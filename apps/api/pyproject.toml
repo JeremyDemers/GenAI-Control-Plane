@@ -8,6 +8,7 @@ dependencies = [
     "azure-identity>=1.25.3",
     "boto3>=1.43.48",
     "fastapi>=0.115.6",
+    "google-cloud-aiplatform>=1.161.0",
     "google-cloud-resource-manager>=1.18.0",
     "httpx>=0.28.1",
     "msgraph-sdk>=1.59.2",

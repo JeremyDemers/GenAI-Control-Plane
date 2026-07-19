@@ -4,7 +4,12 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.models.enums import DataClassification, ProviderName, RequestStatus
+from app.models.enums import (
+    DataClassification,
+    ProviderName,
+    RequestStatus,
+    canonical_provider_value,
+)
 
 
 class RoleOut(BaseModel):
@@ -60,6 +65,16 @@ class AccessRequestCreate(BaseModel):
         start_at = info.data.get("requested_start_at")
         if start_at and value <= start_at:
             raise ValueError("requested_end_at must be after requested_start_at")
+        return value
+
+    @field_validator("requested_providers", mode="before")
+    @classmethod
+    def normalize_provider_aliases(cls, value: Any) -> Any:
+        if isinstance(value, list):
+            return [
+                canonical_provider_value(provider) if isinstance(provider, str) else provider
+                for provider in value
+            ]
         return value
 
 

@@ -10,11 +10,12 @@ from app.models.enums import ProviderName
 from app.providers.base import ProviderOperationError
 from app.providers.live import adapter as live_adapter_module
 from app.providers.live.adapter import (
-    PROVIDER_OPERATION_PROFILES,
     PROVIDER_REQUIREMENTS,
+    PROVIDER_SDKS,
     LiveProviderAdapter,
 )
 from app.providers.mock.adapter import MockProviderAdapter
+from app.providers.profiles import PROVIDER_OPERATION_PROFILES
 from app.providers.registry import all_provider_adapters, get_provider_adapter
 
 
@@ -128,6 +129,50 @@ def test_provider_registry_switches_between_mock_and_live_adapters() -> None:
         }
     finally:
         settings.provider_mode = original_mode
+
+
+def test_google_provider_names_use_current_product_boundaries() -> None:
+    assert ProviderName.GOOGLE_GEMINI_ENTERPRISE_APP.value == "google_gemini_enterprise_app"
+    assert (
+        ProviderName.GOOGLE_GEMINI_AGENT_PLATFORM.value
+        == "google_gemini_enterprise_agent_platform"
+    )
+    assert "google_gemini_enterprise" not in {provider.value for provider in ProviderName}
+    assert "google_vertex_ai" not in {provider.value for provider in ProviderName}
+
+
+def test_provider_registry_accepts_legacy_google_aliases() -> None:
+    settings = get_settings()
+    original_mode = settings.provider_mode
+    try:
+        settings.provider_mode = "mock"
+        assert (
+            get_provider_adapter("google_gemini_enterprise").name
+            == "google_gemini_enterprise_app"
+        )
+        assert (
+            get_provider_adapter("google_vertex_ai").name
+            == "google_gemini_enterprise_agent_platform"
+        )
+    finally:
+        settings.provider_mode = original_mode
+
+
+def test_live_google_provider_profiles_distinguish_app_and_agent_platform() -> None:
+    app_profile = PROVIDER_OPERATION_PROFILES["google_gemini_enterprise_app"]
+    agent_platform_profile = PROVIDER_OPERATION_PROFILES[
+        "google_gemini_enterprise_agent_platform"
+    ]
+
+    assert app_profile["resource_type"] == "google_gemini_enterprise_app_assignment"
+    assert app_profile["scope"] == "gemini-enterprise-user-access"
+    assert app_profile["access_model"] == "employee_app_assignment"
+    assert agent_platform_profile["resource_type"] == "google_project_iam_binding"
+    assert agent_platform_profile["scope"] == "roles/aiplatform.user"
+    assert agent_platform_profile["access_model"] == "project_iam_assignment"
+    assert "google.cloud.aiplatform" in PROVIDER_SDKS[
+        "google_gemini_enterprise_agent_platform"
+    ]
 
 
 def test_live_adapter_fails_closed_when_operations_are_disabled() -> None:

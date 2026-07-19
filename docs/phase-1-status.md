@@ -37,7 +37,8 @@
 - Domain endpoints now expose visible provider assignments, usage records, cost records, and per-request budget summaries.
 - Frontend usage and budget evidence shows visible assignments, latest usage, latest cost, spend, remaining budget, and data freshness.
 - Provider health checks and privileged provider configuration validation are exposed in the dashboard.
-- Live provider readiness checks now include installed AWS, Azure, Azure OpenAI, Microsoft Graph, Google Cloud, and GitHub SDK modules.
+- Live provider readiness checks now include installed AWS, Azure, Azure OpenAI, Microsoft Graph, Google Cloud, Gemini Enterprise Agent Platform, and GitHub SDK modules.
+- Google provider IDs now distinguish Gemini Enterprise app assignments from Gemini Enterprise Agent Platform project IAM while normalizing legacy `google_gemini_enterprise` and `google_vertex_ai` values.
 - Provider adapter tests now cover every declared live provider profile and registry mock/live selection.
 - Provider credential inventory exposes safe vault-style references, admin-only rotation, due dates, and audit evidence without returning secrets.
 - Retryable provider provisioning failures now create failed lifecycle jobs, sanitized failure metadata, requester notifications, and provider failure audit evidence.

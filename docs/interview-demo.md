@@ -58,6 +58,7 @@ workflow can be demonstrated safely.
 - **Cost control:** usage/cost records drive 70%, 90%, and 100% threshold behavior, including suspension and incident evidence.
 - **Adoption governance:** privileged users can review adoption by department, provider, and project activity, then export the report with audit evidence.
 - **Provider boundary:** mock and live adapters share the same contract; live mutating operations are feature-flagged and fail closed.
+- **Google product currency:** Gemini Enterprise app access and Gemini Enterprise Agent Platform project IAM are separate provider profiles, with legacy Vertex AI naming normalized by the API.
 - **Auditability:** lifecycle jobs, approvals, provider evidence, incident resolution, exports, and retention actions produce audit records.
 - **Delivery readiness:** Docker Compose, health checks, Alembic, CI, backend/frontend tests, Playwright demo flow, and Terraform validation are wired.
 
